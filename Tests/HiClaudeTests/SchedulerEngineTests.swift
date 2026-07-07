@@ -60,19 +60,21 @@ final class SchedulerEngineTests: XCTestCase {
         XCTAssertEqual(engine.lastCheck, date(8, 30))
     }
 
-    func testDedupeIgnoraSegundoDisparoEmMenosDe120s() {
-        let clock = FakeClock(now: date(6, 0))
-        let engine = SchedulerEngine(clock: clock, calendar: cal, lastCheck: date(6, 0))
+    func testDedupeSuprimeSegundoDisparoLegitimoEmMenosDe120s() {
+        let clock = FakeClock(now: date(6, 59))
+        let engine = SchedulerEngine(clock: clock, calendar: cal, lastCheck: date(6, 59))
         var fires = 0
         engine.onFire = { fires += 1 }
-        engine.configure(times: [7 * 60], paused: false)
+        engine.configure(times: [7 * 60, 7 * 60 + 1], paused: false) // 07:00 e 07:01
 
-        clock.now = date(7, 1)
-        engine.handleWake()
+        clock.now = cal.date(from: DateComponents(year: 2026, month: 7, day: 7,
+                                                  hour: 7, minute: 0, second: 30))!
+        engine.handleWake() // perdeu 07:00 → dispara
         XCTAssertEqual(fires, 1)
 
-        clock.now = date(7, 2) // 60s depois: dentro da janela de dedupe
-        engine.handleWake()
+        clock.now = cal.date(from: DateComponents(year: 2026, month: 7, day: 7,
+                                                  hour: 7, minute: 1, second: 30))!
+        engine.handleWake() // perdeu 07:01 (legítimo), mas só 60s após o último disparo → dedupe suprime
         XCTAssertEqual(fires, 1)
     }
 
