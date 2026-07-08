@@ -9,25 +9,68 @@ final class AppStateTests: XCTestCase {
 
     func testPrimeiraExecucaoTemDefault7h() {
         let state = AppState(defaults: freshDefaults())
+        XCTAssertEqual(state.schedules.count, 1)
+        XCTAssertEqual(state.schedules[0].minutes, 7 * 60)
+        XCTAssertNil(state.schedules[0].messageUID)
         XCTAssertEqual(state.times, [7 * 60])
         XCTAssertFalse(state.paused)
         XCTAssertNil(state.lastEvent)
     }
 
-    func testPersisteERestauraTimesPausedELastEvent() {
+    func testPersisteERestauraSchedulesPausedELastEvent() {
         let defaults = freshDefaults()
         let event = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000), result: .success)
-
         let a = AppState(defaults: defaults)
-        a.times = [12 * 60 + 30, 7 * 60] // salva ordenado
-        XCTAssertEqual(a.times, [7 * 60, 12 * 60 + 30]) // ja ordenado em memoria, na mesma instancia
+        a.addSchedule(minutes: 12 * 60 + 30)
+        a.updateSchedule(id: a.schedules[0].id, minutes: 8 * 60)
         a.paused = true
         a.lastEvent = event
-
         let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.times, [7 * 60, 12 * 60 + 30])
+        XCTAssertEqual(b.times, [8 * 60, 12 * 60 + 30]) // ordenado
+        XCTAssertEqual(b.schedules, a.schedules)        // ids sobrevivem
         XCTAssertTrue(b.paused)
         XCTAssertEqual(b.lastEvent, event)
+    }
+
+    /// Migração: instalações antigas guardavam `times` como [Int].
+    func testMigraTimesLegadoParaSchedules() {
+        let defaults = freshDefaults()
+        defaults.set([9 * 60, 7 * 60], forKey: "times")
+        let state = AppState(defaults: defaults)
+        XCTAssertEqual(state.times, [7 * 60, 9 * 60])
+        XCTAssertTrue(state.schedules.allSatisfy { $0.messageUID == nil })
+    }
+
+    func testMensagemPorHorarioComFallbackParaAtiva() {
+        let state = AppState(defaults: freshDefaults())
+        state.addFavorite(text: "bom dia", kind: .claude)
+        let fav = state.favorites[0]
+        let id = state.schedules[0].id
+        state.setScheduleMessage(id: id, messageUID: fav.uid)
+        XCTAssertEqual(state.resolvedMessage(for: state.schedules[0]), fav)
+        XCTAssertEqual(state.resolvedMessage(forMinutes: 7 * 60), fav)
+        // Sem mensagem fixa → segue a ativa.
+        state.setScheduleMessage(id: id, messageUID: nil)
+        XCTAssertEqual(state.resolvedMessage(for: state.schedules[0]), state.resolvedMessage)
+        // Horário desconhecido → ativa.
+        XCTAssertEqual(state.resolvedMessage(forMinutes: 23 * 60), state.resolvedMessage)
+    }
+
+    /// Apagar a mensagem fixa de um horário limpa a referência (volta a "Ativa").
+    func testRemoverFavoritoLimpaReferenciaDoHorario() {
+        let state = AppState(defaults: freshDefaults())
+        state.addFavorite(text: "bom dia", kind: .claude)
+        let fav = state.favorites[0]
+        state.setScheduleMessage(id: state.schedules[0].id, messageUID: fav.uid)
+        state.removeFavorite(fav)
+        XCTAssertNil(state.schedules[0].messageUID)
+        XCTAssertEqual(state.resolvedMessage(for: state.schedules[0]), AppState.defaultMessage)
+    }
+
+    func testSchedulesOrdenamPorMinutos() {
+        let state = AppState(defaults: freshDefaults())
+        state.addSchedule(minutes: 6 * 60)
+        XCTAssertEqual(state.times, [6 * 60, 7 * 60])
     }
 
     func testPersisteLastCheck() {

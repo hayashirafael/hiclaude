@@ -92,15 +92,54 @@ extension Message {
     var resolvedShowResponse: Bool { showResponse ?? false }
 }
 
+/// Um horário diário. `messageUID` fixa uma mensagem específica; nil = segue
+/// a mensagem ativa (comportamento clássico).
+struct ScheduleEntry: Codable, Equatable, Identifiable {
+    var id = UUID()
+    var minutes: Int
+    var messageUID: UUID? = nil
+}
+
 @MainActor
 final class AppState: ObservableObject {
-    @Published var times: [Int] {
+    @Published var schedules: [ScheduleEntry] {
         didSet {
-            let sorted = times.sorted()
-            if times != sorted { times = sorted; return } // re-normaliza uma vez; didSet re-dispara, entao igual -> persiste
-            defaults.set(times, forKey: Keys.times)
+            let sorted = schedules.sorted {
+                ($0.minutes, $0.id.uuidString) < ($1.minutes, $1.id.uuidString)
+            }
+            if schedules != sorted { schedules = sorted; return } // re-normaliza; didSet re-dispara e persiste
+            defaults.set(try? JSONEncoder().encode(schedules), forKey: Keys.schedules)
         }
     }
+
+    /// Minutos ordenados — visão que o SchedulerEngine consome.
+    var times: [Int] { schedules.map(\.minutes) }
+
+    func addSchedule(minutes: Int) { schedules.append(ScheduleEntry(minutes: minutes)) }
+    func removeSchedule(id: UUID) { schedules.removeAll { $0.id == id } }
+
+    func updateSchedule(id: UUID, minutes: Int) {
+        guard let i = schedules.firstIndex(where: { $0.id == id }) else { return }
+        schedules[i].minutes = minutes
+    }
+
+    func setScheduleMessage(id: UUID, messageUID: UUID?) {
+        guard let i = schedules.firstIndex(where: { $0.id == id }) else { return }
+        schedules[i].messageUID = messageUID
+    }
+
+    /// Mensagem efetiva de um horário: a fixa se ainda existir, senão a ativa.
+    func resolvedMessage(for entry: ScheduleEntry) -> Message {
+        entry.messageUID.flatMap { message(withUID: $0) } ?? resolvedMessage
+    }
+
+    /// Versão por minutos (o engine reporta o horário que disparou). Se dois
+    /// horários coincidirem em minutos, vale o primeiro (ordem estável por id).
+    func resolvedMessage(forMinutes minutes: Int) -> Message {
+        schedules.first { $0.minutes == minutes }.map { resolvedMessage(for: $0) }
+            ?? resolvedMessage
+    }
+
     @Published var paused: Bool { didSet { defaults.set(paused, forKey: Keys.paused) } }
     @Published var lastEvent: FireEvent? {
         didSet { defaults.set(lastEvent.flatMap { try? JSONEncoder().encode($0) }, forKey: Keys.lastEvent) }
@@ -198,6 +237,11 @@ final class AppState: ObservableObject {
     }
 
     func removeFavorite(_ msg: Message) {
+        if let uid = msg.uid ?? favorites.first(where: { $0 == msg })?.uid {
+            for i in schedules.indices where schedules[i].messageUID == uid {
+                schedules[i].messageUID = nil
+            }
+        }
         favorites.removeAll { $0 == msg }
         if activeMessage == msg { activeMessage = Self.defaultMessage }
     }
@@ -231,6 +275,7 @@ final class AppState: ObservableObject {
     private let defaults: UserDefaults
     private enum Keys {
         static let times = "times"
+        static let schedules = "schedules"
         static let paused = "paused"
         static let lastEvent = "lastEvent"
         static let lastCheck = "lastCheck"
@@ -241,7 +286,7 @@ final class AppState: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.times = (defaults.array(forKey: Keys.times) as? [Int]) ?? [7 * 60]
+        self.schedules = Self.loadSchedules(defaults)
         self.paused = defaults.bool(forKey: Keys.paused)
         if let data = defaults.data(forKey: Keys.lastEvent) {
             self.lastEvent = try? JSONDecoder().decode(FireEvent.self, from: data)
@@ -253,6 +298,18 @@ final class AppState: ObservableObject {
         } else {
             self.claudeConfigDir = Self.defaultConfigDir
         }
+    }
+
+    /// Decodifica schedules; se ausente, migra do formato legado `times: [Int]`.
+    private static func loadSchedules(_ defaults: UserDefaults) -> [ScheduleEntry] {
+        if let data = defaults.data(forKey: Keys.schedules),
+           let decoded = try? JSONDecoder().decode([ScheduleEntry].self, from: data) {
+            return decoded
+        }
+        if let legacy = defaults.array(forKey: Keys.times) as? [Int] {
+            return legacy.sorted().map { ScheduleEntry(minutes: $0) }
+        }
+        return [ScheduleEntry(minutes: 7 * 60)]
     }
 
     /// Decodifica favoritos em JSON; se falhar, migra do formato legado

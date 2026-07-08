@@ -3,26 +3,25 @@ import SwiftUI
 struct SchedulesTab: View {
     @ObservedObject var state: AppState
     let onChange: () -> Void
-    @State private var scheduleRows: ScheduleRows
-
-    init(state: AppState, onChange: @escaping () -> Void) {
-        self.state = state
-        self.onChange = onChange
-        self._scheduleRows = State(initialValue: ScheduleRows(times: state.times))
-    }
 
     var body: some View {
         Form {
             Section {
-                ForEach(scheduleRows.rows) { row in
+                ForEach(state.schedules) { entry in
                     HStack {
-                        DatePicker("", selection: timeBinding(id: row.id),
+                        DatePicker("", selection: timeBinding(entry),
                                    displayedComponents: .hourAndMinute)
                             .labelsHidden()
-                        Spacer()
+                        Picker("", selection: messageBinding(entry)) {
+                            Text("Ativa (padrão)").tag(UUID?.none)
+                            ForEach(state.allMessages) { msg in
+                                Text(msg.text).tag(msg.uid)
+                            }
+                        }
+                        .labelsHidden()
                         Button {
-                            scheduleRows.remove(id: row.id)
-                            publishRows()
+                            state.removeSchedule(id: entry.id)
+                            onChange()
                         } label: {
                             Image(systemName: "minus.circle")
                         }
@@ -30,42 +29,40 @@ struct SchedulesTab: View {
                     }
                 }
                 Button {
-                    scheduleRows.append(minutes: 9 * 60)
-                    publishRows()
+                    state.addSchedule(minutes: 9 * 60)
+                    onChange()
                 } label: {
                     Label("Adicionar horário", systemImage: "plus.circle")
                 }
                 .buttonStyle(.plain)
             } footer: {
-                Text("Todos os dias, nos horários acima.")
+                Text("Todos os dias, nos horários acima. Cada horário pode fixar uma mensagem ou seguir a ativa.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .onChange(of: state.times) { newTimes in
-            scheduleRows.sync(from: newTimes)
-        }
     }
 
-    private func timeBinding(id: ScheduleRow.ID) -> Binding<Date> {
+    private func timeBinding(_ entry: ScheduleEntry) -> Binding<Date> {
         Binding(
             get: {
-                guard let minutes = scheduleRows.rows.first(where: { $0.id == id })?.minutes else {
-                    return Date()
-                }
-                return Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60,
-                                             second: 0, of: Date()) ?? Date()
+                Calendar.current.date(bySettingHour: entry.minutes / 60,
+                                      minute: entry.minutes % 60,
+                                      second: 0, of: Date()) ?? Date()
             },
             set: { newDate in
                 let parts = Calendar.current.dateComponents([.hour, .minute], from: newDate)
-                scheduleRows.update(id: id, minutes: (parts.hour ?? 0) * 60 + (parts.minute ?? 0))
-                publishRows()
+                state.updateSchedule(id: entry.id,
+                                     minutes: (parts.hour ?? 0) * 60 + (parts.minute ?? 0))
+                onChange()
             }
         )
     }
 
-    private func publishRows() {
-        state.times = scheduleRows.publishedTimes
-        onChange()
+    private func messageBinding(_ entry: ScheduleEntry) -> Binding<UUID?> {
+        Binding(
+            get: { entry.messageUID },
+            set: { state.setScheduleMessage(id: entry.id, messageUID: $0) }
+        )
     }
 }
