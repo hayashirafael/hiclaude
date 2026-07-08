@@ -1,8 +1,8 @@
 # HiClaude
 
-App de menu bar para macOS que envia um "hi" ao Claude Code em horarios
+App de menu bar para macOS que envia um "hi" ao Claude Code em horários
 agendados, iniciando a janela de 5h do seu plano Claude alinhada com o seu
-expediente, sem desperdiçar prompt quando a janela ja esta ativa.
+expediente, sem desperdiçar prompt quando a janela já está ativa.
 
 *macOS menu bar app that pings Claude Code on a schedule so your 5-hour usage
 window starts when your workday does. It skips the ping if a window is already
@@ -11,31 +11,31 @@ active. English docs below.*
 ## Como funciona
 
 O plano do Claude (Pro/Max) funciona em janelas de 5h que começam no primeiro
-prompt enviado. O HiClaude roda `claude -p "hi"` em background nos horarios que
-voce configurar. Antes de disparar, ele le os transcripts locais do Claude Code
-(`~/.claude/projects/`) e reconstroi a janela de 5h corrente. Se ja houver uma
-ativa, o disparo e pulado.
+prompt enviado. O HiClaude roda `claude -p "hi"` em background nos horários que
+você configurar. Antes de disparar, ele lê os transcripts locais do Claude Code
+(`~/.claude/projects/`) e reconstrói a janela de 5h corrente. Se já houver uma
+ativa, o disparo é pulado.
 
-- Icone na menu bar: ativo, pausado ou erro
-- Menu com ultimo disparo, proximo horario, janela ativa, "Enviar hi agora",
+- Ícone na menu bar: ativo, pausado ou erro
+- Menu com último disparo, próximo horário, janela ativa, "Enviar hi agora",
   pausar/retomar e iniciar com o Mac
-- Se o Mac estava dormindo no horario, dispara ao acordar
-- Notificacao do sistema apenas quando um disparo agendado falha
+- Se o Mac estava dormindo no horário, dispara ao acordar
+- Notificação do sistema apenas quando um disparo agendado falha
 
 ## Requisitos
 
 - macOS 13+
 - [Claude Code](https://claude.com/claude-code) instalado e logado
 
-## Instalacao
+## Instalação
 
-1. Baixe o `HiClaude.zip` da [ultima release](../../releases/latest) e
+1. Baixe o `HiClaude.zip` da [última release](../../releases/latest) e
    descompacte
 2. Mova `HiClaude.app` para `/Applications`
-3. Primeira abertura: clique-direito > **Abrir** (o app nao e notarizado)
-4. No menu do balao, ative **Iniciar com o Mac** e configure os **Horarios...**
+3. Primeira abertura: clique-direito > **Abrir** (o app não é notarizado)
+4. No menu do balão, ative **Iniciar com o Mac** e configure os **Horários...**
 
-## Build a partir do codigo
+## Build a partir do código
 
 ```bash
 git clone <repo> && cd hiclaude
@@ -45,13 +45,13 @@ swift test
 
 O app bundleado fica em `build/HiClaude.app`.
 
-## Limitacoes
+## Limitações
 
-- A deteccao de janela ativa so enxerga o uso do Claude Code nesta maquina.
-  Sessoes iniciadas no navegador ou em outro computador nao sao detectadas; um
-  "hi" redundante e inofensivo.
-- Com o app fechado, nada dispara. O HiClaude e um app de menu bar, sem daemon.
-- A build de v1 usa assinatura ad-hoc e nao e notarizada.
+- A detecção de janela ativa só enxerga o uso do Claude Code nesta máquina.
+  Sessões iniciadas no navegador ou em outro computador não são detectadas; um
+  "hi" redundante é inofensivo.
+- Com o app fechado, nada dispara. O HiClaude é um app de menu bar, sem daemon.
+- A build de v1 usa assinatura ad-hoc e não é notarizada.
 
 ---
 
@@ -74,7 +74,7 @@ already active, the ping is skipped.
 2. Move `HiClaude.app` to `/Applications`
 3. First launch: right-click > **Open** (the app is not notarized)
 4. In the menu bar bubble, enable **Iniciar com o Mac** and set times under
-   **Horarios...**
+   **Horários...**
 
 ## Build from source
 

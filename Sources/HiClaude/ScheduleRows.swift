@@ -29,12 +29,7 @@ struct ScheduleRows: Equatable {
     mutating func update(id: UUID, minutes: Int) {
         guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
         rows[index].minutes = minutes
-        rows.sort { lhs, rhs in
-            if lhs.minutes == rhs.minutes {
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-            return lhs.minutes < rhs.minutes
-        }
+        sortRows()
     }
 
     mutating func remove(id: UUID) {
@@ -43,6 +38,12 @@ struct ScheduleRows: Equatable {
 
     mutating func append(minutes: Int) {
         rows.append(ScheduleRow(minutes: minutes))
+        sortRows()
+    }
+
+    /// Ordena por horário; desempata por id para uma ordem estável quando
+    /// dois horários coincidem.
+    private mutating func sortRows() {
         rows.sort { lhs, rhs in
             if lhs.minutes == rhs.minutes {
                 return lhs.id.uuidString < rhs.id.uuidString
