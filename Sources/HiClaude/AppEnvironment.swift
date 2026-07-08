@@ -24,10 +24,16 @@ final class AppEnvironment: ObservableObject {
             Task { @MainActor in await self?.scheduledFire() }
         }
 
-        state.claudeFound = ClaudeRunner.locateClaude() != nil
+        // Sonda do CLI fora da thread principal: quando `claude` não está nos
+        // candidatos padrão, `locateClaude()` faz spawn de um shell de login
+        // (`command -v claude`) — um stall real no launch. `claudeFound` já
+        // começa `true`, então o ícone de erro não pisca enquanto isso resolve.
+        Task.detached {
+            let found = ClaudeRunner.locateClaude() != nil
+            await MainActor.run { state.claudeFound = found }
+        }
         reconfigure()
-        engine.handleWake() // catch-up do boot (lastCheck persistido da execução anterior)
-        persistLastCheck()
+        handleWake() // catch-up do boot via mesmo caminho do wake/clock-change
 
         let workspace = NSWorkspace.shared.notificationCenter
         observers.append(workspace.addObserver(
