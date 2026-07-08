@@ -61,6 +61,10 @@ final class AppEnvironment: ObservableObject {
         reconfigure()
     }
 
+    func setActiveMessage(_ text: String) {
+        state.setActiveMessage(text)
+    }
+
     func fireNow() async {
         await controller.fire(manual: true)
     }

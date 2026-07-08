@@ -34,6 +34,24 @@ struct MenuContent: View {
         Divider()
         Button("Enviar hi agora") { Task { await env.fireNow() } }
         Button(state.paused ? "Retomar" : "Pausar") { env.togglePause() }
+        Menu("Mensagem") {
+            ForEach(state.allMessages, id: \.self) { msg in
+                Button {
+                    env.setActiveMessage(msg)
+                } label: {
+                    if msg == state.resolvedMessage {
+                        Label(msg, systemImage: "checkmark")
+                    } else {
+                        Text(msg)
+                    }
+                }
+            }
+            Divider()
+            Button("Gerenciar…") {
+                openWindow(id: "schedule")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
         Divider()
         Button("Horários…") {
             openWindow(id: "schedule")
