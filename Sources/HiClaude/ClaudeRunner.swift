@@ -18,6 +18,28 @@ protocol ClaudeRunning {
     func sendHi() async -> Result<Void, RunnerError>
 }
 
+/// Acumula os bytes de stderr recebidos via `readabilityHandler`, que roda
+/// em uma dispatch queue de fundo — precisa de lock porque o loop de poll
+/// do timeout le `isRunning` na task async enquanto o handler escreve.
+final class StderrBuffer: @unchecked Sendable {
+    private var data = Data()
+    private let lock = NSLock()
+
+    func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
+    }
+
+    func trimmedString() -> String {
+        lock.lock()
+        let snapshot = data
+        lock.unlock()
+        return String(data: snapshot, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+}
+
 struct ClaudeRunner: ClaudeRunning {
     var timeout: TimeInterval = 60
     var binaryOverride: URL? // testes
@@ -71,13 +93,31 @@ struct ClaudeRunner: ClaudeRunning {
         env["PATH"] = [env["PATH"], extraPath].compactMap { $0 }.joined(separator: ":")
         process.environment = env
 
+        let outPipe = Pipe()
         let errPipe = Pipe()
-        process.standardOutput = Pipe()
+        process.standardOutput = outPipe
         process.standardError = errPipe
+
+        // Drena os pipes concorrentemente enquanto o processo roda: se
+        // ninguem ler, uma saida maior que o buffer do SO (~64KB) trava o
+        // write do filho e o processo nunca termina (deadlock classico de
+        // Process/Pipe), fazendo sendHi() reportar .timeout erroneamente.
+        let stderrBuffer = StderrBuffer()
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
+            _ = handle.availableData // descarta stdout, so precisamos drenar
+        }
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if !chunk.isEmpty {
+                stderrBuffer.append(chunk)
+            }
+        }
 
         do {
             try process.run()
         } catch {
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
             return .failure(.failed(error.localizedDescription))
         }
 
@@ -85,14 +125,21 @@ struct ClaudeRunner: ClaudeRunning {
         while process.isRunning && Date() < deadline {
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
-        if process.isRunning {
+
+        let timedOut = process.isRunning
+        if timedOut {
             process.terminate()
+            process.waitUntilExit()
+        }
+
+        outPipe.fileHandleForReading.readabilityHandler = nil
+        errPipe.fileHandleForReading.readabilityHandler = nil
+
+        if timedOut {
             return .failure(.timeout)
         }
         if process.terminationStatus != 0 {
-            let data = (try? errPipe.fileHandleForReading.readToEnd()) ?? Data()
-            let message = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let message = stderrBuffer.trimmedString()
             return .failure(.failed(message.isEmpty ? "exit \(process.terminationStatus)" : message))
         }
         return .success(())

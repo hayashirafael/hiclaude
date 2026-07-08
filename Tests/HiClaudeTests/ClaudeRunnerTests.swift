@@ -28,6 +28,19 @@ final class ClaudeRunnerTests: XCTestCase {
         let result = await runner.sendHi()
         XCTAssertEqual(result, .failure(.timeout))
     }
+
+    /// Regressao: se o pipe de stdout nao for drenado enquanto o processo
+    /// roda, uma saida maior que o buffer do SO (~64KB) trava o write do
+    /// filho, o processo nunca termina e sendHi() reporta .timeout
+    /// erroneamente. Este script emite bem mais que 64KB antes de sair 0.
+    func testNaoTravaComStdoutMaiorQueBufferDoPipe() async {
+        let runner = ClaudeRunner(
+            timeout: 10,
+            binaryOverride: makeScript("head -c 200000 /dev/zero | tr '\\0' 'x'; exit 0")
+        )
+        let result = await runner.sendHi()
+        XCTAssertEqual(result, .success(()))
+    }
 }
 
 extension Result where Success == Void, Failure == RunnerError {
