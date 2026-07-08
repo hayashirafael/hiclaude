@@ -4,6 +4,7 @@ struct ScheduleView: View {
     @ObservedObject var state: AppState
     let onChange: () -> Void
     @State private var scheduleRows: ScheduleRows
+    @State private var newMessage = ""
 
     init(state: AppState, onChange: @escaping () -> Void) {
         self.state = state
@@ -41,6 +42,44 @@ struct ScheduleView: View {
                 Label("Adicionar horário", systemImage: "plus.circle")
             }
             .buttonStyle(.plain)
+
+            Divider()
+            Text("Mensagens").font(.headline)
+            Text("Enviada ao Claude para abrir a janela. Escolha a ativa.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            ForEach(state.allMessages, id: \.self) { msg in
+                HStack {
+                    Button {
+                        state.setActiveMessage(msg)
+                    } label: {
+                        Image(systemName: msg == state.resolvedMessage
+                              ? "largecircle.fill.circle" : "circle")
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(msg)
+                    Spacer()
+
+                    if msg != AppState.defaultMessage {
+                        Button {
+                            state.removeFavorite(msg)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack {
+                TextField("Nova mensagem", text: $newMessage)
+                Button("Adicionar") {
+                    state.addFavorite(newMessage)
+                    newMessage = ""
+                }
+            }
         }
         .onChange(of: state.times) { newTimes in
             scheduleRows.sync(from: newTimes)
