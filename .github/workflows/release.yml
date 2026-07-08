@@ -1,0 +1,19 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+      - run: ./scripts/make-app.sh
+      - run: ditto -c -k --keepParent build/HiClaude.app HiClaude.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: HiClaude.zip
