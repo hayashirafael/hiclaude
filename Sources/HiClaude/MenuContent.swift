@@ -50,33 +50,15 @@ struct MenuContent: View {
             }
             Divider()
             Button("Gerenciar…") {
+                state.settingsTab = .messages
                 openWindow(id: "schedule")
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
-        Menu("Conta") {
-            ForEach(state.discoverAccounts(), id: \.self) { dir in
-                Button {
-                    env.setAccount(dir)
-                } label: {
-                    if dir.standardizedFileURL == state.resolvedConfigDir.standardizedFileURL {
-                        Label(dir.lastPathComponent, systemImage: "checkmark")
-                    } else {
-                        Text(dir.lastPathComponent)
-                    }
-                }
-            }
-        }
         Divider()
-        Button("Horários…") {
+        Button("Configurações…") {
             openWindow(id: "schedule")
             NSApp.activate(ignoringOtherApps: true)
-        }
-        if LoginItem.isSupported {
-            Toggle("Iniciar com o Mac", isOn: Binding(
-                get: { LoginItem.isEnabled },
-                set: { LoginItem.setEnabled($0) }
-            ))
         }
         Divider()
         Button("Sair") { NSApplication.shared.terminate(nil) }

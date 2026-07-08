@@ -107,6 +107,8 @@ final class AppState: ObservableObject {
     }
     @Published var claudeFound = true
     @Published var activeWindowEnd: Date?
+    /// Aba selecionada na janela de Configurações (deep-link a partir do menu).
+    @Published var settingsTab: SettingsTab = .schedules
 
     static let defaultMessage = Message(
         text: "1+1", kind: .claude,

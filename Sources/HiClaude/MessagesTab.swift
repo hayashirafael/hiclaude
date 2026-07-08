@@ -1,9 +1,7 @@
 import SwiftUI
 
-struct ScheduleView: View {
+struct MessagesTab: View {
     @ObservedObject var state: AppState
-    let onChange: () -> Void
-    @State private var scheduleRows: ScheduleRows
     @State private var newMessage = ""
     @State private var newIsClaude = true
     // Config Claude do formulário (add/editar).
@@ -15,50 +13,9 @@ struct ScheduleView: View {
     /// Mensagem sendo editada; nil = modo "adicionar".
     @State private var editing: Message? = nil
 
-    init(state: AppState, onChange: @escaping () -> Void) {
-        self.state = state
-        self.onChange = onChange
-        self._scheduleRows = State(initialValue: ScheduleRows(times: state.times))
-    }
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Horários do hi diário").font(.headline)
-                Text("Todos os dias, nos horários abaixo.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                ForEach(scheduleRows.rows) { row in
-                    HStack {
-                        DatePicker("", selection: timeBinding(id: row.id),
-                                   displayedComponents: .hourAndMinute)
-                            .labelsHidden()
-                        Spacer()
-                        Button {
-                            scheduleRows.remove(id: row.id)
-                            publishRows()
-                        } label: {
-                            Image(systemName: "minus.circle")
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                Button {
-                    scheduleRows.append(minutes: 9 * 60)
-                    publishRows()
-                } label: {
-                    Label("Adicionar horário", systemImage: "plus.circle")
-                }
-                .buttonStyle(.plain)
-
-                Divider()
-                Text("Mensagens").font(.headline)
-                Text("Com Claude: abre a janela de 5h. Sem Claude: roda o texto como comando.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
+        Form {
+            Section {
                 ForEach(state.allMessages) { msg in
                     HStack(alignment: .top) {
                         Button {
@@ -123,34 +80,12 @@ struct ScheduleView: View {
                         }
                     }
                 }
-
-                Divider()
-                Text("Conta").font(.headline)
-                Text("Conta Claude (CLAUDE_CONFIG_DIR) padrão — cada mensagem pode sobrescrever.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                ForEach(state.discoverAccounts(), id: \.self) { dir in
-                    HStack {
-                        Button {
-                            state.setAccount(dir)
-                        } label: {
-                            Image(systemName: dir.standardizedFileURL == state.resolvedConfigDir.standardizedFileURL
-                                  ? "largecircle.fill.circle" : "circle")
-                        }
-                        .buttonStyle(.plain)
-
-                        Text(dir.lastPathComponent)
-                        Spacer()
-                    }
-                }
+            } footer: {
+                Text("Com Claude: abre a janela de 5h. Sem Claude: roda o texto como comando.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            .padding(20)
         }
-        .onChange(of: state.times) { newTimes in
-            scheduleRows.sync(from: newTimes)
-        }
-        .frame(width: 280, height: 560)
+        .formStyle(.grouped)
     }
 
     /// Resumo compacto da config não-default de uma mensagem Claude (ex:
@@ -207,28 +142,6 @@ struct ScheduleView: View {
                               safeMode: safe, configDir: account, workingDir: wd)
         }
         resetForm()
-    }
-
-    private func timeBinding(id: ScheduleRow.ID) -> Binding<Date> {
-        Binding(
-            get: {
-                guard let minutes = scheduleRows.rows.first(where: { $0.id == id })?.minutes else {
-                    return Date()
-                }
-                return Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60,
-                                             second: 0, of: Date()) ?? Date()
-            },
-            set: { newDate in
-                let parts = Calendar.current.dateComponents([.hour, .minute], from: newDate)
-                scheduleRows.update(id: id, minutes: (parts.hour ?? 0) * 60 + (parts.minute ?? 0))
-                publishRows()
-            }
-        )
-    }
-
-    private func publishRows() {
-        state.times = scheduleRows.publishedTimes
-        onChange()
     }
 }
 
