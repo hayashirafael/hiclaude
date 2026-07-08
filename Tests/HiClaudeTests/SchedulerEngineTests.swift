@@ -21,7 +21,7 @@ final class SchedulerEngineTests: XCTestCase {
         let clock = FakeClock(now: date(6, 0))
         let engine = SchedulerEngine(clock: clock, calendar: cal, lastCheck: date(6, 0))
         var fires = 0
-        engine.onFire = { fires += 1 }
+        engine.onFire = { _ in fires += 1 }
         engine.configure(times: [7 * 60, 12 * 60], paused: false)
 
         clock.now = date(14, 0) // dormiu das 6h às 14h; perdeu 07:00 e 12:00
@@ -33,7 +33,7 @@ final class SchedulerEngineTests: XCTestCase {
         let clock = FakeClock(now: date(8, 0))
         let engine = SchedulerEngine(clock: clock, calendar: cal, lastCheck: date(8, 0))
         var fires = 0
-        engine.onFire = { fires += 1 }
+        engine.onFire = { _ in fires += 1 }
         engine.configure(times: [7 * 60], paused: false)
 
         clock.now = date(9, 0)
@@ -45,7 +45,7 @@ final class SchedulerEngineTests: XCTestCase {
         let clock = FakeClock(now: date(6, 0))
         let engine = SchedulerEngine(clock: clock, calendar: cal, lastCheck: date(6, 0))
         var fires = 0
-        engine.onFire = { fires += 1 }
+        engine.onFire = { _ in fires += 1 }
         engine.configure(times: [7 * 60], paused: true)
 
         clock.now = date(8, 0)
@@ -64,7 +64,7 @@ final class SchedulerEngineTests: XCTestCase {
         let clock = FakeClock(now: date(6, 59))
         let engine = SchedulerEngine(clock: clock, calendar: cal, lastCheck: date(6, 59))
         var fires = 0
-        engine.onFire = { fires += 1 }
+        engine.onFire = { _ in fires += 1 }
         engine.configure(times: [7 * 60, 7 * 60 + 1], paused: false) // 07:00 e 07:01
 
         clock.now = cal.date(from: DateComponents(year: 2026, month: 7, day: 7,
@@ -83,5 +83,16 @@ final class SchedulerEngineTests: XCTestCase {
         let engine = SchedulerEngine(clock: clock, calendar: cal, lastCheck: date(6, 0))
         engine.configure(times: [7 * 60], paused: true)
         XCTAssertNil(engine.nextFireDate)
+    }
+
+    func testCatchUpInformaOHorarioPerdidoMaisRecente() {
+        let clock = FakeClock(now: date(6, 0))
+        let engine = SchedulerEngine(clock: clock, calendar: cal, lastCheck: date(6, 0))
+        var minutes: [Int] = []
+        engine.onFire = { minutes.append($0) }
+        engine.configure(times: [7 * 60, 12 * 60], paused: false)
+        clock.now = date(14, 0) // perdeu 07:00 e 12:00
+        engine.handleWake()
+        XCTAssertEqual(minutes, [12 * 60]) // dispara uma vez, com o mais recente
     }
 }

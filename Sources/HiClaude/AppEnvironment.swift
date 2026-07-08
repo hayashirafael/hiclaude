@@ -23,8 +23,8 @@ final class AppEnvironment: ObservableObject {
                                          runner: ClaudeRunner(configDir: state.resolvedConfigDir),
                                          notifier: SystemNotifier())
 
-        engine.onFire = { [weak self] in
-            Task { @MainActor in await self?.scheduledFire() }
+        engine.onFire = { [weak self] minutes in
+            Task { @MainActor in await self?.scheduledFire(minutes: minutes) }
         }
 
         // Sonda do CLI fora da thread principal: quando `claude` não está nos
@@ -111,8 +111,9 @@ final class AppEnvironment: ObservableObject {
         state.activeWindowEnd = await detector.activeWindowEnd(projectsDir: projects)
     }
 
-    private func scheduledFire() async {
-        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
+    private func scheduledFire(minutes: Int) async {
+        await controller.fire(message: state.resolvedMessage(forMinutes: minutes),
+                              origin: .scheduled)
         persistLastCheck()
     }
 

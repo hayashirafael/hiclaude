@@ -4,7 +4,7 @@ import Foundation
 /// O timer real só é exercitado no app (smoke test); a lógica de catch-up,
 /// dedupe e pausa é testada com relógio injetado.
 final class SchedulerEngine {
-    var onFire: (() -> Void)?
+    var onFire: ((Int) -> Void)?   // minutos do horário que disparou
     private(set) var lastCheck: Date
     private(set) var lastFireAt: Date?
 
@@ -21,9 +21,11 @@ final class SchedulerEngine {
         self.lastCheck = lastCheck ?? clock.now
     }
 
-    var nextFireDate: Date? {
-        paused ? nil : ScheduleMath.nextFireDate(times: times, after: clock.now, calendar: calendar)
+    var nextFire: (date: Date, minutes: Int)? {
+        paused ? nil : ScheduleMath.nextFire(times: times, after: clock.now, calendar: calendar)
     }
+
+    var nextFireDate: Date? { nextFire?.date }
 
     func configure(times: [Int], paused: Bool) {
         self.times = times
@@ -39,28 +41,28 @@ final class SchedulerEngine {
 
     private func catchUp() {
         let now = clock.now
-        let hadMissed = !paused
-            && ScheduleMath.hasMissedTime(times: times, between: lastCheck, and: now, calendar: calendar)
+        let missed = paused ? nil
+            : ScheduleMath.lastMissedMinutes(times: times, between: lastCheck, and: now, calendar: calendar)
         lastCheck = now
-        if hadMissed { fire() }
+        if let missed { fire(minutes: missed) }
     }
 
-    private func fire() {
+    private func fire(minutes: Int) {
         let now = clock.now
         if let last = lastFireAt, now.timeIntervalSince(last) < dedupeInterval { return }
         lastFireAt = now
         lastCheck = now
-        onFire?()
+        onFire?(minutes)
     }
 
     private func rearm() {
         timer?.invalidate()
         timer = nil
-        guard let next = nextFireDate else { return }
-        let t = Timer(fire: next, interval: 0, repeats: false) { [weak self] _ in
+        guard let next = nextFire else { return }
+        let t = Timer(fire: next.date, interval: 0, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.lastCheck = self.clock.now
-            self.fire()
+            self.fire(minutes: next.minutes)
             self.rearm()
         }
         t.tolerance = 60 // deixa o macOS agrupar wakeups (bateria)
