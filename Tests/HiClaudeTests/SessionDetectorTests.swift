@@ -80,4 +80,54 @@ final class SessionDetectorTests: XCTestCase {
         let end = await detector.activeWindowEnd()
         XCTAssertNil(end)
     }
+
+    func testCadeiaContinuaTruncadaPelaJanelaDeVarredura() async throws {
+        // Cadeia contínua (10 em 10 min) das últimas 30h: a varredura fixa de
+        // 24h truncaria no meio de um bloco. O detector deve ampliar a
+        // varredura e devolver o mesmo fim de bloco do histórico completo.
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let proj = dir.appendingPathComponent("proj-a")
+        try fm.createDirectory(at: proj, withIntermediateDirectories: true)
+
+        let agora = Date()
+        let iso = ISO8601DateFormatter()
+        var todas: [Date] = []
+        var linhas = ""
+        var t = agora.addingTimeInterval(-30 * 3600)
+        while t <= agora {
+            todas.append(t)
+            linhas += "{\"type\":\"user\",\"timestamp\":\"\(iso.string(from: t))\"}\n"
+            t = t.addingTimeInterval(600)
+        }
+        try linhas.write(to: proj.appendingPathComponent("s.jsonl"), atomically: true, encoding: .utf8)
+
+        let detector = SessionDetector(projectsDir: dir, clock: SystemClock())
+        let end = await detector.activeWindowEnd()
+        XCTAssertNotNil(end)
+        XCTAssertEqual(end, SessionDetector.activeBlockEnd(timestamps: todas, now: agora))
+    }
+
+    func testArquivoIlegivelEIgnoradoSemBloquear() async throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let proj = dir.appendingPathComponent("proj-a")
+        try fm.createDirectory(at: proj, withIntermediateDirectories: true)
+
+        // "Transcript" ilegível: um diretório com extensão .jsonl (url.lines lança ao abrir)
+        try fm.createDirectory(at: proj.appendingPathComponent("quebrado.jsonl"),
+                               withIntermediateDirectories: true)
+
+        let detector = SessionDetector(projectsDir: dir, clock: SystemClock())
+        let semJanela = await detector.activeWindowEnd()
+        XCTAssertNil(semJanela)
+
+        // Com um arquivo válido ao lado, o ilegível não impede a detecção
+        let iso = ISO8601DateFormatter()
+        let recente = iso.string(from: Date().addingTimeInterval(-1800))
+        try "{\"type\":\"user\",\"timestamp\":\"\(recente)\"}\n"
+            .write(to: proj.appendingPathComponent("ok.jsonl"), atomically: true, encoding: .utf8)
+        let comJanela = await detector.activeWindowEnd()
+        XCTAssertNotNil(comJanela)
+    }
 }

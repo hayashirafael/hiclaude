@@ -17,9 +17,22 @@ struct SessionDetector: SessionDetecting {
     static let blockDuration: TimeInterval = 5 * 3600
 
     func activeWindowEnd() async -> Date? {
-        let since = clock.now.addingTimeInterval(-Self.scanInterval)
-        let timestamps = await collectTimestamps(since: since)
-        return Self.activeBlockEnd(timestamps: timestamps, now: clock.now)
+        var lookback: TimeInterval = Self.scanInterval
+        let maxLookback: TimeInterval = 7 * 24 * 3600
+        while true {
+            let since = clock.now.addingTimeInterval(-lookback)
+            let timestamps = await collectTimestamps(since: since).sorted()
+            // Se o primeiro timestamp visível está a menos de 5h do início da
+            // janela de varredura, a cadeia pode ter sido truncada no meio de
+            // um bloco — amplia a varredura até garantir um gap de 5h à esquerda.
+            if let first = timestamps.first,
+               first.timeIntervalSince(since) < Self.blockDuration,
+               lookback < maxLookback {
+                lookback = min(lookback * 2, maxLookback)
+                continue
+            }
+            return Self.activeBlockEnd(timestamps: timestamps, now: clock.now)
+        }
     }
 
     // MARK: - Núcleo puro (testável)
@@ -60,19 +73,26 @@ struct SessionDetector: SessionDetecting {
 
     // MARK: - Varredura
 
-    private func collectTimestamps(since: Date) async -> [Date] {
+    private func candidateFiles(since: Date) -> [URL] {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(
             at: projectsDir,
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else { return [] }
-
-        var result: [Date] = []
+        var files: [URL] = []
         for case let url as URL in enumerator {
             guard url.pathExtension == "jsonl",
                   let mtime = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                   mtime >= since else { continue }
+            files.append(url)
+        }
+        return files
+    }
+
+    private func collectTimestamps(since: Date) async -> [Date] {
+        var result: [Date] = []
+        for url in candidateFiles(since: since) {
             do {
                 // Streaming linha a linha — nunca carrega o arquivo inteiro
                 for try await line in url.lines {
