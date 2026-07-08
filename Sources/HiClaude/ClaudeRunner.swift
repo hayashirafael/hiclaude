@@ -86,7 +86,17 @@ struct ClaudeRunner: ClaudeRunning {
         }
         let process = Process()
         process.executableURL = binary
-        process.arguments = ["-p", "hi"]
+        // Ping mínimo em tokens: Haiku (modelo mais barato) com esforço baixo,
+        // --safe-mode pula CLAUDE.md/skills/plugins/hooks/MCP (corta o contexto
+        // de entrada), e "1+1" gera saída de ~1 token. O objetivo é só iniciar
+        // a janela de 5h — o conteúdo da resposta é irrelevante.
+        process.arguments = [
+            "-p",
+            "--model", "claude-haiku-4-5",
+            "--effort", "low",
+            "--safe-mode",
+            "1+1",
+        ]
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
 
         var env = ProcessInfo.processInfo.environment

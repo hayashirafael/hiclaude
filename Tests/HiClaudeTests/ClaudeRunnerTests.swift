@@ -11,6 +11,28 @@ final class ClaudeRunnerTests: XCTestCase {
         return url
     }
 
+    /// Trava o comando enviado ao CLI: ping mínimo em tokens
+    /// (Haiku + effort low + safe-mode + prompt "1+1"). O fake script grava
+    /// "$@" e a asserção confere os argumentos exatos, na ordem.
+    func testEnviaComandoMinimoDeTokens() async throws {
+        let argsFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-args-\(UUID().uuidString).txt")
+        let runner = ClaudeRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
+        )
+
+        let result = await runner.sendHi()
+        XCTAssertEqual(result, .success(()))
+
+        let captured = try String(contentsOf: argsFile, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.isEmpty }
+            .map(String.init)
+        XCTAssertEqual(captured,
+                       ["-p", "--model", "claude-haiku-4-5", "--effort", "low", "--safe-mode", "1+1"])
+    }
+
     func testSucessoQuandoExitZero() async {
         let runner = ClaudeRunner(timeout: 5, binaryOverride: makeScript("exit 0"))
         let result = await runner.sendHi()
