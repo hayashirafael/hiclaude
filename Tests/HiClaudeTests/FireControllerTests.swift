@@ -11,10 +11,10 @@ final class MockDetector: SessionDetecting {
 }
 
 final class MockRunner: ClaudeRunning {
-    var result: Result<Void, RunnerError> = .success(())
+    var result: Result<String, RunnerError> = .success("")
     var calls = 0
     var lastMessage: Message?
-    func run(_ message: Message) async -> Result<Void, RunnerError> {
+    func run(_ message: Message) async -> Result<String, RunnerError> {
         calls += 1
         lastMessage = message
         return result

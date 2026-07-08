@@ -15,7 +15,7 @@ enum RunnerError: Error, Equatable {
 }
 
 protocol ClaudeRunning {
-    func run(_ message: Message) async -> Result<Void, RunnerError>
+    func run(_ message: Message) async -> Result<String, RunnerError>
 }
 
 /// Acumula os bytes de stderr recebidos via `readabilityHandler`, que roda
@@ -23,13 +23,18 @@ protocol ClaudeRunning {
 /// (chamado pela task async) e `append()` (chamado pela queue de fundo da
 /// readability e pelo drain final síncrono) tocam o mesmo `Data`
 /// concorrentemente.
-final class StderrBuffer: @unchecked Sendable {
+final class PipeBuffer: @unchecked Sendable {
+    /// Cap de segurança — o histórico trunca bem antes disso; evita reter
+    /// respostas gigantes na memória.
+    static let maxBytes = 256 * 1024
     private var data = Data()
     private let lock = NSLock()
 
     func append(_ chunk: Data) {
         lock.lock()
-        data.append(chunk)
+        if data.count < Self.maxBytes {
+            data.append(chunk.prefix(Self.maxBytes - data.count))
+        }
         lock.unlock()
     }
 
@@ -85,7 +90,7 @@ struct ClaudeRunner: ClaudeRunning {
         return URL(fileURLWithPath: path)
     }
 
-    func run(_ message: Message) async -> Result<Void, RunnerError> {
+    func run(_ message: Message) async -> Result<String, RunnerError> {
         let process = Process()
         switch message.kind {
         case .claude:
@@ -139,9 +144,11 @@ struct ClaudeRunner: ClaudeRunning {
         // ninguem ler, uma saida maior que o buffer do SO (~64KB) trava o
         // write do filho e o processo nunca termina (deadlock classico de
         // Process/Pipe), fazendo sendHi() reportar .timeout erroneamente.
-        let stderrBuffer = StderrBuffer()
+        let stdoutBuffer = PipeBuffer()
+        let stderrBuffer = PipeBuffer()
         outPipe.fileHandleForReading.readabilityHandler = { handle in
-            _ = handle.availableData // descarta stdout, so precisamos drenar
+            let chunk = handle.availableData
+            if !chunk.isEmpty { stdoutBuffer.append(chunk) }
         }
         errPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
@@ -192,6 +199,9 @@ struct ClaudeRunner: ClaudeRunning {
         // zerar cancela a DispatchSourceRead e essa cauda se perderia.
         // Depois de cancelar a source, um `readToEnd()` bloqueante no mesmo
         // fd é seguro e recupera a completude do `readToEnd()` pré-fix.
+        if let rest = try? outPipe.fileHandleForReading.readToEnd(), !rest.isEmpty {
+            stdoutBuffer.append(rest)
+        }
         if let rest = try? errPipe.fileHandleForReading.readToEnd(), !rest.isEmpty {
             stderrBuffer.append(rest)
         }
@@ -199,6 +209,6 @@ struct ClaudeRunner: ClaudeRunning {
             let message = stderrBuffer.trimmedString()
             return .failure(.failed(message.isEmpty ? "exit \(process.terminationStatus)" : message))
         }
-        return .success(())
+        return .success(stdoutBuffer.trimmedString())
     }
 }

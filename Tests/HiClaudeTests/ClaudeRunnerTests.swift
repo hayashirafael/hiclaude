@@ -23,7 +23,7 @@ final class ClaudeRunnerTests: XCTestCase {
         )
 
         let result = await runner.run(Message(text: "1+1", kind: .claude))
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
 
         let captured = try String(contentsOf: argsFile, encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: false)
@@ -42,7 +42,7 @@ final class ClaudeRunnerTests: XCTestCase {
         )
 
         let result = await runner.run(Message(text: "bom dia", kind: .claude))
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
 
         let captured = try String(contentsOf: argsFile, encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: false)
@@ -63,7 +63,7 @@ final class ClaudeRunnerTests: XCTestCase {
         )
         let msg = Message(text: "tarefa", kind: .claude, model: .opus, effort: .high, safeMode: false)
         let result = await runner.run(msg)
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
 
         let captured = try String(contentsOf: argsFile, encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: false)
@@ -87,7 +87,7 @@ final class ClaudeRunnerTests: XCTestCase {
         )
         let msg = Message(text: "1+1", kind: .claude, workingDir: dir.path)
         let result = await runner.run(msg)
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
         let captured = try String(contentsOf: pwdFile, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(URL(fileURLWithPath: captured).standardizedFileURL,
@@ -109,7 +109,7 @@ final class ClaudeRunnerTests: XCTestCase {
         )
         let msg = Message(text: "1+1", kind: .claude, configDir: daMensagem.path)
         let result = await runner.run(msg)
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
         let captured = try String(contentsOf: envFile, encoding: .utf8)
         XCTAssertEqual(captured, daMensagem.path)
     }
@@ -126,7 +126,7 @@ final class ClaudeRunnerTests: XCTestCase {
         )
 
         let result = await runner.run(Message(text: "echo oi", kind: .shell))
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
 
         let captured = try String(contentsOf: argsFile, encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: false)
@@ -148,7 +148,7 @@ final class ClaudeRunnerTests: XCTestCase {
             configDir: conta
         )
         let result = await runner.run(Message(text: "1+1", kind: .claude))
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
         let captured = try String(contentsOf: envFile, encoding: .utf8)
         XCTAssertEqual(captured, conta.path)
     }
@@ -166,15 +166,22 @@ final class ClaudeRunnerTests: XCTestCase {
             binaryOverride: makeScript("printf '%s' \"$CLAUDE_CONFIG_DIR\" > '\(envFile.path)'; exit 0")
         )
         let result = await runner.run(Message(text: "1+1", kind: .claude))
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
         let captured = try String(contentsOf: envFile, encoding: .utf8)
         XCTAssertEqual(captured, NSHomeDirectory() + "/.claude")
+    }
+
+    func testCapturaStdoutNoSucesso() async {
+        let runner = ClaudeRunner(timeout: 5,
+                                  binaryOverride: makeScript("echo 'resposta do claude'; exit 0"))
+        let result = await runner.run(Message(text: "1+1", kind: .claude))
+        XCTAssertEqual(result, .success("resposta do claude"))
     }
 
     func testSucessoQuandoExitZero() async {
         let runner = ClaudeRunner(timeout: 5, binaryOverride: makeScript("exit 0"))
         let result = await runner.run(Message(text: "1+1", kind: .claude))
-        XCTAssertEqual(result, .success(()))
+        XCTAssertEqual(result, .success(""))
     }
 
     func testFalhaCapturaStderr() async {
@@ -199,7 +206,12 @@ final class ClaudeRunnerTests: XCTestCase {
             binaryOverride: makeScript("head -c 200000 /dev/zero | tr '\\0' 'x'; exit 0")
         )
         let result = await runner.run(Message(text: "1+1", kind: .claude))
-        XCTAssertEqual(result, .success(()))
+        if case .success(let output) = result {
+            XCTAssertEqual(output.count, 200000, "esperava 200000 chars, obtido \(output.count)")
+            XCTAssertTrue(output.allSatisfy { $0 == "x" }, "stdout deveria conter apenas 'x'")
+        } else {
+            XCTFail("esperava sucesso, obtido \(result)")
+        }
     }
 
     /// Regressao (re-review #1): o readabilityHandler e assincrono/level-
@@ -252,6 +264,21 @@ final class ClaudeRunnerTests: XCTestCase {
         XCTAssertEqual(result, .failure(.timeout))
         XCTAssertLessThan(elapsed, 10, "sendHi() nao retornou em tempo limitado: \(elapsed)s")
     }
+}
+
+extension Result where Success == String, Failure == RunnerError {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case (.success(let l), .success(let r)): return l == r
+        case (.failure(let l), .failure(let r)): return l == r
+        default: return false
+        }
+    }
+}
+
+func XCTAssertEqual(_ lhs: Result<String, RunnerError>, _ rhs: Result<String, RunnerError>,
+                    file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertTrue(lhs == rhs, "\(lhs) != \(rhs)", file: file, line: line)
 }
 
 extension Result where Success == Void, Failure == RunnerError {
