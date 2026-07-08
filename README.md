@@ -59,11 +59,3 @@ CLAUDE.md/skills/MCP) — só o suficiente para abrir a janela.
 Antes de disparar, ele lê passivamente os transcripts locais do Claude Code em
 `~/.claude/projects/**.jsonl` (streaming linha a linha, por `mtime`) e
 reconstrói a janela de 5h corrente. Se já houver uma ativa, o disparo é pulado.
-
-## Limitações
-
-- A detecção de janela ativa só enxerga o uso do Claude Code **nesta máquina**;
-  sessões no navegador ou em outro computador não são vistas (o "hi" redundante
-  é inofensivo).
-- Sem daemon: com o app fechado, nada dispara.
-- Build v1 é assinada ad-hoc e não notarizada.
