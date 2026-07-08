@@ -24,7 +24,7 @@ final class AppStateTests: XCTestCase {
         a.addSchedule(minutes: 12 * 60 + 30)
         a.updateSchedule(id: a.schedules[0].id, minutes: 8 * 60)
         a.paused = true
-        a.lastEvent = event
+        a.recordEvent(event)
         let b = AppState(defaults: defaults)
         XCTAssertEqual(b.times, [8 * 60, 12 * 60 + 30]) // ordenado
         XCTAssertEqual(b.schedules, a.schedules)        // ids sobrevivem
@@ -342,5 +342,43 @@ final class AppStateTests: XCTestCase {
         let b = AppState(defaults: defaults)
         XCTAssertEqual(b.favorites.first?.showResponse, true)
         XCTAssertTrue(b.favorites.first!.resolvedShowResponse)
+    }
+
+    func testHistoricoCapEm20MaisRecentePrimeiro() {
+        let state = AppState(defaults: freshDefaults())
+        for i in 0..<25 {
+            state.recordEvent(FireEvent(date: Date(timeIntervalSince1970: Double(i)), result: .success))
+        }
+        XCTAssertEqual(state.history.count, 20)
+        XCTAssertEqual(state.history.first?.date, Date(timeIntervalSince1970: 24))
+        XCTAssertEqual(state.lastEvent, state.history.first)
+    }
+
+    func testHistoricoPersisteERestaura() {
+        let defaults = freshDefaults()
+        let a = AppState(defaults: defaults)
+        a.recordEvent(FireEvent(date: Date(timeIntervalSince1970: 1), result: .success,
+                                messageText: "1+1", account: ".claude", origin: .scheduled))
+        let b = AppState(defaults: defaults)
+        XCTAssertEqual(b.history, a.history)
+    }
+
+    /// Migração: o lastEvent persistido pela versão antiga vira o primeiro histórico.
+    func testMigraLastEventLegadoParaHistorico() {
+        let defaults = freshDefaults()
+        let event = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000), result: .success)
+        defaults.set(try? JSONEncoder().encode(event), forKey: "lastEvent")
+        let state = AppState(defaults: defaults)
+        XCTAssertEqual(state.history, [event])
+        XCTAssertEqual(state.lastEvent, event)
+    }
+
+    /// Evento sem os campos novos (JSON legado) decodifica com nil.
+    func testFireEventLegadoDecodificaComCamposNil() throws {
+        let data = try JSONEncoder().encode(FireEvent(date: Date(timeIntervalSince1970: 1), result: .success))
+        let decoded = try JSONDecoder().decode(FireEvent.self, from: data)
+        XCTAssertNil(decoded.messageText)
+        XCTAssertNil(decoded.origin)
+        XCTAssertNil(decoded.response)
     }
 }

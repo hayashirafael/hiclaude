@@ -47,48 +47,49 @@ final class FireControllerTests: XCTestCase {
     func testJanelaAtivaPulaSemExecutar() async {
         let end = now.addingTimeInterval(3600)
         detector.end = end
-        await controller.fire(manual: false)
+        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
         XCTAssertEqual(runner.calls, 0)
-        XCTAssertEqual(state.lastEvent, FireEvent(date: now, result: .skipped(activeUntil: end)))
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .skipped(activeUntil: end),
+                                 messageText: "1+1", account: ".claude", origin: .scheduled))
         XCTAssertEqual(state.activeWindowEnd, end)
     }
 
-    func testSucessoRegistraEvento() async {
-        await controller.fire(manual: false)
+    func testSucessoRegistraEventoNoHistorico() async {
+        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
         XCTAssertEqual(runner.calls, 1)
-        XCTAssertEqual(state.lastEvent, FireEvent(date: now, result: .success))
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .success,
+                                 messageText: "1+1", account: ".claude", origin: .scheduled))
+        XCTAssertEqual(state.history.count, 1)
         XCTAssertTrue(notifier.messages.isEmpty)
     }
 
     func testFalhaAgendadaNotifica() async {
         runner.result = .failure(.failed("sem rede"))
-        await controller.fire(manual: false)
-        XCTAssertEqual(state.lastEvent, FireEvent(date: now, result: .failure(message: "sem rede")))
+        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .failure(message: "sem rede"),
+                                 messageText: "1+1", account: ".claude", origin: .scheduled))
         XCTAssertEqual(notifier.messages, ["sem rede"])
     }
 
     func testFalhaManualNaoNotifica() async {
         runner.result = .failure(.failed("sem rede"))
-        await controller.fire(manual: true)
+        await controller.fire(message: state.resolvedMessage, origin: .manual)
         XCTAssertTrue(notifier.messages.isEmpty)
     }
 
     func testCliNaoEncontradoMarcaClaudeFound() async {
         runner.result = .failure(.cliNotFound)
-        await controller.fire(manual: false)
+        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
         XCTAssertFalse(state.claudeFound)
     }
 
-    func testEnviaMensagemPadraoPorDefault() async {
-        await controller.fire(manual: false)
-        XCTAssertEqual(runner.lastMessage, AppState.defaultMessage)
-    }
-
-    func testEnviaMensagemAtivaEscolhida() async {
+    /// O controller envia exatamente a mensagem recebida (o chamador resolve).
+    func testEnviaAMensagemRecebida() async {
         let msg = Message(text: "bom dia", kind: .claude)
-        state.addFavorite(text: "bom dia", kind: .claude)
-        state.setActiveMessage(msg)
-        await controller.fire(manual: false)
+        await controller.fire(message: msg, origin: .scheduled)
         XCTAssertEqual(runner.lastMessage, msg)
     }
 
@@ -100,9 +101,7 @@ final class FireControllerTests: XCTestCase {
         try FileManager.default.createDirectory(at: conta, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: conta) }
         let msg = Message(text: "oi", kind: .claude, configDir: conta.path)
-        state.addFavorite(text: "oi", kind: .claude, configDir: conta.path)
-        state.setActiveMessage(msg)
-        await controller.fire(manual: false)
+        await controller.fire(message: msg, origin: .scheduled)
         XCTAssertEqual(detector.lastProjectsDir?.standardizedFileURL,
                        conta.appendingPathComponent("projects").standardizedFileURL)
     }
@@ -111,11 +110,11 @@ final class FireControllerTests: XCTestCase {
     func testComandoCruRodaMesmoComJanelaAtiva() async {
         detector.end = now.addingTimeInterval(3600)
         let msg = Message(text: "echo oi", kind: .shell)
-        state.addFavorite(text: "echo oi", kind: .shell)
-        state.setActiveMessage(msg)
-        await controller.fire(manual: false)
+        await controller.fire(message: msg, origin: .scheduled)
         XCTAssertEqual(runner.calls, 1)
         XCTAssertEqual(runner.lastMessage, msg)
-        XCTAssertEqual(state.lastEvent, FireEvent(date: now, result: .success))
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .success,
+                                 messageText: "echo oi", account: ".claude", origin: .scheduled))
     }
 }

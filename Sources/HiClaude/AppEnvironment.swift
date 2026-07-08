@@ -101,7 +101,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     func fireNow() async {
-        await controller.fire(manual: true)
+        await controller.fire(message: state.resolvedMessage, origin: .manual)
     }
 
     func refreshWindowStatus() async {
@@ -112,7 +112,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func scheduledFire() async {
-        await controller.fire(manual: false)
+        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
         persistLastCheck()
     }
 

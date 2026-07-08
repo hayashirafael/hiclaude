@@ -6,9 +6,16 @@ enum FireResult: Codable, Equatable {
     case failure(message: String)
 }
 
+enum FireOrigin: String, Codable { case scheduled, manual, renewal }
+
 struct FireEvent: Codable, Equatable {
     let date: Date
     let result: FireResult
+    // Campos novos, opcionais para decodificar eventos persistidos antigos.
+    var messageText: String? = nil
+    var account: String? = nil      // lastPathComponent da conta efetiva
+    var origin: FireOrigin? = nil   // nil = evento legado
+    var response: String? = nil     // resposta capturada (quando showResponse)
 }
 
 /// Uma mensagem agendável. `claude` vira o corpo de `claude -p`; `shell` roda
@@ -141,9 +148,24 @@ final class AppState: ObservableObject {
     }
 
     @Published var paused: Bool { didSet { defaults.set(paused, forKey: Keys.paused) } }
-    @Published var lastEvent: FireEvent? {
-        didSet { defaults.set(lastEvent.flatMap { try? JSONEncoder().encode($0) }, forKey: Keys.lastEvent) }
+
+    static let historyLimit = 20
+
+    @Published var history: [FireEvent] {
+        didSet {
+            if history.count > Self.historyLimit {
+                history = Array(history.prefix(Self.historyLimit)) // didSet re-dispara e persiste
+                return
+            }
+            defaults.set(try? JSONEncoder().encode(history), forKey: Keys.history)
+        }
     }
+
+    /// Último disparo — cabeçalho do menu.
+    var lastEvent: FireEvent? { history.first }
+
+    func recordEvent(_ event: FireEvent) { history.insert(event, at: 0) }
+
     @Published var claudeFound = true
     @Published var activeWindowEnd: Date?
     /// Aba selecionada na janela de Configurações (deep-link a partir do menu).
@@ -278,6 +300,7 @@ final class AppState: ObservableObject {
         static let schedules = "schedules"
         static let paused = "paused"
         static let lastEvent = "lastEvent"
+        static let history = "history"
         static let lastCheck = "lastCheck"
         static let favorites = "favorites"
         static let activeMessage = "activeMessage"
@@ -288,8 +311,14 @@ final class AppState: ObservableObject {
         self.defaults = defaults
         self.schedules = Self.loadSchedules(defaults)
         self.paused = defaults.bool(forKey: Keys.paused)
-        if let data = defaults.data(forKey: Keys.lastEvent) {
-            self.lastEvent = try? JSONDecoder().decode(FireEvent.self, from: data)
+        if let data = defaults.data(forKey: Keys.history),
+           let decoded = try? JSONDecoder().decode([FireEvent].self, from: data) {
+            self.history = decoded
+        } else if let data = defaults.data(forKey: Keys.lastEvent),
+                  let event = try? JSONDecoder().decode(FireEvent.self, from: data) {
+            self.history = [event] // migração da versão antiga
+        } else {
+            self.history = []
         }
         self.favorites = Self.loadFavorites(defaults)
         self.activeMessage = Self.loadActiveMessage(defaults)
