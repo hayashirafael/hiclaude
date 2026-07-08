@@ -19,8 +19,10 @@ protocol ClaudeRunning {
 }
 
 /// Acumula os bytes de stderr recebidos via `readabilityHandler`, que roda
-/// em uma dispatch queue de fundo — precisa de lock porque o loop de poll
-/// do timeout le `isRunning` na task async enquanto o handler escreve.
+/// em uma dispatch queue de fundo — precisa de lock porque `trimmedString()`
+/// (chamado pela task async) e `append()` (chamado pela queue de fundo da
+/// readability e pelo drain final síncrono) tocam o mesmo `Data`
+/// concorrentemente.
 final class StderrBuffer: @unchecked Sendable {
     private var data = Data()
     private let lock = NSLock()
@@ -128,15 +130,35 @@ struct ClaudeRunner: ClaudeRunning {
 
         let timedOut = process.isRunning
         if timedOut {
+            // `terminate()` só manda SIGTERM; um filho que ignora/trata o
+            // sinal faria um `waitUntilExit()` travar para sempre —
+            // reintroduzindo o mesmo bug (subprocesso que nunca reporta
+            // término) na branch de timeout. Então limitamos a espera: um
+            // grace period curto e, se ainda vivo, escalamos para SIGKILL.
             process.terminate()
-            process.waitUntilExit()
+            let graceDeadline = Date().addingTimeInterval(2)
+            while process.isRunning && Date() < graceDeadline {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
         }
 
-        outPipe.fileHandleForReading.readabilityHandler = nil
         errPipe.fileHandleForReading.readabilityHandler = nil
+        outPipe.fileHandleForReading.readabilityHandler = nil
 
         if timedOut {
             return .failure(.timeout)
+        }
+        // O `readabilityHandler` é assíncrono/level-triggered: ao ver o
+        // processo já terminado e zerar o handler, o último chunk (ou o
+        // evento de EOF) pode não ter sido despachado ao bloco ainda —
+        // zerar cancela a DispatchSourceRead e essa cauda se perderia.
+        // Depois de cancelar a source, um `readToEnd()` bloqueante no mesmo
+        // fd é seguro e recupera a completude do `readToEnd()` pré-fix.
+        if let rest = try? errPipe.fileHandleForReading.readToEnd(), !rest.isEmpty {
+            stderrBuffer.append(rest)
         }
         if process.terminationStatus != 0 {
             let message = stderrBuffer.trimmedString()

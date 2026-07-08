@@ -41,6 +41,57 @@ final class ClaudeRunnerTests: XCTestCase {
         let result = await runner.sendHi()
         XCTAssertEqual(result, .success(()))
     }
+
+    /// Regressao (re-review #1): o readabilityHandler e assincrono/level-
+    /// triggered; ao zerar o handler assim que o processo termina, o ultimo
+    /// chunk de stderr (escrito logo antes do exit) pode nao ter sido
+    /// despachado ainda e se perder, virando "exit N" em vez da mensagem
+    /// real. O drain final sincrono garante a captura completa.
+    func testCapturaStderrEscritoImediatamenteAntesDoExit() async {
+        let runner = ClaudeRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf 'erro fatal na cli\\n' >&2; exit 3")
+        )
+        let result = await runner.sendHi()
+        XCTAssertEqual(result, .failure(.failed("erro fatal na cli")))
+    }
+
+    /// Regressao (re-review #1): stderr grande (acima do buffer do pipe)
+    /// deve ser capturado por completo, sem truncar. Usamos uma linha
+    /// reconhecivel no fim para provar que a cauda chegou.
+    func testCapturaStderrGrandeCompleto() async {
+        let runner = ClaudeRunner(
+            timeout: 10,
+            binaryOverride: makeScript(
+                "head -c 200000 /dev/zero | tr '\\0' 'x' >&2; printf 'FIM-DA-STDERR\\n' >&2; exit 1"
+            )
+        )
+        let result = await runner.sendHi()
+        if case .failure(.failed(let message)) = result {
+            XCTAssertTrue(message.hasSuffix("FIM-DA-STDERR"),
+                          "stderr truncado; sufixo real: \(String(message.suffix(40)))")
+            XCTAssertGreaterThan(message.count, 200000)
+        } else {
+            XCTFail("esperava .failure(.failed(...)), obtido \(result)")
+        }
+    }
+
+    /// Regressao (re-review #2): terminate() so manda SIGTERM. Um filho que
+    /// ignora SIGTERM faria um waitUntilExit() travar para sempre, e
+    /// sendHi() nunca retornaria — o mesmo bug que o fix original matou,
+    /// so que na branch de timeout. A espera pos-terminate deve ser
+    /// limitada (grace + SIGKILL) e retornar .timeout em tempo limitado.
+    func testTimeoutLimitadoMesmoComFilhoQueIgnoraSIGTERM() async {
+        let runner = ClaudeRunner(
+            timeout: 1,
+            binaryOverride: makeScript("trap '' TERM; sleep 30")
+        )
+        let start = Date()
+        let result = await runner.sendHi()
+        let elapsed = Date().timeIntervalSince(start)
+        XCTAssertEqual(result, .failure(.timeout))
+        XCTAssertLessThan(elapsed, 10, "sendHi() nao retornou em tempo limitado: \(elapsed)s")
+    }
 }
 
 extension Result where Success == Void, Failure == RunnerError {
