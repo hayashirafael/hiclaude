@@ -13,7 +13,7 @@ struct FireEvent: Codable, Equatable {
 
 /// Uma mensagem agendável. `claude` vira o corpo de `claude -p`; `shell` roda
 /// como comando cru no shell de login (utilidade fora do Claude).
-struct Message: Codable, Equatable, Identifiable {
+struct Message: Codable, Identifiable {
     enum Kind: String, Codable { case claude, shell }
 
     /// Modelo do `claude --model`. Só relevante quando `kind == .claude`.
@@ -49,14 +49,36 @@ struct Message: Codable, Equatable, Identifiable {
     var safeMode: Bool? = nil
     var configDir: String? = nil   // conta; nil = herda a global
     var workingDir: String? = nil  // nil = home
+    /// Identidade estável — referências horário→mensagem sobrevivem a edições.
+    /// Opcional para decodificar JSON legado; AppState garante uid em tudo que
+    /// persiste. Fica fora do `==` de propósito (igualdade é por conteúdo).
+    var uid: UUID? = nil
+    /// Mostrar a resposta do disparo (histórico + notificação). nil = desligado.
+    var showResponse: Bool? = nil
 
-    /// Id estável para ForEach; o \u{1} é separador seguro (não aparece em texto).
-    /// Inclui a config para não colidir quando dois favoritos têm o mesmo texto
-    /// com configs diferentes.
-    var id: String {
-        [kind.rawValue, text, model?.rawValue ?? "", effort?.rawValue ?? "",
-         safeMode.map(String.init) ?? "", configDir ?? "", workingDir ?? ""]
+    /// Id para ForEach: uid quando presente, senão a chave de conteúdo (legado).
+    var id: String { uid?.uuidString ?? contentKey }
+
+    private var contentKey: String {
+        let modelVal = model?.rawValue ?? ""
+        let effortVal = effort?.rawValue ?? ""
+        let safeModeVal = safeMode.map(String.init) ?? ""
+        let configVal = configDir ?? ""
+        let workingVal = workingDir ?? ""
+        let showResponseVal = showResponse.map(String.init) ?? ""
+        return [kind.rawValue, text, modelVal, effortVal, safeModeVal, configVal, workingVal, showResponseVal]
             .joined(separator: "\u{1}")
+    }
+}
+
+extension Message: Equatable {
+    /// Igualdade por conteúdo/config — ignora `uid`: dedupe e resolução de
+    /// mensagem ativa comparam o que a mensagem FAZ, não quem ela é.
+    static func == (lhs: Message, rhs: Message) -> Bool {
+        lhs.text == rhs.text && lhs.kind == rhs.kind && lhs.model == rhs.model
+            && lhs.effort == rhs.effort && lhs.safeMode == rhs.safeMode
+            && lhs.configDir == rhs.configDir && lhs.workingDir == rhs.workingDir
+            && lhs.showResponse == rhs.showResponse
     }
 }
 
@@ -67,6 +89,7 @@ extension Message {
     var resolvedModel: Model { model ?? Self.defaultModel }
     var resolvedEffort: Effort { effort ?? Self.defaultEffort }
     var resolvedSafeMode: Bool { safeMode ?? Self.defaultSafeMode }
+    var resolvedShowResponse: Bool { showResponse ?? false }
 }
 
 @MainActor
@@ -85,7 +108,9 @@ final class AppState: ObservableObject {
     @Published var claudeFound = true
     @Published var activeWindowEnd: Date?
 
-    static let defaultMessage = Message(text: "1+1", kind: .claude)
+    static let defaultMessage = Message(
+        text: "1+1", kind: .claude,
+        uid: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
 
     @Published var favorites: [Message] {
         didSet { defaults.set(try? JSONEncoder().encode(favorites), forKey: Keys.favorites) }
@@ -149,11 +174,13 @@ final class AppState: ObservableObject {
     func addFavorite(text: String, kind: Message.Kind,
                      model: Message.Model? = nil, effort: Message.Effort? = nil,
                      safeMode: Bool? = nil, configDir: String? = nil,
-                     workingDir: String? = nil) {
+                     workingDir: String? = nil, showResponse: Bool? = nil) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let msg = Message(text: t, kind: kind, model: model, effort: effort,
-                          safeMode: safeMode, configDir: configDir, workingDir: workingDir)
+        var msg = Message(text: t, kind: kind, model: model, effort: effort,
+                          safeMode: safeMode, configDir: configDir,
+                          workingDir: workingDir, showResponse: showResponse)
         guard !t.isEmpty, msg != Self.defaultMessage, !favorites.contains(msg) else { return }
+        msg.uid = UUID()
         favorites.append(msg)
     }
 
@@ -162,8 +189,10 @@ final class AppState: ObservableObject {
     func updateFavorite(_ old: Message, to new: Message) {
         guard let idx = favorites.firstIndex(of: old) else { return }
         let wasActive = activeMessage == old
-        favorites[idx] = new
-        if wasActive { activeMessage = new }
+        var updated = new
+        updated.uid = favorites[idx].uid ?? UUID()
+        favorites[idx] = updated
+        if wasActive { activeMessage = updated }
     }
 
     func removeFavorite(_ msg: Message) {
@@ -184,6 +213,12 @@ final class AppState: ObservableObject {
     func setActiveMessage(_ msg: Message) {
         guard msg == Self.defaultMessage || favorites.contains(msg) else { return }
         activeMessage = msg
+    }
+
+    /// Resolve uma referência estável (uid) para a mensagem atual — default ou favorito.
+    func message(withUID uid: UUID) -> Message? {
+        if uid == Self.defaultMessage.uid { return Self.defaultMessage }
+        return favorites.first { $0.uid == uid }
     }
 
     var lastCheck: Date? {
@@ -221,14 +256,21 @@ final class AppState: ObservableObject {
     /// Decodifica favoritos em JSON; se falhar, migra do formato legado
     /// (`[String]`, todos tratados como `.claude`).
     private static func loadFavorites(_ defaults: UserDefaults) -> [Message] {
+        var loaded: [Message]
         if let data = defaults.data(forKey: Keys.favorites),
            let decoded = try? JSONDecoder().decode([Message].self, from: data) {
-            return decoded
+            loaded = decoded
+        } else if let legacy = defaults.array(forKey: Keys.favorites) as? [String] {
+            loaded = legacy.map { Message(text: $0, kind: .claude) }
+        } else {
+            return []
         }
-        if let legacy = defaults.array(forKey: Keys.favorites) as? [String] {
-            return legacy.map { Message(text: $0, kind: .claude) }
+        // Migração: garante uid estável persistido (referências horário→mensagem).
+        if loaded.contains(where: { $0.uid == nil }) {
+            for i in loaded.indices where loaded[i].uid == nil { loaded[i].uid = UUID() }
+            defaults.set(try? JSONEncoder().encode(loaded), forKey: Keys.favorites)
         }
-        return []
+        return loaded
     }
 
     /// Decodifica a mensagem ativa em JSON; migra string legada para `.claude`.

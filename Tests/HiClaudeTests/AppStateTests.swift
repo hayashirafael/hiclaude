@@ -233,4 +233,71 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.activeMessage, Message(text: "bom dia", kind: .claude))
         XCTAssertEqual(state.resolvedMessage, Message(text: "bom dia", kind: .claude))
     }
+
+    func testDefaultMessageTemUIDFixo() {
+        XCTAssertEqual(AppState.defaultMessage.uid,
+                       UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+    }
+
+    func testFavoritoGanhaUIDEstavelEPersistido() {
+        let defaults = freshDefaults()
+        let a = AppState(defaults: defaults)
+        a.addFavorite(text: "oi", kind: .claude)
+        let uid = a.favorites[0].uid
+        XCTAssertNotNil(uid)
+        let b = AppState(defaults: defaults)
+        XCTAssertEqual(b.favorites[0].uid, uid)
+    }
+
+    /// Migração: favoritos persistidos sem uid ganham um na carga e ele é
+    /// gravado de volta imediatamente (referências horário→mensagem dependem disso).
+    func testFavoritosLegadosSemUIDGanhamUIDNaCarga() {
+        let defaults = freshDefaults()
+        defaults.set(#"[{"text":"oi","kind":"claude"}]"#.data(using: .utf8)!, forKey: "favorites")
+        let a = AppState(defaults: defaults)
+        let uid = a.favorites[0].uid
+        XCTAssertNotNil(uid)
+        let b = AppState(defaults: defaults)
+        XCTAssertEqual(b.favorites[0].uid, uid)
+    }
+
+    func testUpdateFavoritoPreservaUID() {
+        let state = AppState(defaults: freshDefaults())
+        state.addFavorite(text: "tarefa", kind: .claude)
+        let uid = state.favorites[0].uid
+        state.updateFavorite(state.favorites[0], to: Message(text: "tarefa 2", kind: .claude))
+        XCTAssertEqual(state.favorites[0].uid, uid)
+        XCTAssertEqual(state.favorites[0].text, "tarefa 2")
+    }
+
+    func testIgualdadeIgnoraUID() {
+        var a = Message(text: "x", kind: .claude); a.uid = UUID()
+        var b = Message(text: "x", kind: .claude); b.uid = UUID()
+        XCTAssertEqual(a, b)
+    }
+
+    func testMessageWithUIDEncontraFavoritoEDefault() {
+        let state = AppState(defaults: freshDefaults())
+        state.addFavorite(text: "oi", kind: .claude)
+        let uid = state.favorites[0].uid!
+        XCTAssertEqual(state.message(withUID: uid), state.favorites[0])
+        XCTAssertEqual(state.message(withUID: AppState.defaultMessage.uid!), AppState.defaultMessage)
+        XCTAssertNil(state.message(withUID: UUID()))
+    }
+
+    func testShowResponseLegadoNilEDefaultFalse() throws {
+        let legacyJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
+        let msg = try JSONDecoder().decode(Message.self, from: legacyJSON)
+        XCTAssertNil(msg.showResponse)
+        XCTAssertFalse(msg.resolvedShowResponse)
+    }
+
+    func testAddFavoritoComShowResponsePersiste() {
+        let defaults = freshDefaults()
+        let a = AppState(defaults: defaults)
+        a.addFavorite(text: "resumo", kind: .claude, showResponse: true)
+        let b = AppState(defaults: defaults)
+        XCTAssertEqual(b.favorites.first?.showResponse, true)
+        XCTAssertTrue(b.favorites.first!.resolvedShowResponse)
+    }
 }
