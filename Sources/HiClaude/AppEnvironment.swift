@@ -18,7 +18,7 @@ final class AppEnvironment: ObservableObject {
         self.detector = detector
         self.engine = SchedulerEngine(lastCheck: state.lastCheck)
         self.controller = FireController(state: state, detector: detector,
-                                         runner: ClaudeRunner(), notifier: NullNotifier())
+                                         runner: ClaudeRunner(), notifier: SystemNotifier())
 
         engine.onFire = { [weak self] in
             Task { @MainActor in await self?.scheduledFire() }

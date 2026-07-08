@@ -39,6 +39,12 @@ struct MenuContent: View {
             openWindow(id: "schedule")
             NSApp.activate(ignoringOtherApps: true)
         }
+        if LoginItem.isSupported {
+            Toggle("Iniciar com o Mac", isOn: Binding(
+                get: { LoginItem.isEnabled },
+                set: { LoginItem.setEnabled($0) }
+            ))
+        }
         Divider()
         Button("Sair") { NSApplication.shared.terminate(nil) }
     }
