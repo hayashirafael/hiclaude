@@ -3,16 +3,20 @@ import XCTest
 
 final class MockDetector: SessionDetecting {
     var end: Date?
-    func activeWindowEnd() async -> Date? { end }
+    var lastProjectsDir: URL?
+    func activeWindowEnd(projectsDir: URL) async -> Date? {
+        lastProjectsDir = projectsDir
+        return end
+    }
 }
 
 final class MockRunner: ClaudeRunning {
     var result: Result<Void, RunnerError> = .success(())
     var calls = 0
-    var lastPrompt: String?
-    func sendHi(prompt: String) async -> Result<Void, RunnerError> {
+    var lastMessage: Message?
+    func run(_ message: Message) async -> Result<Void, RunnerError> {
         calls += 1
-        lastPrompt = prompt
+        lastMessage = message
         return result
     }
 }
@@ -77,13 +81,41 @@ final class FireControllerTests: XCTestCase {
 
     func testEnviaMensagemPadraoPorDefault() async {
         await controller.fire(manual: false)
-        XCTAssertEqual(runner.lastPrompt, "1+1")
+        XCTAssertEqual(runner.lastMessage, AppState.defaultMessage)
     }
 
     func testEnviaMensagemAtivaEscolhida() async {
-        state.addFavorite("bom dia")
-        state.setActiveMessage("bom dia")
+        let msg = Message(text: "bom dia", kind: .claude)
+        state.addFavorite(text: "bom dia", kind: .claude)
+        state.setActiveMessage(msg)
         await controller.fire(manual: false)
-        XCTAssertEqual(runner.lastPrompt, "bom dia")
+        XCTAssertEqual(runner.lastMessage, msg)
+    }
+
+    /// A janela é checada na conta efetiva da mensagem (conta por mensagem):
+    /// o detector recebe o `projects` do override, não o da conta global.
+    func testJanelaChecadaNaContaDaMensagem() async throws {
+        let conta = FileManager.default.temporaryDirectory
+            .appendingPathComponent("conta-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: conta, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: conta) }
+        let msg = Message(text: "oi", kind: .claude, configDir: conta.path)
+        state.addFavorite(text: "oi", kind: .claude, configDir: conta.path)
+        state.setActiveMessage(msg)
+        await controller.fire(manual: false)
+        XCTAssertEqual(detector.lastProjectsDir?.standardizedFileURL,
+                       conta.appendingPathComponent("projects").standardizedFileURL)
+    }
+
+    /// Comando cru ignora o skip de janela ativa e sempre executa.
+    func testComandoCruRodaMesmoComJanelaAtiva() async {
+        detector.end = now.addingTimeInterval(3600)
+        let msg = Message(text: "echo oi", kind: .shell)
+        state.addFavorite(text: "echo oi", kind: .shell)
+        state.setActiveMessage(msg)
+        await controller.fire(manual: false)
+        XCTAssertEqual(runner.calls, 1)
+        XCTAssertEqual(runner.lastMessage, msg)
+        XCTAssertEqual(state.lastEvent, FireEvent(date: now, result: .success))
     }
 }

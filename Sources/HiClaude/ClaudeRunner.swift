@@ -15,7 +15,7 @@ enum RunnerError: Error, Equatable {
 }
 
 protocol ClaudeRunning {
-    func sendHi(prompt: String) async -> Result<Void, RunnerError>
+    func run(_ message: Message) async -> Result<Void, RunnerError>
 }
 
 /// Acumula os bytes de stderr recebidos via `readabilityHandler`, que roda
@@ -45,6 +45,11 @@ final class StderrBuffer: @unchecked Sendable {
 struct ClaudeRunner: ClaudeRunning {
     var timeout: TimeInterval = 60
     var binaryOverride: URL? // testes
+    var shellOverride: URL? // testes
+    /// Conta Claude a mirar. Fixado no `CLAUDE_CONFIG_DIR` do subprocesso para
+    /// não herdar silenciosamente o valor do shell que lançou o app — senão o
+    /// ping abre a janela de 5h numa conta diferente da que o usuário observa.
+    var configDir: URL?
 
     /// Caminhos comuns de instalação; fallback via shell de login cobre
     /// nvm/asdf e instalações exóticas (importante para open source).
@@ -80,29 +85,49 @@ struct ClaudeRunner: ClaudeRunning {
         return URL(fileURLWithPath: path)
     }
 
-    func sendHi(prompt: String = "1+1") async -> Result<Void, RunnerError> {
-        guard let binary = binaryOverride ?? Self.locateClaude() else {
-            return .failure(.cliNotFound)
-        }
+    func run(_ message: Message) async -> Result<Void, RunnerError> {
         let process = Process()
-        process.executableURL = binary
-        // Ping mínimo em tokens: Haiku (modelo mais barato) com esforço baixo,
-        // --safe-mode pula CLAUDE.md/skills/plugins/hooks/MCP (corta o contexto
-        // de entrada), e "1+1" gera saída de ~1 token. O objetivo é só iniciar
-        // a janela de 5h — o conteúdo da resposta é irrelevante.
-        process.arguments = [
-            "-p",
-            "--model", "claude-haiku-4-5",
-            "--effort", "low",
-            "--safe-mode",
-            prompt,
-        ]
-        process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+        switch message.kind {
+        case .claude:
+            guard let binary = binaryOverride ?? Self.locateClaude() else {
+                return .failure(.cliNotFound)
+            }
+            process.executableURL = binary
+            // Args montados a partir da config da mensagem (defaults: Haiku,
+            // effort low, --safe-mode — o ping mínimo em tokens que só abre a
+            // janela de 5h). --safe-mode pula CLAUDE.md/skills/plugins/hooks/MCP;
+            // quando desligado, o Claude carrega esse contexto normalmente.
+            var args = ["-p",
+                        "--model", message.resolvedModel.cliValue,
+                        "--effort", message.resolvedEffort.rawValue]
+            if message.resolvedSafeMode { args.append("--safe-mode") }
+            args.append(message.text)
+            process.arguments = args
+        case .shell:
+            // Comando cru: shell de login para PATH/aliases/pipes/variáveis
+            // funcionarem — dá utilidade ao app fora do Claude.
+            let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+            process.executableURL = shellOverride ?? URL(fileURLWithPath: shell)
+            process.arguments = ["-l", "-c", message.text]
+        }
+        let home = NSHomeDirectory()
+        // Diretório de trabalho: override da mensagem (se não vazio) senão o home.
+        if let wd = message.workingDir, !wd.trimmingCharacters(in: .whitespaces).isEmpty {
+            process.currentDirectoryURL = URL(fileURLWithPath: NSString(string: wd).expandingTildeInPath)
+        } else {
+            process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+        }
 
         var env = ProcessInfo.processInfo.environment
-        let home = NSHomeDirectory()
         let extraPath = "/opt/homebrew/bin:/usr/local/bin:\(home)/.local/bin"
         env["PATH"] = [env["PATH"], extraPath].compactMap { $0 }.joined(separator: ":")
+        // Sempre fixa a conta alvo. Prioridade: override da mensagem → conta
+        // injetada (global) → ~/.claude. Definir explicitamente sobrescreve
+        // qualquer CLAUDE_CONFIG_DIR herdado do ambiente.
+        let messageConfigDir = (message.configDir?.isEmpty == false)
+            ? URL(fileURLWithPath: message.configDir!) : nil
+        env["CLAUDE_CONFIG_DIR"] = (messageConfigDir ?? configDir
+            ?? URL(fileURLWithPath: home).appendingPathComponent(".claude")).path
         process.environment = env
 
         let outPipe = Pipe()

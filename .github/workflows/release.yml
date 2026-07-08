@@ -12,8 +12,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: swift test
-      - run: ./scripts/make-app.sh
-      - run: ditto -c -k --keepParent build/HiClaude.app HiClaude.zip
+      - run: brew install create-dmg
+      - run: ./scripts/make-dmg.sh
       - uses: softprops/action-gh-release@v2
         with:
-          files: HiClaude.zip
+          files: build/HiClaude-*.dmg
+      - uses: actions/checkout@v4
+        with:
+          repository: hayashirafael/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+      - name: Update Homebrew cask
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ./scripts/update-cask.sh "$VERSION" "build/HiClaude-${VERSION}.dmg" "homebrew-tap/Casks"
+      - name: Commit Homebrew cask
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/hiclaude.rb
+          if git diff --cached --quiet; then
+            echo "No cask changes"
+          else
+            git commit -m "Update HiClaude cask to ${GITHUB_REF_NAME}"
+            git push
+          fi

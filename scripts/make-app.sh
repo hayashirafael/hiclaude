@@ -7,7 +7,27 @@ swift build -c release
 APP="build/HiClaude.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/Resources"
 cp .build/release/HiClaude "$APP/Contents/MacOS/HiClaude"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
+
+# Ícone: a partir de um único master 1024x1024 (assets/AppIcon.png), gera todos
+# os tamanhos que o macOS exige e compila o .icns. macOS não arredonda sozinho —
+# o formato squircle e a margem vão desenhados no próprio PNG.
+ICON_MASTER="assets/AppIcon.png"
+if [[ -f "$ICON_MASTER" ]]; then
+    ICONSET="$(mktemp -d)/AppIcon.iconset"
+    mkdir -p "$ICONSET"
+    for size in 16 32 128 256 512; do
+        sips -z "$size" "$size"     "$ICON_MASTER" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+        sips -z $((size*2)) $((size*2)) "$ICON_MASTER" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+    done
+    iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+    rm -rf "$(dirname "$ICONSET")"
+else
+    echo "aviso: $ICON_MASTER ausente — app sem ícone (coloque um PNG 1024x1024)"
+fi
+
+# Assina por último, depois de Resources/ estar completo.
 codesign --force --sign - "$APP"
 echo "Gerado: $APP"

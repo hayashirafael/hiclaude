@@ -31,18 +31,20 @@ struct MenuContent: View {
         if let end = state.activeWindowEnd, end > Date() {
             Text("Janela ativa até \(Fmt.hhmm(end))")
         }
+        Text("Conta: \(state.resolvedConfigDir.lastPathComponent)")
         Divider()
         Button("Enviar hi agora") { Task { await env.fireNow() } }
         Button(state.paused ? "Retomar" : "Pausar") { env.togglePause() }
         Menu("Mensagem") {
-            ForEach(state.allMessages, id: \.self) { msg in
+            ForEach(state.allMessages) { msg in
                 Button {
                     env.setActiveMessage(msg)
                 } label: {
+                    let label = msg.kind == .shell ? "\(msg.text) (comando)" : msg.text
                     if msg == state.resolvedMessage {
-                        Label(msg, systemImage: "checkmark")
+                        Label(label, systemImage: "checkmark")
                     } else {
-                        Text(msg)
+                        Text(label)
                     }
                 }
             }
@@ -50,6 +52,19 @@ struct MenuContent: View {
             Button("Gerenciar…") {
                 openWindow(id: "schedule")
                 NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+        Menu("Conta") {
+            ForEach(state.discoverAccounts(), id: \.self) { dir in
+                Button {
+                    env.setAccount(dir)
+                } label: {
+                    if dir.standardizedFileURL == state.resolvedConfigDir.standardizedFileURL {
+                        Label(dir.lastPathComponent, systemImage: "checkmark")
+                    } else {
+                        Text(dir.lastPathComponent)
+                    }
+                }
             }
         }
         Divider()

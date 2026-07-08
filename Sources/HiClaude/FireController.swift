@@ -32,17 +32,25 @@ final class FireController {
         isRunning = true
         defer { isRunning = false }
 
-        if let end = await detector.activeWindowEnd() {
+        let message = state.resolvedMessage
+        // A janela é checada na conta efetiva da mensagem (a conta é por mensagem).
+        let projects = state.effectiveConfigDir(for: message).appendingPathComponent("projects")
+
+        // O skip por janela ativa só faz sentido no modo Claude (o objetivo é
+        // abrir a janela de 5h). Comando cru sempre roda no horário.
+        if message.kind == .claude, let end = await detector.activeWindowEnd(projectsDir: projects) {
             state.activeWindowEnd = end
             state.lastEvent = FireEvent(date: clock.now, result: .skipped(activeUntil: end))
             return
         }
 
-        switch await runner.sendHi(prompt: state.resolvedMessage) {
+        switch await runner.run(message) {
         case .success:
             state.claudeFound = true
             state.lastEvent = FireEvent(date: clock.now, result: .success)
-            state.activeWindowEnd = await detector.activeWindowEnd()
+            if message.kind == .claude {
+                state.activeWindowEnd = await detector.activeWindowEnd(projectsDir: projects)
+            }
         case .failure(let error):
             if error == .cliNotFound { state.claudeFound = false }
             state.lastEvent = FireEvent(date: clock.now, result: .failure(message: error.userMessage))

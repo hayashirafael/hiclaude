@@ -67,17 +67,16 @@ final class SessionDetectorTests: XCTestCase {
         try "{\"type\":\"user\",\"timestamp\":\"\(recent)\"}\n".write(to: oldFile, atomically: true, encoding: .utf8)
         try fm.setAttributes([.modificationDate: Date().addingTimeInterval(-48 * 3600)], ofItemAtPath: oldFile.path)
 
-        let detector = SessionDetector(projectsDir: dir, clock: SystemClock())
-        let end = await detector.activeWindowEnd()
+        let detector = SessionDetector(clock: SystemClock())
+        let end = await detector.activeWindowEnd(projectsDir: dir)
         XCTAssertNotNil(end)
         XCTAssertGreaterThan(end!, Date())
     }
 
     func testDiretorioInexistenteRetornaNil() async {
-        let detector = SessionDetector(
-            projectsDir: URL(fileURLWithPath: "/nao/existe/\(UUID().uuidString)"),
-            clock: SystemClock())
-        let end = await detector.activeWindowEnd()
+        let detector = SessionDetector(clock: SystemClock())
+        let end = await detector.activeWindowEnd(
+            projectsDir: URL(fileURLWithPath: "/nao/existe/\(UUID().uuidString)"))
         XCTAssertNil(end)
     }
 
@@ -102,8 +101,8 @@ final class SessionDetectorTests: XCTestCase {
         }
         try linhas.write(to: proj.appendingPathComponent("s.jsonl"), atomically: true, encoding: .utf8)
 
-        let detector = SessionDetector(projectsDir: dir, clock: SystemClock())
-        let end = await detector.activeWindowEnd()
+        let detector = SessionDetector(clock: SystemClock())
+        let end = await detector.activeWindowEnd(projectsDir: dir)
         XCTAssertNotNil(end)
         XCTAssertEqual(end, SessionDetector.activeBlockEnd(timestamps: todas, now: agora))
     }
@@ -118,8 +117,8 @@ final class SessionDetectorTests: XCTestCase {
         try fm.createDirectory(at: proj.appendingPathComponent("quebrado.jsonl"),
                                withIntermediateDirectories: true)
 
-        let detector = SessionDetector(projectsDir: dir, clock: SystemClock())
-        let semJanela = await detector.activeWindowEnd()
+        let detector = SessionDetector(clock: SystemClock())
+        let semJanela = await detector.activeWindowEnd(projectsDir: dir)
         XCTAssertNil(semJanela)
 
         // Com um arquivo válido ao lado, o ilegível não impede a detecção
@@ -127,7 +126,7 @@ final class SessionDetectorTests: XCTestCase {
         let recente = iso.string(from: Date().addingTimeInterval(-1800))
         try "{\"type\":\"user\",\"timestamp\":\"\(recente)\"}\n"
             .write(to: proj.appendingPathComponent("ok.jsonl"), atomically: true, encoding: .utf8)
-        let comJanela = await detector.activeWindowEnd()
+        let comJanela = await detector.activeWindowEnd(projectsDir: dir)
         XCTAssertNotNil(comJanela)
     }
 }

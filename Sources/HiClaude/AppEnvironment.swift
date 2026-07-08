@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 /// Composição: cria as unidades, liga o engine ao controller e observa
@@ -7,9 +8,10 @@ import Foundation
 final class AppEnvironment: ObservableObject {
     let state: AppState
     private let engine: SchedulerEngine
-    private let controller: FireController
+    private var controller: FireController
     private let detector: SessionDetector
     private var observers: [NSObjectProtocol] = []
+    private var cancellables: Set<AnyCancellable> = []
 
     init() {
         let state = AppState()
@@ -18,7 +20,8 @@ final class AppEnvironment: ObservableObject {
         self.detector = detector
         self.engine = SchedulerEngine(lastCheck: state.lastCheck)
         self.controller = FireController(state: state, detector: detector,
-                                         runner: ClaudeRunner(), notifier: SystemNotifier())
+                                         runner: ClaudeRunner(configDir: state.resolvedConfigDir),
+                                         notifier: SystemNotifier())
 
         engine.onFire = { [weak self] in
             Task { @MainActor in await self?.scheduledFire() }
@@ -39,15 +42,31 @@ final class AppEnvironment: ObservableObject {
         observers.append(workspace.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.handleWake() }
+            Task { @MainActor [weak self] in self?.handleWake() }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: .NSSystemClockDidChange, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.handleWake() }
+            Task { @MainActor [weak self] in self?.handleWake() }
         })
 
         Task { @MainActor [weak self] in await self?.refreshWindowStatus() }
+
+        // Trocar de conta global (menu ou janela) recompõe o runner (fallback de
+        // conta) e reflete a janela na UI. `dropFirst` ignora o valor inicial.
+        state.$claudeConfigDir
+            .dropFirst()
+            .sink { [weak self] _ in self?.reconfigureAccount() }
+            .store(in: &cancellables)
+
+        // Trocar a mensagem ativa pode mudar a conta efetiva alvo — reflete a
+        // janela dessa conta na UI.
+        state.$activeMessage
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in await self?.refreshWindowStatus() }
+            }
+            .store(in: &cancellables)
     }
 
     var nextFireDate: Date? { engine.nextFireDate }
@@ -61,8 +80,24 @@ final class AppEnvironment: ObservableObject {
         reconfigure()
     }
 
-    func setActiveMessage(_ text: String) {
-        state.setActiveMessage(text)
+    func setActiveMessage(_ message: Message) {
+        state.setActiveMessage(message)
+    }
+
+    func setAccount(_ url: URL) {
+        state.setAccount(url)
+    }
+
+    /// Recompõe o runner a partir da conta global (fallback de conta das
+    /// mensagens sem override) e reflete a janela na UI. O detector é stateless
+    /// quanto à conta — recebe o `projectsDir` por chamada. Disparado pela
+    /// observação de `claudeConfigDir`.
+    private func reconfigureAccount() {
+        let dir = state.resolvedConfigDir
+        controller = FireController(state: state, detector: detector,
+                                    runner: ClaudeRunner(configDir: dir),
+                                    notifier: SystemNotifier())
+        Task { @MainActor [weak self] in await self?.refreshWindowStatus() }
     }
 
     func fireNow() async {
@@ -70,7 +105,10 @@ final class AppEnvironment: ObservableObject {
     }
 
     func refreshWindowStatus() async {
-        state.activeWindowEnd = await detector.activeWindowEnd()
+        // Reflete a janela da conta que será de fato aquecida (a da mensagem ativa).
+        let projects = state.effectiveConfigDir(for: state.resolvedMessage)
+            .appendingPathComponent("projects")
+        state.activeWindowEnd = await detector.activeWindowEnd(projectsDir: projects)
     }
 
     private func scheduledFire() async {

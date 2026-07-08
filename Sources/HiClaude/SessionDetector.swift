@@ -1,14 +1,14 @@
 import Foundation
 
 protocol SessionDetecting {
-    func activeWindowEnd() async -> Date?
+    /// `projectsDir` é o `<conta>/projects` da conta a inspecionar — passado por
+    /// chamada porque a conta agora é por mensagem.
+    func activeWindowEnd(projectsDir: URL) async -> Date?
 }
 
 /// Reconstrói a janela de 5h do plano Claude lendo passivamente os transcripts
 /// JSONL do Claude Code (mesma técnica do `ccusage blocks`). Nunca executa o CLI.
 struct SessionDetector: SessionDetecting {
-    var projectsDir: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude/projects")
     var clock: Clock = SystemClock()
 
     /// 24h cobre cadeias de blocos consecutivos (o início do bloco corrente
@@ -16,12 +16,12 @@ struct SessionDetector: SessionDetecting {
     static let scanInterval: TimeInterval = 24 * 3600
     static let blockDuration: TimeInterval = 5 * 3600
 
-    func activeWindowEnd() async -> Date? {
+    func activeWindowEnd(projectsDir: URL) async -> Date? {
         var lookback: TimeInterval = Self.scanInterval
         let maxLookback: TimeInterval = 7 * 24 * 3600
         while true {
             let since = clock.now.addingTimeInterval(-lookback)
-            let timestamps = await collectTimestamps(since: since).sorted()
+            let timestamps = await collectTimestamps(projectsDir: projectsDir, since: since).sorted()
             // Se o primeiro timestamp visível está a menos de 5h do início da
             // janela de varredura, a cadeia pode ter sido truncada no meio de
             // um bloco — amplia a varredura até garantir um gap de 5h à esquerda.
@@ -73,7 +73,7 @@ struct SessionDetector: SessionDetecting {
 
     // MARK: - Varredura
 
-    private func candidateFiles(since: Date) -> [URL] {
+    private func candidateFiles(projectsDir: URL, since: Date) -> [URL] {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(
             at: projectsDir,
@@ -90,9 +90,9 @@ struct SessionDetector: SessionDetecting {
         return files
     }
 
-    private func collectTimestamps(since: Date) async -> [Date] {
+    private func collectTimestamps(projectsDir: URL, since: Date) async -> [Date] {
         var result: [Date] = []
-        for url in candidateFiles(since: since) {
+        for url in candidateFiles(projectsDir: projectsDir, since: since) {
             do {
                 // Streaming linha a linha — nunca carrega o arquivo inteiro
                 for try await line in url.lines {
