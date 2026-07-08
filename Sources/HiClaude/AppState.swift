@@ -13,7 +13,13 @@ struct FireEvent: Codable, Equatable {
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var times: [Int] { didSet { defaults.set(times.sorted(), forKey: Keys.times) } }
+    @Published var times: [Int] {
+        didSet {
+            let sorted = times.sorted()
+            if times != sorted { times = sorted; return } // re-normaliza uma vez; didSet re-dispara, entao igual -> persiste
+            defaults.set(times, forKey: Keys.times)
+        }
+    }
     @Published var paused: Bool { didSet { defaults.set(paused, forKey: Keys.paused) } }
     @Published var lastEvent: FireEvent? {
         didSet { defaults.set(lastEvent.flatMap { try? JSONEncoder().encode($0) }, forKey: Keys.lastEvent) }

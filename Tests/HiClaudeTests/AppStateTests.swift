@@ -20,6 +20,7 @@ final class AppStateTests: XCTestCase {
 
         let a = AppState(defaults: defaults)
         a.times = [12 * 60 + 30, 7 * 60] // salva ordenado
+        XCTAssertEqual(a.times, [7 * 60, 12 * 60 + 30]) // ja ordenado em memoria, na mesma instancia
         a.paused = true
         a.lastEvent = event
 
@@ -41,6 +42,14 @@ final class AppStateTests: XCTestCase {
     func testFireResultSkippedRoundtripCodable() throws {
         let event = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000),
                               result: .skipped(activeUntil: Date(timeIntervalSince1970: 1_783_010_000)))
+        let data = try JSONEncoder().encode(event)
+        let decoded = try JSONDecoder().decode(FireEvent.self, from: data)
+        XCTAssertEqual(decoded, event)
+    }
+
+    func testFireResultFailureRoundtripCodable() throws {
+        let event = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000),
+                              result: .failure(message: "claude nao encontrado"))
         let data = try JSONEncoder().encode(event)
         let decoded = try JSONDecoder().decode(FireEvent.self, from: data)
         XCTAssertEqual(decoded, event)
