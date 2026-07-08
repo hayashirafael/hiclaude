@@ -54,4 +54,50 @@ final class AppStateTests: XCTestCase {
         let decoded = try JSONDecoder().decode(FireEvent.self, from: data)
         XCTAssertEqual(decoded, event)
     }
+
+    func testMensagemPadraoInicial() {
+        let state = AppState(defaults: freshDefaults())
+        XCTAssertEqual(state.favorites, [])
+        XCTAssertEqual(state.activeMessage, "1+1")
+        XCTAssertEqual(state.resolvedMessage, "1+1")
+        XCTAssertEqual(state.allMessages, ["1+1"])
+    }
+
+    func testAddFavoritoIgnoraVazioDuplicataEDefault() {
+        let state = AppState(defaults: freshDefaults())
+        state.addFavorite("  oi  ")            // trim
+        state.addFavorite("oi")                // duplicata
+        state.addFavorite("   ")               // vazio
+        state.addFavorite("1+1")               // igual ao default
+        XCTAssertEqual(state.favorites, ["oi"])
+        XCTAssertEqual(state.allMessages, ["1+1", "oi"])
+    }
+
+    func testRemoverFavoritoAtivoVoltaAoDefault() {
+        let state = AppState(defaults: freshDefaults())
+        state.addFavorite("oi")
+        state.setActiveMessage("oi")
+        XCTAssertEqual(state.resolvedMessage, "oi")
+        state.removeFavorite("oi")
+        XCTAssertEqual(state.activeMessage, "1+1")
+        XCTAssertEqual(state.resolvedMessage, "1+1")
+    }
+
+    func testResolvedMessageCaiNoDefaultQuandoAtivoInvalido() {
+        let state = AppState(defaults: freshDefaults())
+        state.setActiveMessage("nao-existe")   // rejeitado por setActiveMessage
+        XCTAssertEqual(state.resolvedMessage, "1+1")
+    }
+
+    func testPersisteFavoritosEAtivo() {
+        let defaults = freshDefaults()
+        let a = AppState(defaults: defaults)
+        a.addFavorite("oi")
+        a.addFavorite("bom dia")
+        a.setActiveMessage("bom dia")
+        let b = AppState(defaults: defaults)
+        XCTAssertEqual(b.favorites, ["oi", "bom dia"])
+        XCTAssertEqual(b.activeMessage, "bom dia")
+        XCTAssertEqual(b.resolvedMessage, "bom dia")
+    }
 }

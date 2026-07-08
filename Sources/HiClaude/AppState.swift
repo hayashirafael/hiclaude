@@ -27,6 +27,36 @@ final class AppState: ObservableObject {
     @Published var claudeFound = true
     @Published var activeWindowEnd: Date?
 
+    static let defaultMessage = "1+1"
+
+    @Published var favorites: [String] { didSet { defaults.set(favorites, forKey: Keys.favorites) } }
+    @Published var activeMessage: String { didSet { defaults.set(activeMessage, forKey: Keys.activeMessage) } }
+
+    /// Lista exibida na UI: o padrão embutido seguido dos favoritos do usuário.
+    var allMessages: [String] { [Self.defaultMessage] + favorites }
+
+    /// Texto efetivamente enviado. Cai no padrão se o ativo não for válido.
+    var resolvedMessage: String {
+        (activeMessage == Self.defaultMessage || favorites.contains(activeMessage))
+            ? activeMessage : Self.defaultMessage
+    }
+
+    func addFavorite(_ text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, t != Self.defaultMessage, !favorites.contains(t) else { return }
+        favorites.append(t)
+    }
+
+    func removeFavorite(_ text: String) {
+        favorites.removeAll { $0 == text }
+        if activeMessage == text { activeMessage = Self.defaultMessage }
+    }
+
+    func setActiveMessage(_ text: String) {
+        guard text == Self.defaultMessage || favorites.contains(text) else { return }
+        activeMessage = text
+    }
+
     var lastCheck: Date? {
         get { defaults.object(forKey: Keys.lastCheck) as? Date }
         set { defaults.set(newValue, forKey: Keys.lastCheck) }
@@ -38,6 +68,8 @@ final class AppState: ObservableObject {
         static let paused = "paused"
         static let lastEvent = "lastEvent"
         static let lastCheck = "lastCheck"
+        static let favorites = "favorites"
+        static let activeMessage = "activeMessage"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -47,5 +79,7 @@ final class AppState: ObservableObject {
         if let data = defaults.data(forKey: Keys.lastEvent) {
             self.lastEvent = try? JSONDecoder().decode(FireEvent.self, from: data)
         }
+        self.favorites = (defaults.array(forKey: Keys.favorites) as? [String]) ?? []
+        self.activeMessage = defaults.string(forKey: Keys.activeMessage) ?? Self.defaultMessage
     }
 }
