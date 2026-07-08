@@ -15,7 +15,7 @@ enum RunnerError: Error, Equatable {
 }
 
 protocol ClaudeRunning {
-    func sendHi() async -> Result<Void, RunnerError>
+    func sendHi(prompt: String) async -> Result<Void, RunnerError>
 }
 
 /// Acumula os bytes de stderr recebidos via `readabilityHandler`, que roda
@@ -80,7 +80,7 @@ struct ClaudeRunner: ClaudeRunning {
         return URL(fileURLWithPath: path)
     }
 
-    func sendHi() async -> Result<Void, RunnerError> {
+    func sendHi(prompt: String = "1+1") async -> Result<Void, RunnerError> {
         guard let binary = binaryOverride ?? Self.locateClaude() else {
             return .failure(.cliNotFound)
         }
@@ -95,7 +95,7 @@ struct ClaudeRunner: ClaudeRunning {
             "--model", "claude-haiku-4-5",
             "--effort", "low",
             "--safe-mode",
-            "1+1",
+            prompt,
         ]
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
 

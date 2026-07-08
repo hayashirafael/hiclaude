@@ -33,6 +33,25 @@ final class ClaudeRunnerTests: XCTestCase {
                        ["-p", "--model", "claude-haiku-4-5", "--effort", "low", "--safe-mode", "1+1"])
     }
 
+    func testRepassaPromptCustomComFlagsFixos() async throws {
+        let argsFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-args-\(UUID().uuidString).txt")
+        let runner = ClaudeRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
+        )
+
+        let result = await runner.sendHi(prompt: "bom dia")
+        XCTAssertEqual(result, .success(()))
+
+        let captured = try String(contentsOf: argsFile, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.isEmpty }
+            .map(String.init)
+        XCTAssertEqual(captured,
+                       ["-p", "--model", "claude-haiku-4-5", "--effort", "low", "--safe-mode", "bom dia"])
+    }
+
     func testSucessoQuandoExitZero() async {
         let runner = ClaudeRunner(timeout: 5, binaryOverride: makeScript("exit 0"))
         let result = await runner.sendHi()

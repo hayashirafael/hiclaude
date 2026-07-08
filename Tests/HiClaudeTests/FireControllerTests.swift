@@ -9,8 +9,10 @@ final class MockDetector: SessionDetecting {
 final class MockRunner: ClaudeRunning {
     var result: Result<Void, RunnerError> = .success(())
     var calls = 0
-    func sendHi() async -> Result<Void, RunnerError> {
+    var lastPrompt: String?
+    func sendHi(prompt: String) async -> Result<Void, RunnerError> {
         calls += 1
+        lastPrompt = prompt
         return result
     }
 }
@@ -71,5 +73,17 @@ final class FireControllerTests: XCTestCase {
         runner.result = .failure(.cliNotFound)
         await controller.fire(manual: false)
         XCTAssertFalse(state.claudeFound)
+    }
+
+    func testEnviaMensagemPadraoPorDefault() async {
+        await controller.fire(manual: false)
+        XCTAssertEqual(runner.lastPrompt, "1+1")
+    }
+
+    func testEnviaMensagemAtivaEscolhida() async {
+        state.addFavorite("bom dia")
+        state.setActiveMessage("bom dia")
+        await controller.fire(manual: false)
+        XCTAssertEqual(runner.lastPrompt, "bom dia")
     }
 }

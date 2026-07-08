@@ -38,7 +38,7 @@ final class FireController {
             return
         }
 
-        switch await runner.sendHi() {
+        switch await runner.sendHi(prompt: state.resolvedMessage) {
         case .success:
             state.claudeFound = true
             state.lastEvent = FireEvent(date: clock.now, result: .success)
