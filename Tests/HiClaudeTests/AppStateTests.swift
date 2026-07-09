@@ -7,72 +7,6 @@ final class AppStateTests: XCTestCase {
         UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
     }
 
-    func testPrimeiraExecucaoTemDefault7h() {
-        let state = AppState(defaults: freshDefaults())
-        XCTAssertEqual(state.schedules.count, 1)
-        XCTAssertEqual(state.schedules[0].minutes, 7 * 60)
-        XCTAssertNil(state.schedules[0].messageUID)
-        XCTAssertEqual(state.times, [7 * 60])
-        XCTAssertFalse(state.paused)
-        XCTAssertNil(state.lastEvent)
-    }
-
-    func testPersisteERestauraSchedulesPausedELastEvent() {
-        let defaults = freshDefaults()
-        let event = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000), result: .success)
-        let a = AppState(defaults: defaults)
-        a.addSchedule(minutes: 12 * 60 + 30)
-        a.updateSchedule(id: a.schedules[0].id, minutes: 8 * 60)
-        a.paused = true
-        a.recordEvent(event)
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.times, [8 * 60, 12 * 60 + 30]) // ordenado
-        XCTAssertEqual(b.schedules, a.schedules)        // ids sobrevivem
-        XCTAssertTrue(b.paused)
-        XCTAssertEqual(b.lastEvent, event)
-    }
-
-    /// Migração: instalações antigas guardavam `times` como [Int].
-    func testMigraTimesLegadoParaSchedules() {
-        let defaults = freshDefaults()
-        defaults.set([9 * 60, 7 * 60], forKey: "times")
-        let state = AppState(defaults: defaults)
-        XCTAssertEqual(state.times, [7 * 60, 9 * 60])
-        XCTAssertTrue(state.schedules.allSatisfy { $0.messageUID == nil })
-    }
-
-    func testMensagemPorHorarioComFallbackParaAtiva() {
-        let state = AppState(defaults: freshDefaults())
-        state.addFavorite(text: "bom dia", kind: .claude)
-        let fav = state.favorites[0]
-        let id = state.schedules[0].id
-        state.setScheduleMessage(id: id, messageUID: fav.uid)
-        XCTAssertEqual(state.resolvedMessage(for: state.schedules[0]), fav)
-        XCTAssertEqual(state.resolvedMessage(forMinutes: 7 * 60), fav)
-        // Sem mensagem fixa → segue a ativa.
-        state.setScheduleMessage(id: id, messageUID: nil)
-        XCTAssertEqual(state.resolvedMessage(for: state.schedules[0]), state.resolvedMessage)
-        // Horário desconhecido → ativa.
-        XCTAssertEqual(state.resolvedMessage(forMinutes: 23 * 60), state.resolvedMessage)
-    }
-
-    /// Apagar a mensagem fixa de um horário limpa a referência (volta a "Ativa").
-    func testRemoverFavoritoLimpaReferenciaDoHorario() {
-        let state = AppState(defaults: freshDefaults())
-        state.addFavorite(text: "bom dia", kind: .claude)
-        let fav = state.favorites[0]
-        state.setScheduleMessage(id: state.schedules[0].id, messageUID: fav.uid)
-        state.removeFavorite(fav)
-        XCTAssertNil(state.schedules[0].messageUID)
-        XCTAssertEqual(state.resolvedMessage(for: state.schedules[0]), AppState.defaultMessage)
-    }
-
-    func testSchedulesOrdenamPorMinutos() {
-        let state = AppState(defaults: freshDefaults())
-        state.addSchedule(minutes: 6 * 60)
-        XCTAssertEqual(state.times, [6 * 60, 7 * 60])
-    }
-
     func testPersisteLastCheck() {
         let defaults = freshDefaults()
         let a = AppState(defaults: defaults)
@@ -98,14 +32,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(decoded, event)
     }
 
-    func testMensagemPadraoInicial() {
-        let state = AppState(defaults: freshDefaults())
-        XCTAssertEqual(state.favorites, [])
-        XCTAssertEqual(state.activeMessage, AppState.defaultMessage)
-        XCTAssertEqual(state.resolvedMessage, AppState.defaultMessage)
-        XCTAssertEqual(state.allMessages, [AppState.defaultMessage])
-    }
-
     func testAddFavoritoIgnoraVazioDuplicataEDefault() {
         let state = AppState(defaults: freshDefaults())
         state.addFavorite(text: "  oi  ", kind: .claude)   // trim
@@ -125,76 +51,11 @@ final class AppStateTests: XCTestCase {
                        [Message(text: "deploy", kind: .claude), Message(text: "deploy", kind: .shell)])
     }
 
-    func testRemoverFavoritoAtivoVoltaAoDefault() {
+    /// Sem conta selecionada: descoberta sempre inclui a conta padrão embutida.
+    func testDiscoverAccountsSempreIncluiDefault() {
         let state = AppState(defaults: freshDefaults())
-        let oi = Message(text: "oi", kind: .shell)
-        state.addFavorite(text: "oi", kind: .shell)
-        state.setActiveMessage(oi)
-        XCTAssertEqual(state.resolvedMessage, oi)
-        state.removeFavorite(oi)
-        XCTAssertEqual(state.activeMessage, AppState.defaultMessage)
-        XCTAssertEqual(state.resolvedMessage, AppState.defaultMessage)
-    }
-
-    func testResolvedMessageCaiNoDefaultQuandoAtivoInvalido() {
-        let state = AppState(defaults: freshDefaults())
-        state.setActiveMessage(Message(text: "nao-existe", kind: .claude)) // rejeitado
-        XCTAssertEqual(state.resolvedMessage, AppState.defaultMessage)
-    }
-
-    func testPersisteFavoritosEAtivoComKindsMistos() {
-        let defaults = freshDefaults()
-        let bomDia = Message(text: "bom dia", kind: .shell)
-        let a = AppState(defaults: defaults)
-        a.addFavorite(text: "oi", kind: .claude)
-        a.addFavorite(text: "bom dia", kind: .shell)
-        a.setActiveMessage(bomDia)
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.favorites,
-                       [Message(text: "oi", kind: .claude), bomDia])
-        XCTAssertEqual(b.activeMessage, bomDia)
-        XCTAssertEqual(b.resolvedMessage, bomDia)
-    }
-
-    func testContaPadraoInicialEhDotClaude() {
-        let state = AppState(defaults: freshDefaults())
-        XCTAssertEqual(state.claudeConfigDir, AppState.defaultConfigDir)
-        XCTAssertEqual(state.resolvedConfigDir, AppState.defaultConfigDir)
-    }
-
-    func testPersisteERestauraConta() throws {
-        let defaults = freshDefaults()
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("conta-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(
-            at: dir.appendingPathComponent("projects"), withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-
-        let a = AppState(defaults: defaults)
-        a.setAccount(dir)
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.claudeConfigDir.standardizedFileURL, dir.standardizedFileURL)
-        XCTAssertEqual(b.resolvedConfigDir.standardizedFileURL, dir.standardizedFileURL)
-    }
-
-    func testResolvedConfigDirCaiNoDefaultQuandoDirNaoExiste() {
-        let state = AppState(defaults: freshDefaults())
-        state.setAccount(URL(fileURLWithPath: "/tmp/nao-existe-\(UUID().uuidString)"))
-        XCTAssertEqual(state.resolvedConfigDir, AppState.defaultConfigDir)
-    }
-
-    func testDiscoverAccountsSempreIncluiDefaultESelecionada() throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("conta-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(
-            at: dir.appendingPathComponent("projects"), withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-
-        let state = AppState(defaults: freshDefaults())
-        state.setAccount(dir)
         let accounts = state.discoverAccounts().map { $0.standardizedFileURL }
         XCTAssertTrue(accounts.contains(AppState.defaultConfigDir.standardizedFileURL))
-        XCTAssertTrue(accounts.contains(dir.standardizedFileURL))
     }
 
     func testMessageConfigRoundtripCodable() throws {
@@ -231,16 +92,14 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(b.favorites.first?.workingDir, "/tmp/p")
     }
 
-    func testUpdateFavoritoSubstituiEMantemAtiva() {
+    /// Sem mensagem ativa (removida): `updateFavorite` só substitui na lista.
+    func testUpdateFavoritoSubstituiNaLista() {
         let state = AppState(defaults: freshDefaults())
         let old = Message(text: "tarefa", kind: .claude)
         state.addFavorite(text: "tarefa", kind: .claude)
-        state.setActiveMessage(old)
         let new = Message(text: "tarefa", kind: .claude, model: .opus)
         state.updateFavorite(old, to: new)
         XCTAssertEqual(state.favorites, [new])
-        XCTAssertEqual(state.activeMessage, new)
-        XCTAssertEqual(state.resolvedMessage, new)
     }
 
     func testEffectiveConfigDirUsaOverrideValidoEFallback() throws {
@@ -253,28 +112,23 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(
             state.effectiveConfigDir(for: Message(text: "x", kind: .claude, configDir: dir.path)).standardizedFileURL,
             dir.standardizedFileURL)
-        // Override inexistente → fallback na conta global.
+        // Override inexistente → fallback na conta padrão embutida.
         XCTAssertEqual(
             state.effectiveConfigDir(for: Message(text: "x", kind: .claude, configDir: "/tmp/nada-\(UUID().uuidString)")),
-            state.resolvedConfigDir)
-        // Sem override → conta global.
+            AppState.defaultConfigDir)
+        // Sem override → conta padrão embutida.
         XCTAssertEqual(
             state.effectiveConfigDir(for: Message(text: "x", kind: .claude)),
-            state.resolvedConfigDir)
+            AppState.defaultConfigDir)
     }
 
-    /// Migração: instalações antigas guardavam favoritos como `[String]` e a
-    /// ativa como `String`; devem virar mensagens `.claude`.
-    func testMigraFormatoLegadoStringParaClaude() {
+    /// Migração: favoritos legados como [String] viram mensagens .claude.
+    func testMigraFavoritosLegadosString() {
         let defaults = freshDefaults()
         defaults.set(["oi", "bom dia"], forKey: "favorites")
-        defaults.set("bom dia", forKey: "activeMessage")
-
         let state = AppState(defaults: defaults)
         XCTAssertEqual(state.favorites,
                        [Message(text: "oi", kind: .claude), Message(text: "bom dia", kind: .claude)])
-        XCTAssertEqual(state.activeMessage, Message(text: "bom dia", kind: .claude))
-        XCTAssertEqual(state.resolvedMessage, Message(text: "bom dia", kind: .claude))
     }
 
     func testDefaultMessageTemUIDFixo() {
@@ -380,21 +234,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(decoded.messageText)
         XCTAssertNil(decoded.origin)
         XCTAssertNil(decoded.response)
-    }
-
-    func testRenewAccountsPersisteEToggle() {
-        let defaults = freshDefaults()
-        let dir = URL(fileURLWithPath: "/tmp/conta-renew")
-        let a = AppState(defaults: defaults)
-        XCTAssertFalse(a.isRenewOn(dir))
-        a.setRenew(dir, enabled: true)
-        XCTAssertTrue(a.isRenewOn(dir))
-        a.setRenew(dir, enabled: true) // idempotente
-        XCTAssertEqual(a.renewAccounts.count, 1)
-        let b = AppState(defaults: defaults)
-        XCTAssertTrue(b.isRenewOn(dir))
-        b.setRenew(dir, enabled: false)
-        XCTAssertFalse(b.isRenewOn(dir))
     }
 
     func testApelidoPersisteEDefineRotulo() {

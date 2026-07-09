@@ -1,6 +1,12 @@
 import XCTest
 @testable import HiClaude
 
+/// Relógio fake para testes determinísticos (compartilhado com RenewalEngineTests).
+final class FakeClock: Clock {
+    var now: Date
+    init(now: Date) { self.now = now }
+}
+
 final class MockDetector: SessionDetecting {
     var end: Date?
     var lastProjectsDir: URL?
@@ -51,16 +57,15 @@ final class FireControllerTests: XCTestCase {
     func testJanelaAtivaPulaSemExecutar() async {
         let end = now.addingTimeInterval(3600)
         detector.end = end
-        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
+        await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
         XCTAssertEqual(runner.calls, 0)
         XCTAssertEqual(state.lastEvent,
                        FireEvent(date: now, result: .skipped(activeUntil: end),
                                  messageText: "1+1", account: ".claude", origin: .scheduled))
-        XCTAssertEqual(state.activeWindowEnd, end)
     }
 
     func testSucessoRegistraEventoNoHistorico() async {
-        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
+        await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
         XCTAssertEqual(runner.calls, 1)
         XCTAssertEqual(state.lastEvent,
                        FireEvent(date: now, result: .success,
@@ -71,7 +76,7 @@ final class FireControllerTests: XCTestCase {
 
     func testFalhaAgendadaNotifica() async {
         runner.result = .failure(.failed("sem rede"))
-        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
+        await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
         XCTAssertEqual(state.lastEvent,
                        FireEvent(date: now, result: .failure(message: "sem rede"),
                                  messageText: "1+1", account: ".claude", origin: .scheduled))
@@ -80,13 +85,13 @@ final class FireControllerTests: XCTestCase {
 
     func testFalhaManualNaoNotifica() async {
         runner.result = .failure(.failed("sem rede"))
-        await controller.fire(message: state.resolvedMessage, origin: .manual)
+        await controller.fire(message: AppState.defaultMessage, origin: .manual)
         XCTAssertTrue(notifier.messages.isEmpty)
     }
 
     func testCliNaoEncontradoMarcaClaudeFound() async {
         runner.result = .failure(.cliNotFound)
-        await controller.fire(message: state.resolvedMessage, origin: .scheduled)
+        await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
         XCTAssertFalse(state.claudeFound)
     }
 

@@ -49,7 +49,6 @@ final class FireController {
         // O skip por janela ativa só faz sentido no modo Claude (o objetivo é
         // abrir a janela de 5h). Comando cru sempre roda no horário.
         if message.kind == .claude, let end = await detector.activeWindowEnd(projectsDir: projects) {
-            state.activeWindowEnd = end
             state.recordEvent(FireEvent(date: clock.now, result: .skipped(activeUntil: end),
                                         messageText: message.text, account: account, origin: origin))
             return true
@@ -65,9 +64,6 @@ final class FireController {
                                         origin: origin, response: response))
             if let response {
                 notifier.notifyResponse(messageText: message.text, response: response)
-            }
-            if message.kind == .claude {
-                state.activeWindowEnd = await detector.activeWindowEnd(projectsDir: projects)
             }
         case .failure(let error):
             if error == .cliNotFound { state.claudeFound = false }

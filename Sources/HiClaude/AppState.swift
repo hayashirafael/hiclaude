@@ -49,7 +49,7 @@ struct Message: Codable, Identifiable {
     var kind: Kind
     // Config Claude (só relevante quando `kind == .claude`). Opcionais com
     // default `nil` para migrar de graça: o JSONDecoder tolera chaves ausentes
-    // nos favoritos/activeMessage já persistidos, e o init memberwise
+    // nos favoritos já persistidos, e o init memberwise
     // `Message(text:kind:)` (usado no caminho legado) continua compilando.
     var model: Model? = nil
     var effort: Effort? = nil
@@ -99,14 +99,6 @@ extension Message {
     var resolvedShowResponse: Bool { showResponse ?? false }
 }
 
-/// Um horário diário. `messageUID` fixa uma mensagem específica; nil = segue
-/// a mensagem ativa (comportamento clássico).
-struct ScheduleEntry: Codable, Equatable, Identifiable {
-    var id = UUID()
-    var minutes: Int
-    var messageUID: UUID? = nil
-}
-
 /// Configuração de renovação de uma Conta. Presença no dicionário `renewals`
 /// significa "renovando"; ausência = Off.
 struct AccountRenewal: Codable, Equatable {
@@ -120,44 +112,6 @@ struct AccountRenewal: Codable, Equatable {
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var schedules: [ScheduleEntry] {
-        didSet {
-            let sorted = schedules.sorted {
-                ($0.minutes, $0.id.uuidString) < ($1.minutes, $1.id.uuidString)
-            }
-            if schedules != sorted { schedules = sorted; return } // re-normaliza; didSet re-dispara e persiste
-            defaults.set(try? JSONEncoder().encode(schedules), forKey: Keys.schedules)
-        }
-    }
-
-    /// Minutos ordenados — visão que o SchedulerEngine consome.
-    var times: [Int] { schedules.map(\.minutes) }
-
-    func addSchedule(minutes: Int) { schedules.append(ScheduleEntry(minutes: minutes)) }
-    func removeSchedule(id: UUID) { schedules.removeAll { $0.id == id } }
-
-    func updateSchedule(id: UUID, minutes: Int) {
-        guard let i = schedules.firstIndex(where: { $0.id == id }) else { return }
-        schedules[i].minutes = minutes
-    }
-
-    func setScheduleMessage(id: UUID, messageUID: UUID?) {
-        guard let i = schedules.firstIndex(where: { $0.id == id }) else { return }
-        schedules[i].messageUID = messageUID
-    }
-
-    /// Mensagem efetiva de um horário: a fixa se ainda existir, senão a ativa.
-    func resolvedMessage(for entry: ScheduleEntry) -> Message {
-        entry.messageUID.flatMap { message(withUID: $0) } ?? resolvedMessage
-    }
-
-    /// Versão por minutos (o engine reporta o horário que disparou). Se dois
-    /// horários coincidirem em minutos, vale o primeiro (ordem estável por id).
-    func resolvedMessage(forMinutes minutes: Int) -> Message {
-        schedules.first { $0.minutes == minutes }.map { resolvedMessage(for: $0) }
-            ?? resolvedMessage
-    }
-
     @Published var paused: Bool { didSet { defaults.set(paused, forKey: Keys.paused) } }
 
     static let historyLimit = 20
@@ -178,7 +132,6 @@ final class AppState: ObservableObject {
     func recordEvent(_ event: FireEvent) { history.insert(event, at: 0) }
 
     @Published var claudeFound = true
-    @Published var activeWindowEnd: Date?
     /// Mostrar o tempo restante da janela ("3h12") ao lado do ícone da barra.
     @Published var showRemainingInBar: Bool {
         didSet { defaults.set(showRemainingInBar, forKey: Keys.showRemainingInBar) }
@@ -193,14 +146,6 @@ final class AppState: ObservableObject {
     @Published var favorites: [Message] {
         didSet { defaults.set(try? JSONEncoder().encode(favorites), forKey: Keys.favorites) }
     }
-    @Published var activeMessage: Message {
-        didSet { defaults.set(try? JSONEncoder().encode(activeMessage), forKey: Keys.activeMessage) }
-    }
-    /// Conta Claude a aquecer, definida pelo diretório de config (`CLAUDE_CONFIG_DIR`).
-    /// O ping e o detector usam este valor — assim ambos miram sempre a mesma conta.
-    @Published var claudeConfigDir: URL {
-        didSet { defaults.set(claudeConfigDir.path, forKey: Keys.claudeConfigDir) }
-    }
 
     /// Diretório de config padrão do Claude Code (`~/.claude`).
     static var defaultConfigDir: URL {
@@ -210,28 +155,13 @@ final class AppState: ObservableObject {
     /// Lista exibida na UI: o padrão embutido seguido dos favoritos do usuário.
     var allMessages: [Message] { [Self.defaultMessage] + favorites }
 
-    /// Mensagem efetivamente enviada. Cai no padrão se a ativa não for válida.
-    var resolvedMessage: Message {
-        (activeMessage == Self.defaultMessage || favorites.contains(activeMessage))
-            ? activeMessage : Self.defaultMessage
-    }
-
-    /// Conta efetivamente usada. Cai no padrão (`~/.claude`) se o diretório
-    /// escolhido não existir mais — nunca aquece uma conta fantasma.
-    var resolvedConfigDir: URL {
-        var isDir: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: claudeConfigDir.path, isDirectory: &isDir)
-        return (exists && isDir.boolValue) ? claudeConfigDir : Self.defaultConfigDir
-    }
-
     /// Contas descobertas: diretórios `~/.claude*` que contenham uma subpasta
-    /// `projects` (assinatura de config do Claude Code). Sempre inclui o padrão
-    /// e a conta atualmente selecionada, mesmo fora do padrão. Ordenado por path.
+    /// `projects` (assinatura de config do Claude Code). Sempre inclui o padrão.
+    /// Ordenado por path.
     func discoverAccounts() -> [URL] {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser
-        var found: Set<URL> = [Self.defaultConfigDir.standardizedFileURL,
-                               resolvedConfigDir.standardizedFileURL]
+        var found: Set<URL> = [Self.defaultConfigDir.standardizedFileURL]
         if let names = try? fm.contentsOfDirectory(atPath: home.path) {
             for name in names where name.hasPrefix(".claude") {
                 let dir = home.appendingPathComponent(name)
@@ -243,28 +173,6 @@ final class AppState: ObservableObject {
             }
         }
         return found.sorted { $0.path < $1.path }
-    }
-
-    func setAccount(_ url: URL) {
-        claudeConfigDir = url.standardizedFileURL
-    }
-
-    /// Contas com renovação automática ligada (paths standardizados).
-    @Published var renewAccounts: [String] {
-        didSet { defaults.set(renewAccounts, forKey: Keys.renewAccounts) }
-    }
-
-    func isRenewOn(_ dir: URL) -> Bool {
-        renewAccounts.contains(dir.standardizedFileURL.path)
-    }
-
-    func setRenew(_ dir: URL, enabled: Bool) {
-        let path = dir.standardizedFileURL.path
-        if enabled {
-            if !renewAccounts.contains(path) { renewAccounts.append(path) }
-        } else {
-            renewAccounts.removeAll { $0 == path }
-        }
     }
 
     /// Apelido opcional por conta (chave = path padronizado). Independente da
@@ -336,40 +244,27 @@ final class AppState: ObservableObject {
         favorites.append(msg)
     }
 
-    /// Substitui um favorito por uma versão editada. Preserva a posição na lista
-    /// e mantém a seleção ativa se a mensagem editada era a ativa.
+    /// Substitui um favorito por uma versão editada. Preserva a posição na
+    /// lista e o uid.
     func updateFavorite(_ old: Message, to new: Message) {
         guard let idx = favorites.firstIndex(of: old) else { return }
-        let wasActive = activeMessage == old
         var updated = new
         updated.uid = favorites[idx].uid ?? UUID()
         favorites[idx] = updated
-        if wasActive { activeMessage = updated }
     }
 
     func removeFavorite(_ msg: Message) {
-        if let uid = msg.uid ?? favorites.first(where: { $0 == msg })?.uid {
-            for i in schedules.indices where schedules[i].messageUID == uid {
-                schedules[i].messageUID = nil
-            }
-        }
         favorites.removeAll { $0 == msg }
-        if activeMessage == msg { activeMessage = Self.defaultMessage }
     }
 
-    /// Conta efetiva de uma mensagem: o override da mensagem se existir e for um
-    /// diretório válido, senão a conta global. Nunca aponta para conta fantasma.
+    /// Conta efetiva de uma mensagem: o override se for diretório válido, senão
+    /// a conta padrão embutida (~/.claude). Nunca aponta para conta fantasma.
     func effectiveConfigDir(for message: Message) -> URL {
-        guard let path = message.configDir, !path.isEmpty else { return resolvedConfigDir }
+        guard let path = message.configDir, !path.isEmpty else { return Self.defaultConfigDir }
         let url = URL(fileURLWithPath: path)
         var isDir: ObjCBool = false
         let ok = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
-        return ok ? url.standardizedFileURL : resolvedConfigDir
-    }
-
-    func setActiveMessage(_ msg: Message) {
-        guard msg == Self.defaultMessage || favorites.contains(msg) else { return }
-        activeMessage = msg
+        return ok ? url.standardizedFileURL : Self.defaultConfigDir
     }
 
     /// Resolve uma referência estável (uid) para a mensagem atual — default ou favorito.
@@ -385,29 +280,22 @@ final class AppState: ObservableObject {
 
     private let defaults: UserDefaults
     private enum Keys {
-        static let times = "times"
-        static let schedules = "schedules"
         static let paused = "paused"
-        static let lastEvent = "lastEvent"
         static let history = "history"
         static let lastCheck = "lastCheck"
         static let favorites = "favorites"
-        static let activeMessage = "activeMessage"
-        static let claudeConfigDir = "claudeConfigDir"
         static let showRemainingInBar = "showRemainingInBar"
-        static let renewAccounts = "renewAccounts"
         static let aliases = "aliases"
         static let renewals = "renewals"
     }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.schedules = Self.loadSchedules(defaults)
         self.paused = defaults.bool(forKey: Keys.paused)
         if let data = defaults.data(forKey: Keys.history),
            let decoded = try? JSONDecoder().decode([FireEvent].self, from: data) {
             self.history = decoded
-        } else if let data = defaults.data(forKey: Keys.lastEvent),
+        } else if let data = defaults.data(forKey: "lastEvent"),
                   let event = try? JSONDecoder().decode(FireEvent.self, from: data) {
             self.history = [event] // migração da versão antiga
         } else {
@@ -415,27 +303,8 @@ final class AppState: ObservableObject {
         }
         self.showRemainingInBar = defaults.bool(forKey: Keys.showRemainingInBar)
         self.favorites = Self.loadFavorites(defaults)
-        self.activeMessage = Self.loadActiveMessage(defaults)
-        if let path = defaults.string(forKey: Keys.claudeConfigDir) {
-            self.claudeConfigDir = URL(fileURLWithPath: path)
-        } else {
-            self.claudeConfigDir = Self.defaultConfigDir
-        }
-        self.renewAccounts = (defaults.array(forKey: Keys.renewAccounts) as? [String]) ?? []
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         self.renewals = Self.loadRenewals(defaults)
-    }
-
-    /// Decodifica schedules; se ausente, migra do formato legado `times: [Int]`.
-    private static func loadSchedules(_ defaults: UserDefaults) -> [ScheduleEntry] {
-        if let data = defaults.data(forKey: Keys.schedules),
-           let decoded = try? JSONDecoder().decode([ScheduleEntry].self, from: data) {
-            return decoded
-        }
-        if let legacy = defaults.array(forKey: Keys.times) as? [Int] {
-            return legacy.sorted().map { ScheduleEntry(minutes: $0) }
-        }
-        return [ScheduleEntry(minutes: 7 * 60)]
     }
 
     /// Decodifica favoritos em JSON; se falhar, migra do formato legado
@@ -458,18 +327,6 @@ final class AppState: ObservableObject {
         return loaded
     }
 
-    /// Decodifica a mensagem ativa em JSON; migra string legada para `.claude`.
-    private static func loadActiveMessage(_ defaults: UserDefaults) -> Message {
-        if let data = defaults.data(forKey: Keys.activeMessage),
-           let decoded = try? JSONDecoder().decode(Message.self, from: data) {
-            return decoded
-        }
-        if let legacy = defaults.string(forKey: Keys.activeMessage) {
-            return Message(text: legacy, kind: .claude)
-        }
-        return Self.defaultMessage
-    }
-
     /// Decodifica renovações; se ausente, migra do formato legado
     /// `renewAccounts: [String]` (todas como Automática).
     private static func loadRenewals(_ defaults: UserDefaults) -> [String: AccountRenewal] {
@@ -477,7 +334,7 @@ final class AppState: ObservableObject {
            let decoded = try? JSONDecoder().decode([String: AccountRenewal].self, from: data) {
             return decoded
         }
-        if let legacy = defaults.array(forKey: Keys.renewAccounts) as? [String] {
+        if let legacy = defaults.array(forKey: "renewAccounts") as? [String] {
             var result: [String: AccountRenewal] = [:]
             for path in legacy { result[path] = AccountRenewal(mode: .automatic) }
             return result
