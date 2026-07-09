@@ -310,18 +310,3 @@ func XCTAssertEqual(_ lhs: Result<String, RunnerError>, _ rhs: Result<String, Ru
                     file: StaticString = #filePath, line: UInt = #line) {
     XCTAssertTrue(lhs == rhs, "\(lhs) != \(rhs)", file: file, line: line)
 }
-
-extension Result where Success == Void, Failure == RunnerError {
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        switch (lhs, rhs) {
-        case (.success, .success): return true
-        case (.failure(let l), .failure(let r)): return l == r
-        default: return false
-        }
-    }
-}
-
-func XCTAssertEqual(_ lhs: Result<Void, RunnerError>, _ rhs: Result<Void, RunnerError>,
-                    file: StaticString = #filePath, line: UInt = #line) {
-    XCTAssertTrue(lhs == rhs, "\(lhs) != \(rhs)", file: file, line: line)
-}

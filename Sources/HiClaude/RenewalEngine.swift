@@ -7,7 +7,11 @@ import Foundation
 /// testado com relógio e detector fakes (mesmo padrão do SchedulerEngine).
 @MainActor
 final class RenewalEngine {
-    var onRenew: ((URL) async -> Void)?
+    /// Retorna `true` quando o disparo de fato executou (ver
+    /// `FireController.fire`) e `false` quando foi descartado pelo guard
+    /// `isRunning` do controller — nesse caso a renovação não conta como
+    /// feita e `rearm` tenta de novo (ver `pendingRetry`).
+    var onRenew: ((URL) async -> Bool)?
     /// Snapshot de `nextRenewal` a cada mudança — vira "↻ Renova às HH:mm" na UI.
     var onStatus: (([URL: Date]) -> Void)?
 
@@ -22,6 +26,10 @@ final class RenewalEngine {
     private var paused = false
     private var timers: [URL: Timer] = [:]
     private var lastRenewAt: [URL: Date] = [:]
+    /// Contas cuja última tentativa de renovação foi descartada pelo guard
+    /// `isRunning` do FireController — `rearm` tenta de novo na próxima
+    /// chamada (statusTick a cada 60s, wake, ou o rearmAll de outro fire).
+    private var pendingRetry: Set<URL> = []
 
     init(detector: SessionDetecting, clock: Clock = SystemClock()) {
         self.detector = detector
@@ -38,10 +46,12 @@ final class RenewalEngine {
         }
         if paused {
             nextRenewal = [:]
+            pendingRetry.removeAll()
         } else {
             for account in Array(nextRenewal.keys) where !self.accounts.contains(account) {
                 nextRenewal[account] = nil
             }
+            pendingRetry = pendingRetry.filter { self.accounts.contains($0) }
         }
         await rearmAll()
     }
@@ -55,6 +65,14 @@ final class RenewalEngine {
     }
 
     private func rearm(_ account: URL) async {
+        // Tentativa anterior descartada pelo isRunning do controller → tenta
+        // de novo agora, sem depender de detectar uma janela nova (não há:
+        // a renovação que abriria a janela é justamente o que falhou).
+        if pendingRetry.contains(account) {
+            pendingRetry.remove(account)
+            await renew(account)
+            return
+        }
         // Já armado para o futuro → nada a fazer (evita re-varrer transcripts
         // a cada tick de status).
         if let armed = nextRenewal[account], armed > clock.now, timers[account] != nil { return }
@@ -83,13 +101,25 @@ final class RenewalEngine {
     }
 
     private func renew(_ account: URL) async {
-        guard !paused, accounts.contains(account) else { return }
+        guard !paused, accounts.contains(account) else {
+            pendingRetry.remove(account)
+            return
+        }
         let now = clock.now
         // Dedupe: timer + wake podem coincidir logo após o fim da janela.
         if let last = lastRenewAt[account], now.timeIntervalSince(last) < dedupeInterval { return }
-        lastRenewAt[account] = now
         nextRenewal[account] = nil
-        await onRenew?(account)
+        let didRun = await onRenew?(account) ?? true
+        guard didRun else {
+            // O disparo foi descartado pelo guard isRunning do FireController
+            // (outro fire, de qualquer origem, em andamento) — não marca como
+            // renovado (lastRenewAt fica intacto) para não travar a conta
+            // permanentemente. `rearm` tenta de novo na próxima chamada.
+            pendingRetry.insert(account)
+            return
+        }
+        pendingRetry.remove(account)
+        lastRenewAt[account] = now
         await rearm(account) // encadeia a janela recém-aberta
     }
 }

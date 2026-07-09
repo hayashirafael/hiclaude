@@ -31,11 +31,13 @@ final class AppEnvironment: ObservableObject {
         }
 
         renewalEngine.onRenew = { [weak self] account in
-            guard let self else { return }
+            // Sem self não há como nem executar nem reagendar o retry — não
+            // há nada de útil a fazer além de reportar "não executou".
+            guard let self else { return false }
             // Renovação = ping mínimo (1+1 default) fixado na conta a renovar.
             var msg = AppState.defaultMessage
             msg.configDir = account.path
-            await self.controller.fire(message: msg, origin: .renewal)
+            return await self.controller.fire(message: msg, origin: .renewal)
         }
         renewalEngine.onStatus = { [weak self] next in
             self?.state.nextRenewals = next
@@ -126,10 +128,6 @@ final class AppEnvironment: ObservableObject {
 
     func setActiveMessage(_ message: Message) {
         state.setActiveMessage(message)
-    }
-
-    func setAccount(_ url: URL) {
-        state.setAccount(url)
     }
 
     /// Recompõe o runner a partir da conta global (fallback de conta das

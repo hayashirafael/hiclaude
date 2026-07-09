@@ -31,8 +31,14 @@ final class FireController {
         self.clock = clock
     }
 
-    func fire(message: Message, origin: FireOrigin) async {
-        guard !isRunning else { return } // disparo em andamento → ignora o novo
+    /// Retorna `true` quando o disparo de fato executou (sucesso, falha ou
+    /// pulado por janela ativa) e `false` apenas quando foi descartado pelo
+    /// guard `isRunning` (outro disparo, de qualquer origem, em andamento).
+    /// A renovação usa esse retorno para não marcar dedupe num disparo que
+    /// nunca aconteceu de verdade (ver RenewalEngine.renew).
+    @discardableResult
+    func fire(message: Message, origin: FireOrigin) async -> Bool {
+        guard !isRunning else { return false } // disparo em andamento → ignora o novo
         isRunning = true
         defer { isRunning = false }
 
@@ -46,7 +52,7 @@ final class FireController {
             state.activeWindowEnd = end
             state.recordEvent(FireEvent(date: clock.now, result: .skipped(activeUntil: end),
                                         messageText: message.text, account: account, origin: origin))
-            return
+            return true
         }
 
         switch await runner.run(message) {
@@ -69,5 +75,6 @@ final class FireController {
                                         messageText: message.text, account: account, origin: origin))
             if origin != .manual { notifier.notifyFailure(message: error.userMessage) }
         }
+        return true
     }
 }
