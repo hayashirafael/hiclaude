@@ -7,15 +7,6 @@ final class AppStateTests: XCTestCase {
         UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
     }
 
-    func testPersisteLastCheck() {
-        let defaults = freshDefaults()
-        let a = AppState(defaults: defaults)
-        let mark = Date(timeIntervalSince1970: 1_783_000_000)
-        a.lastCheck = mark
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.lastCheck, mark)
-    }
-
     func testFireResultSkippedRoundtripCodable() throws {
         let event = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000),
                               result: .skipped(activeUntil: Date(timeIntervalSince1970: 1_783_010_000)))

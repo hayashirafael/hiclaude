@@ -273,16 +273,10 @@ final class AppState: ObservableObject {
         return favorites.first { $0.uid == uid }
     }
 
-    var lastCheck: Date? {
-        get { defaults.object(forKey: Keys.lastCheck) as? Date }
-        set { defaults.set(newValue, forKey: Keys.lastCheck) }
-    }
-
     private let defaults: UserDefaults
     private enum Keys {
         static let paused = "paused"
         static let history = "history"
-        static let lastCheck = "lastCheck"
         static let favorites = "favorites"
         static let showRemainingInBar = "showRemainingInBar"
         static let aliases = "aliases"
