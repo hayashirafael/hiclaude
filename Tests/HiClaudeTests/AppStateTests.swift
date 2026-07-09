@@ -31,7 +31,7 @@ final class AppStateTests: XCTestCase {
         state.addFavorite(text: "1+1", kind: .claude)      // igual ao default
         XCTAssertEqual(state.favorites, [Message(text: "oi", kind: .claude)])
         XCTAssertEqual(state.allMessages,
-                       [AppState.defaultMessage, Message(text: "oi", kind: .claude)])
+                       [AppState.defaultMessage, AppState.defaultCodexMessage, Message(text: "oi", kind: .claude)])
     }
 
     func testAddFavoritoRetornaMensagemCriadaOuExistente() {
@@ -298,5 +298,36 @@ final class AppStateTests: XCTestCase {
         let fav = state.favorites[0]
         state.setRenewal(dir, AccountRenewal(mode: .automatic, anchorMinutes: nil, messageUID: fav.uid))
         XCTAssertEqual(state.resolvedRenewalMessage(for: dir), fav)
+    }
+
+    func testMensagemCodexDecodificaEDefaults() throws {
+        let msg = Message(text: "oi", kind: .codex)
+        XCTAssertEqual(msg.resolvedCodexModel, "gpt-5.1-codex-mini")
+        XCTAssertEqual(msg.resolvedCodexReasoning, .low)
+        let data = try JSONEncoder().encode(msg)
+        let decoded = try JSONDecoder().decode(Message.self, from: data)
+        XCTAssertEqual(decoded, msg)
+    }
+
+    func testMensagemLegadaSemCamposCodexDecodifica() throws {
+        // JSON antigo (sem codexModel/codexReasoning) precisa decodificar.
+        let json = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(Message.self, from: json)
+        XCTAssertEqual(decoded.kind, .claude)
+        XCTAssertNil(decoded.codexModel)
+    }
+
+    func testHiPadraoPorProvider() {
+        XCTAssertEqual(AppState.defaultHi(for: .claude), AppState.defaultMessage)
+        XCTAssertEqual(AppState.defaultHi(for: .codex), AppState.defaultCodexMessage)
+        XCTAssertEqual(AppState.defaultCodexMessage.kind, .codex)
+        XCTAssertEqual(AppState.defaultCodexMessage.uid,
+                       UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
+    }
+
+    func testMessageWithUIDResolveDefaultCodex() {
+        let state = AppState(defaults: freshDefaults())
+        XCTAssertEqual(state.message(withUID: AppState.defaultCodexMessage.uid!),
+                       AppState.defaultCodexMessage)
     }
 }

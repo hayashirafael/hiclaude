@@ -135,6 +135,9 @@ struct ClaudeRunner: ClaudeRunning {
             let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
             process.executableURL = shellOverride ?? URL(fileURLWithPath: shell)
             process.arguments = ["-l", "-c", message.text]
+        case .codex:
+            // Codex execution — implementado em Task 3 (CommandRunner executa codex exec)
+            return .failure(.cliNotFound)
         }
         let home = NSHomeDirectory()
         // Diretório de trabalho: override da mensagem (se não vazio) senão o home.

@@ -21,7 +21,10 @@ struct FireEvent: Codable, Equatable {
 /// Uma mensagem agendável. `claude` vira o corpo de `claude -p`; `shell` roda
 /// como comando cru no shell de login (utilidade fora do Claude).
 struct Message: Codable, Identifiable {
-    enum Kind: String, Codable { case claude, shell }
+    enum Kind: String, Codable { case claude, shell, codex }
+
+    /// Reasoning do Codex (`-c model_reasoning_effort`). Só relevante em `.codex`.
+    enum CodexReasoning: String, Codable, CaseIterable { case minimal, low, medium, high }
 
     /// Modelo do `claude --model`. Só relevante quando `kind == .claude`.
     enum Model: String, Codable, CaseIterable {
@@ -62,6 +65,10 @@ struct Message: Codable, Identifiable {
     var uid: UUID? = nil
     /// Mostrar a resposta do disparo (histórico + notificação). nil = desligado.
     var showResponse: Bool? = nil
+    // Config Codex (só relevante quando `kind == .codex`). Opcionais com default
+    // nil pelo mesmo motivo dos campos Claude: migração de graça.
+    var codexModel: String? = nil
+    var codexReasoning: CodexReasoning? = nil
 
     /// Id para ForEach: uid quando presente, senão a chave de conteúdo (legado).
     var id: String { uid?.uuidString ?? contentKey }
@@ -73,7 +80,9 @@ struct Message: Codable, Identifiable {
         let configVal = configDir ?? ""
         let workingVal = workingDir ?? ""
         let showResponseVal = showResponse.map(String.init) ?? ""
-        return [kind.rawValue, text, modelVal, effortVal, safeModeVal, configVal, workingVal, showResponseVal]
+        let codexModelVal = codexModel ?? ""
+        let codexReasoningVal = codexReasoning?.rawValue ?? ""
+        return [kind.rawValue, text, modelVal, effortVal, safeModeVal, configVal, workingVal, showResponseVal, codexModelVal, codexReasoningVal]
             .joined(separator: "\u{1}")
     }
 }
@@ -86,6 +95,7 @@ extension Message: Equatable {
             && lhs.effort == rhs.effort && lhs.safeMode == rhs.safeMode
             && lhs.configDir == rhs.configDir && lhs.workingDir == rhs.workingDir
             && lhs.showResponse == rhs.showResponse
+            && lhs.codexModel == rhs.codexModel && lhs.codexReasoning == rhs.codexReasoning
     }
 }
 
@@ -97,6 +107,11 @@ extension Message {
     var resolvedEffort: Effort { effort ?? Self.defaultEffort }
     var resolvedSafeMode: Bool { safeMode ?? Self.defaultSafeMode }
     var resolvedShowResponse: Bool { showResponse ?? false }
+
+    static let defaultCodexModel = "gpt-5.1-codex-mini"
+    static let defaultCodexReasoning: CodexReasoning = .low
+    var resolvedCodexModel: String { codexModel ?? Self.defaultCodexModel }
+    var resolvedCodexReasoning: CodexReasoning { codexReasoning ?? Self.defaultCodexReasoning }
 }
 
 /// Configuração de renovação de uma Conta. Presença no dicionário `renewals`
@@ -143,6 +158,16 @@ final class AppState: ObservableObject {
         text: "1+1", kind: .claude,
         uid: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
 
+    /// Hi mínimo Codex — análogo ao defaultMessage, para contas Codex.
+    static let defaultCodexMessage = Message(
+        text: "1+1", kind: .codex,
+        uid: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!)
+
+    /// Hi padrão embutido do provider (o "1+1" de cada mundo).
+    static func defaultHi(for provider: Provider) -> Message {
+        provider == .codex ? defaultCodexMessage : defaultMessage
+    }
+
     @Published var favorites: [Message] {
         didSet { defaults.set(try? JSONEncoder().encode(favorites), forKey: Keys.favorites) }
     }
@@ -153,7 +178,7 @@ final class AppState: ObservableObject {
     }
 
     /// Lista exibida na UI: o padrão embutido seguido dos favoritos do usuário.
-    var allMessages: [Message] { [Self.defaultMessage] + favorites }
+    var allMessages: [Message] { [Self.defaultMessage, Self.defaultCodexMessage] + favorites }
 
     /// Contas descobertas: diretórios `~/.claude*` que contenham uma subpasta
     /// `projects` (assinatura de config do Claude Code). Sempre inclui o padrão.
@@ -244,6 +269,7 @@ final class AppState: ObservableObject {
                           workingDir: workingDir, showResponse: showResponse)
         guard !t.isEmpty else { return nil }
         if msg == Self.defaultMessage { return Self.defaultMessage }
+        if msg == Self.defaultCodexMessage { return Self.defaultCodexMessage }
         if let existing = favorites.first(where: { $0 == msg }) { return existing }
         msg.uid = UUID()
         favorites.append(msg)
@@ -276,6 +302,7 @@ final class AppState: ObservableObject {
     /// Resolve uma referência estável (uid) para a mensagem atual — default ou favorito.
     func message(withUID uid: UUID) -> Message? {
         if uid == Self.defaultMessage.uid { return Self.defaultMessage }
+        if uid == Self.defaultCodexMessage.uid { return Self.defaultCodexMessage }
         return favorites.first { $0.uid == uid }
     }
 
