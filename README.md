@@ -65,24 +65,43 @@ The app icon is generated at build time from `assets/AppIcon.png` (a single
 
 ## Usage
 
-Lives in the menu bar (no Dock icon). Click the balloon for the menu:
+Lives in the menu bar (no Dock icon). The icon fills/empties to reflect the current
+5-hour usage window; it shows an error mark if the CLI is not found, and appears faded
+if paused.
 
-- **Status** — next run time, `Paused`, or error (CLI not found / failure)
-- **Last run** — success, skipped (window already active), or failure
-- **Send hi now** — fire manually
-- **Pause / Resume** — suspend scheduled runs
-- **Message** — pick the active message to send; **Manage…** opens the config window
-- **Schedules…** — open the config window (add/remove/edit times and messages)
-- **Start at login** — register as a login item (`SMAppService`)
+Click the menu icon for quick actions:
+
+- **Status** — next dispatch time and minutes remaining in the current 5-hour window
+- **Renewal lines** (`↻`) — each account's next auto-renewal; click to renew now
+- **Last hi** — clickable when a saved response is available; opens the response
+- **Send hi now** — fire a dispatch immediately
+- **Pause / Resume** — suspend all scheduled dispatches and auto-renewals (pause affects all accounts)
+- **Message** — quick-select the active message to send, or **Manage…** to open Settings
+- **Settings…** — open the configuration window
 - **Quit**
 
-Schedules are daily and configurable (default: 07:00). If the Mac was asleep at the
-scheduled time, the run fires on wake (catch-up). A failed scheduled run posts a system
-notification.
+### Settings Window
 
-The sent message is configurable: keep a list of favorites and select the active one
-from the **Message** submenu. The default (`1+1`) is always available and is used as a
-fallback when no valid active message is set.
+The **Settings** window has four tabs:
+
+- **Times** — add/remove/edit daily dispatch times (default: 07:00). Each time can pin a
+  message or follow the globally-active message. If the Mac was asleep, the dispatch
+  fires on wake (catch-up).
+- **Messages** — manage the message list. Set one as active (it's the default at each
+  time unless overridden). Each message has a **Show response** toggle to display the
+  response in the menu bar after dispatch.
+- **History** — view the last 20 dispatches with their times, status, and the sent
+  message. Click any row to expand and read the full response.
+- **General** — set the default account for dispatches, toggle "Launch at Login"
+  (`SMAppService`), display minutes remaining in the menu bar, and enable/disable
+  auto-renewal per account.
+
+### Auto-Renewal
+
+When enabled in **General**, each account automatically chains 5-hour usage windows by
+sending a default message (`1+1`) every 5 hours. Pause suspends all auto-renewals. The
+next renewal time for each account is shown in the menu; click the `↻` to renew
+immediately (useful after waking the Mac from sleep).
 
 ## How it works
 

@@ -66,24 +66,42 @@ O ícone do app é gerado no build a partir de `assets/AppIcon.png` (um único m
 
 ## Uso
 
-Fica na menu bar (sem ícone no Dock). Clique no balão para o menu:
+Fica na menu bar (sem ícone no Dock). O ícone se enche/esvazia refletindo a janela
+corrente de 5 horas; mostra um `!` de erro se a CLI não for encontrada, e fica
+esmaecido se pausado.
 
-- **Status** — próximo horário, `Pausado`, ou erro (CLI não encontrado / falha)
-- **Último disparo** — sucesso, pulado (janela já ativa) ou falha
+Clique no ícone do menu para ações rápidas:
+
+- **Status** — horário do próximo disparo e minutos restantes na janela de 5 horas
+- **Linhas de renovação** (`↻`) — próxima renovação automática de cada conta; clique para renovar agora
+- **Último hi** — clicável quando há resposta salva; abre a resposta
 - **Enviar hi agora** — dispara manualmente
-- **Pausar / Retomar** — suspende os disparos agendados
-- **Mensagem** — escolhe a mensagem ativa a enviar; **Gerenciar…** abre a janela de configuração
-- **Horários…** — abre a janela de configuração (adicionar/remover/editar horários e mensagens)
-- **Iniciar com o Mac** — registra como item de login (`SMAppService`)
+- **Pausar / Retomar** — suspende todos os disparos agendados e renovações automáticas (afeta todas as contas)
+- **Mensagem** — escolher rápido a mensagem ativa, ou **Gerenciar…** para abrir Configurações
+- **Configurações…** — abre a janela de configuração
 - **Sair**
 
-Horários são diários e configuráveis (default: 07:00). Se o Mac estava dormindo no
-horário agendado, o disparo ocorre ao acordar (catch-up). Falha em disparo agendado
-gera uma notificação do sistema.
+### Janela de Configurações
 
-A mensagem enviada é configurável: mantenha uma lista de favoritos e selecione a ativa
-no submenu **Mensagem**. O default (`1+1`) está sempre disponível e é usado como
-fallback quando não há mensagem ativa válida.
+A janela de **Configurações** tem quatro abas:
+
+- **Horários** — adicionar/remover/editar horários diários de disparo (default: 07:00). Cada horário
+  pode fixar uma mensagem específica ou seguir a mensagem ativa global. Se o Mac estava
+  dormindo, o disparo ocorre ao acordar (catch-up).
+- **Mensagens** — gerenciar a lista de mensagens. Defina uma como ativa (é o default em cada
+  horário, a menos que sobrescrito). Cada mensagem tem um toggle **Mostrar resposta** para
+  exibir a resposta na menu bar após o disparo.
+- **Histórico** — ver os últimos 20 disparos com horários, status e a mensagem enviada. Clique
+  em qualquer linha para expandir e ler a resposta completa.
+- **Geral** — defina a conta padrão para disparos, toggle "Iniciar com o Mac" (`SMAppService`),
+  mostrar minutos restantes na menu bar e ativar/desativar renovação automática por conta.
+
+### Renovação Automática
+
+Quando ativada em **Geral**, cada conta renova automaticamente janelas de 5 horas enviando
+uma mensagem default (`1+1`) a cada 5 horas. Pausar suspende todas as renovações. O horário
+da próxima renovação de cada conta é mostrado no menu; clique no `↻` para renovar agora
+(útil após acordar o Mac do sono).
 
 ## Como funciona
 
