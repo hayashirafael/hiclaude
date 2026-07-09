@@ -95,26 +95,27 @@ final class RenewalEngine {
 
     private func rearmScheduled(_ account: URL) async {
         let anchor = configs[account]?.anchorMinutes ?? Self.defaultAnchorMinutes
-        // Disparo armado passou? Catch-up só se ainda dentro da janela pretendida.
+        // Uma janela ativa detectada (sessão real em andamento) sempre prevalece
+        // sobre qualquer catch-up de disparo agendado — checagem única, usada
+        // pelos dois ramos abaixo (mesmo critério do modo Automático).
+        let projects = account.appendingPathComponent("projects")
+        let activeEnd = await detector.activeWindowEnd(projectsDir: projects)
+        // Disparo armado passou? Catch-up só se ainda dentro da janela pretendida
+        // e não houver janela ativa cobrindo a conta agora.
         if let armed = nextRenewal[account], armed <= clock.now {
             timers[account]?.invalidate(); timers[account] = nil
             nextRenewal[account] = nil
-            if armed.addingTimeInterval(ScheduleMath.renewalWindow) > clock.now {
+            if activeEnd == nil, armed.addingTimeInterval(ScheduleMath.renewalWindow) > clock.now {
                 await renew(account); return
             }
         }
         // Sem armado: catch-up de um disparo perdido cuja janela ainda cobre agora.
-        if nextRenewal[account] == nil {
-            let projects = account.appendingPathComponent("projects")
-            let activeEnd = await detector.activeWindowEnd(projectsDir: projects)
-            if activeEnd == nil,
-               let missed = ScheduleMath.missedScheduledRenewal(
-                    anchorMinutes: anchor,
-                    between: (lastRenewAt[account] ?? clock.now.addingTimeInterval(-ScheduleMath.renewalWindow)),
-                    and: clock.now, calendar: calendar) {
-                _ = missed
-                await renew(account); return
-            }
+        if nextRenewal[account] == nil, activeEnd == nil,
+           ScheduleMath.missedScheduledRenewal(
+                anchorMinutes: anchor,
+                between: (lastRenewAt[account] ?? clock.now.addingTimeInterval(-ScheduleMath.renewalWindow)),
+                and: clock.now, calendar: calendar) != nil {
+            await renew(account); return
         }
         guard let next = ScheduleMath.nextScheduledRenewal(
             anchorMinutes: anchor, after: clock.now, calendar: calendar) else { return }
