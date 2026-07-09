@@ -256,6 +256,9 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Próximas renovações por conta (espelho do RenewalEngine, para o menu e Geral).
+    @Published var nextRenewals: [URL: Date] = [:]
+
     func addFavorite(text: String, kind: Message.Kind,
                      model: Message.Model? = nil, effort: Message.Effort? = nil,
                      safeMode: Bool? = nil, configDir: String? = nil,

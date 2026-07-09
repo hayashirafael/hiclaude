@@ -10,6 +10,7 @@ final class AppEnvironment: ObservableObject {
     private let engine: SchedulerEngine
     private var controller: FireController
     private let detector: SessionDetector
+    private let renewalEngine: RenewalEngine
     private var observers: [NSObjectProtocol] = []
     private var cancellables: Set<AnyCancellable> = []
     private var statusTimer: Timer?
@@ -23,9 +24,21 @@ final class AppEnvironment: ObservableObject {
         self.controller = FireController(state: state, detector: detector,
                                          runner: ClaudeRunner(configDir: state.resolvedConfigDir),
                                          notifier: SystemNotifier())
+        self.renewalEngine = RenewalEngine(detector: detector)
 
         engine.onFire = { [weak self] minutes in
             Task { @MainActor in await self?.scheduledFire(minutes: minutes) }
+        }
+
+        renewalEngine.onRenew = { [weak self] account in
+            guard let self else { return }
+            // Renovação = ping mínimo (1+1 default) fixado na conta a renovar.
+            var msg = AppState.defaultMessage
+            msg.configDir = account.path
+            await self.controller.fire(message: msg, origin: .renewal)
+        }
+        renewalEngine.onStatus = { [weak self] next in
+            self?.state.nextRenewals = next
         }
 
         // Sonda do CLI fora da thread principal: quando `claude` não está nos
@@ -75,6 +88,13 @@ final class AppEnvironment: ObservableObject {
                 Task { @MainActor [weak self] in await self?.refreshWindowStatus() }
             }
             .store(in: &cancellables)
+
+        // Ligar/desligar renovação por conta reconfigura o engine.
+        state.$renewAccounts
+            .dropFirst()
+            .sink { [weak self] _ in self?.reconfigureRenewals() }
+            .store(in: &cancellables)
+        reconfigureRenewals()
     }
 
     var nextFireDate: Date? { engine.nextFireDate }
@@ -86,6 +106,22 @@ final class AppEnvironment: ObservableObject {
     func togglePause() {
         state.paused.toggle()
         reconfigure()
+        reconfigureRenewals() // pausar suspende as renovações também
+    }
+
+    /// Reconfigura o RenewalEngine com as contas marcadas que ainda existem.
+    private func reconfigureRenewals() {
+        let accounts = state.renewAccounts
+            .map { URL(fileURLWithPath: $0) }
+            .filter { url in
+                var isDir: ObjCBool = false
+                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+                    && isDir.boolValue
+            }
+        let paused = state.paused
+        Task { @MainActor [weak self] in
+            await self?.renewalEngine.configure(accounts: accounts, paused: paused)
+        }
     }
 
     func setActiveMessage(_ message: Message) {
@@ -110,11 +146,13 @@ final class AppEnvironment: ObservableObject {
 
     func fireNow() async {
         await controller.fire(message: state.resolvedMessage, origin: .manual)
+        await renewalEngine.rearmAll() // o hi pode ter aberto janela → arma a renovação
     }
 
     /// Tick periódico: re-detecta a janela ativa (alimenta ícone e "3h12").
     func statusTick() async {
         await refreshWindowStatus()
+        await renewalEngine.rearmAll() // arma contas que ganharam janela por fora
     }
 
     func refreshWindowStatus() async {
@@ -128,11 +166,13 @@ final class AppEnvironment: ObservableObject {
         await controller.fire(message: state.resolvedMessage(forMinutes: minutes),
                               origin: .scheduled)
         persistLastCheck()
+        await renewalEngine.rearmAll()
     }
 
     private func handleWake() {
         engine.handleWake()
         persistLastCheck()
+        Task { @MainActor [weak self] in await self?.renewalEngine.handleWake() }
     }
 
     /// lastCheck persistido a cada evento; se o app morrer sem salvar, o

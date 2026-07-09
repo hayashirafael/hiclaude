@@ -42,6 +42,9 @@ struct MenuContent: View {
         if let end = state.activeWindowEnd, end > Date() {
             Text("Janela ativa até \(Fmt.hhmm(end))")
         }
+        ForEach(state.nextRenewals.sorted(by: { $0.value < $1.value }), id: \.key) { account, date in
+            Text("↻ Renova às \(Fmt.hhmm(date)) (\(account.lastPathComponent))")
+        }
         Text("Conta: \(state.resolvedConfigDir.lastPathComponent)")
         Divider()
         Button("Enviar hi agora") { Task { await env.fireNow() } }
