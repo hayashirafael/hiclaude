@@ -21,9 +21,13 @@ final class MockRunner: ClaudeRunning {
     }
 }
 
-final class MockNotifier: FailureNotifying {
+final class MockNotifier: Notifying {
     var messages: [String] = []
+    var responses: [(messageText: String, response: String)] = []
     func notifyFailure(message: String) { messages.append(message) }
+    func notifyResponse(messageText: String, response: String) {
+        responses.append((messageText, response))
+    }
 }
 
 @MainActor
@@ -116,5 +120,36 @@ final class FireControllerTests: XCTestCase {
         XCTAssertEqual(state.lastEvent,
                        FireEvent(date: now, result: .success,
                                  messageText: "echo oi", account: ".claude", origin: .scheduled))
+    }
+
+    func testRespostaSalvaENotificadaQuandoLigado() async {
+        runner.result = .success("resposta do claude")
+        let msg = Message(text: "resumo", kind: .claude, showResponse: true)
+        await controller.fire(message: msg, origin: .scheduled)
+        XCTAssertEqual(state.lastEvent?.response, "resposta do claude")
+        XCTAssertEqual(notifier.responses.count, 1)
+        XCTAssertEqual(notifier.responses.first?.messageText, "resumo")
+    }
+
+    func testRespostaIgnoradaQuandoDesligado() async {
+        runner.result = .success("resposta do claude")
+        await controller.fire(message: Message(text: "1+1", kind: .claude), origin: .scheduled)
+        XCTAssertNil(state.lastEvent?.response)
+        XCTAssertTrue(notifier.responses.isEmpty)
+    }
+
+    func testRespostaTruncadaEm4000() async {
+        runner.result = .success(String(repeating: "a", count: 5000))
+        let msg = Message(text: "resumo", kind: .claude, showResponse: true)
+        await controller.fire(message: msg, origin: .scheduled)
+        XCTAssertEqual(state.lastEvent?.response?.count, 4000)
+    }
+
+    func testRespostaVaziaNaoNotificaNemPersiste() async {
+        runner.result = .success("")
+        let msg = Message(text: "resumo", kind: .claude, showResponse: true)
+        await controller.fire(message: msg, origin: .scheduled)
+        XCTAssertNil(state.lastEvent?.response)
+        XCTAssertTrue(notifier.responses.isEmpty)
     }
 }

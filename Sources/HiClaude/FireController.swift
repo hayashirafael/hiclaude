@@ -1,11 +1,13 @@
 import Foundation
 
-protocol FailureNotifying {
+protocol Notifying {
     func notifyFailure(message: String)
+    func notifyResponse(messageText: String, response: String)
 }
 
-struct NullNotifier: FailureNotifying {
+struct NullNotifier: Notifying {
     func notifyFailure(message: String) {}
+    func notifyResponse(messageText: String, response: String) {}
 }
 
 /// Orquestra um disparo: detector → (pula | executa) → registra em AppState.
@@ -14,12 +16,14 @@ final class FireController {
     private let state: AppState
     private let detector: SessionDetecting
     private let runner: ClaudeRunning
-    private let notifier: FailureNotifying
+    private let notifier: Notifying
     private let clock: Clock
     private var isRunning = false
 
+    static let responseLimit = 4000
+
     init(state: AppState, detector: SessionDetecting, runner: ClaudeRunning,
-         notifier: FailureNotifying, clock: Clock = SystemClock()) {
+         notifier: Notifying, clock: Clock = SystemClock()) {
         self.state = state
         self.detector = detector
         self.runner = runner
@@ -46,10 +50,16 @@ final class FireController {
         }
 
         switch await runner.run(message) {
-        case .success:
+        case .success(let output):
             state.claudeFound = true
+            let response = message.resolvedShowResponse && !output.isEmpty
+                ? String(output.prefix(Self.responseLimit)) : nil
             state.recordEvent(FireEvent(date: clock.now, result: .success,
-                                        messageText: message.text, account: account, origin: origin))
+                                        messageText: message.text, account: account,
+                                        origin: origin, response: response))
+            if let response {
+                notifier.notifyResponse(messageText: message.text, response: response)
+            }
             if message.kind == .claude {
                 state.activeWindowEnd = await detector.activeWindowEnd(projectsDir: projects)
             }
