@@ -9,9 +9,9 @@ final class FakeClock: Clock {
 
 final class MockDetector: SessionDetecting {
     var end: Date?
-    var lastProjectsDir: URL?
-    func activeWindowEnd(projectsDir: URL) async -> Date? {
-        lastProjectsDir = projectsDir
+    var lastAccount: URL?
+    func activeWindowEnd(account: URL) async -> Date? {
+        lastAccount = account
         return end
     }
 }
@@ -103,7 +103,7 @@ final class FireControllerTests: XCTestCase {
     }
 
     /// A janela é checada na conta efetiva da mensagem (conta por mensagem):
-    /// o detector recebe o `projects` do override, não o da conta global.
+    /// o detector recebe a pasta da conta do override, não a da conta global.
     func testJanelaChecadaNaContaDaMensagem() async throws {
         let conta = FileManager.default.temporaryDirectory
             .appendingPathComponent("conta-\(UUID().uuidString)")
@@ -111,8 +111,7 @@ final class FireControllerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: conta) }
         let msg = Message(text: "oi", kind: .claude, configDir: conta.path)
         await controller.fire(message: msg, origin: .scheduled)
-        XCTAssertEqual(detector.lastProjectsDir?.standardizedFileURL,
-                       conta.appendingPathComponent("projects").standardizedFileURL)
+        XCTAssertEqual(detector.lastAccount?.standardizedFileURL, conta.standardizedFileURL)
     }
 
     /// Comando cru ignora o skip de janela ativa e sempre executa.

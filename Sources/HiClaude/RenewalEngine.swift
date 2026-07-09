@@ -82,8 +82,7 @@ final class RenewalEngine {
     }
 
     private func rearmAutomatic(_ account: URL) async {
-        let projects = account.appendingPathComponent("projects")
-        guard let end = await detector.activeWindowEnd(projectsDir: projects) else {
+        guard let end = await detector.activeWindowEnd(account: account) else {
             let missed = nextRenewal[account].map { $0 <= clock.now } ?? false
             timers[account]?.invalidate(); timers[account] = nil
             nextRenewal[account] = nil
@@ -98,8 +97,7 @@ final class RenewalEngine {
         // Uma janela ativa detectada (sessão real em andamento) sempre prevalece
         // sobre qualquer catch-up de disparo agendado — checagem única, usada
         // pelos dois ramos abaixo (mesmo critério do modo Automático).
-        let projects = account.appendingPathComponent("projects")
-        let activeEnd = await detector.activeWindowEnd(projectsDir: projects)
+        let activeEnd = await detector.activeWindowEnd(account: account)
         // Disparo armado passou? Catch-up só se ainda dentro da janela pretendida
         // e não houver janela ativa cobrindo a conta agora.
         if let armed = nextRenewal[account], armed <= clock.now {

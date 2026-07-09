@@ -44,11 +44,11 @@ final class FireController {
 
         let accountDir = state.effectiveConfigDir(for: message)
         let account = accountDir.lastPathComponent
-        let projects = accountDir.appendingPathComponent("projects")
 
-        // O skip por janela ativa só faz sentido no modo Claude (o objetivo é
-        // abrir a janela de 5h). Comando cru sempre roda no horário.
-        if message.kind == .claude, let end = await detector.activeWindowEnd(projectsDir: projects) {
+        // O skip por janela ativa vale para os kinds que abrem janela (Claude e
+        // Codex). Comando cru sempre roda no horário.
+        if message.kind != .shell,
+           let end = await detector.activeWindowEnd(account: accountDir) {
             state.recordEvent(FireEvent(date: clock.now, result: .skipped(activeUntil: end),
                                         messageText: message.text, account: account, origin: origin))
             return true

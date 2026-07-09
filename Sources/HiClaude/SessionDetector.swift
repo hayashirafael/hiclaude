@@ -1,9 +1,9 @@
 import Foundation
 
 protocol SessionDetecting {
-    /// `projectsDir` é o `<conta>/projects` da conta a inspecionar — passado por
-    /// chamada porque a conta agora é por mensagem.
-    func activeWindowEnd(projectsDir: URL) async -> Date?
+    /// `account` é a pasta da conta (`~/.claude`, `~/.codex`…); o detector
+    /// deriva a subpasta de transcripts e a regra de bloco pelo provider.
+    func activeWindowEnd(account: URL) async -> Date?
 }
 
 /// Reconstrói a janela de 5h do plano Claude lendo passivamente os transcripts
@@ -16,12 +16,15 @@ struct SessionDetector: SessionDetecting {
     static let scanInterval: TimeInterval = 24 * 3600
     static let blockDuration: TimeInterval = 5 * 3600
 
-    func activeWindowEnd(projectsDir: URL) async -> Date? {
+    func activeWindowEnd(account: URL) async -> Date? {
+        let provider = Provider.detect(at: account) ?? .claude
+        let transcriptsDir = account.appendingPathComponent(provider.transcriptsSubpath)
+        let roundsToHour = provider.roundsBlockStartToHour
         var lookback: TimeInterval = Self.scanInterval
         let maxLookback: TimeInterval = 7 * 24 * 3600
         while true {
             let since = clock.now.addingTimeInterval(-lookback)
-            let timestamps = await collectTimestamps(projectsDir: projectsDir, since: since).sorted()
+            let timestamps = await collectTimestamps(projectsDir: transcriptsDir, since: since).sorted()
             // Se o primeiro timestamp visível está a menos de 5h do início da
             // janela de varredura, a cadeia pode ter sido truncada no meio de
             // um bloco — amplia a varredura até garantir um gap de 5h à esquerda.
@@ -31,20 +34,23 @@ struct SessionDetector: SessionDetecting {
                 lookback = min(lookback * 2, maxLookback)
                 continue
             }
-            return Self.activeBlockEnd(timestamps: timestamps, now: clock.now)
+            return Self.activeBlockEnd(timestamps: timestamps, now: clock.now,
+                                       roundsToHour: roundsToHour)
         }
     }
 
     // MARK: - Núcleo puro (testável)
 
-    /// Blocos de 5h: início = primeira mensagem arredondada para a hora cheia;
-    /// mensagem após o fim do bloco corrente abre bloco novo.
-    static func activeBlockEnd(timestamps: [Date], now: Date) -> Date? {
+    /// Blocos de 5h: início = primeira mensagem (arredondada para a hora cheia
+    /// quando `roundsToHour` — regra do Claude); mensagem após o fim do bloco
+    /// corrente abre bloco novo.
+    static func activeBlockEnd(timestamps: [Date], now: Date, roundsToHour: Bool = true) -> Date? {
         var blockEnd: Date?
         for t in timestamps.sorted() {
             guard t <= now else { break }
             if blockEnd == nil || t >= blockEnd! {
-                blockEnd = floorToHour(t).addingTimeInterval(blockDuration)
+                let start = roundsToHour ? floorToHour(t) : t
+                blockEnd = start.addingTimeInterval(blockDuration)
             }
         }
         guard let end = blockEnd, now < end else { return nil }
