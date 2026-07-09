@@ -5,7 +5,8 @@ struct MessageFormSheet: View {
     @ObservedObject var state: AppState
     /// Mensagem sendo editada; nil = modo "adicionar".
     let editing: Message?
-    let onDone: () -> Void
+    /// Chamado ao fechar: nil se cancelado, a mensagem criada/editada se salvo.
+    let onDone: (Message?) -> Void
 
     @State private var text = ""
     @State private var isClaude = true
@@ -28,13 +29,14 @@ struct MessageFormSheet: View {
             if isClaude {
                 ClaudeConfigForm(model: $model, effort: $effort, safeMode: $safeMode,
                                  configDir: $account, workingDir: $workingDir,
-                                 accounts: state.discoverAccounts())
+                                 accounts: state.discoverAccounts(),
+                                 accountLabel: { state.label(for: $0) })
             }
             Toggle("Mostrar resposta (histórico + notificação)", isOn: $showResponse)
                 .toggleStyle(.checkbox)
             HStack {
                 Spacer()
-                Button("Cancelar") { onDone() }
+                Button("Cancelar") { onDone(nil) }
                     .keyboardShortcut(.cancelAction)
                 Button(editing == nil ? "Adicionar" : "Salvar") { commit() }
                     .keyboardShortcut(.defaultAction)
@@ -73,12 +75,13 @@ struct MessageFormSheet: View {
             showResponse: showResponse ? true : nil)
         if let editing {
             state.updateFavorite(editing, to: msg)
+            onDone(msg)
         } else {
-            state.addFavorite(text: t, kind: kind, model: msg.model, effort: msg.effort,
+            let created = state.addFavorite(text: t, kind: kind, model: msg.model, effort: msg.effort,
                               safeMode: msg.safeMode, configDir: msg.configDir,
                               workingDir: msg.workingDir, showResponse: msg.showResponse)
+            onDone(created)
         }
-        onDone()
     }
 }
 
@@ -91,6 +94,7 @@ struct ClaudeConfigForm: View {
     @Binding var configDir: String?   // nil = conta global
     @Binding var workingDir: String
     let accounts: [URL]
+    let accountLabel: (URL) -> String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -109,7 +113,7 @@ struct ClaudeConfigForm: View {
             Picker("Conta", selection: $configDir) {
                 Text("Padrão (global)").tag(String?.none)
                 ForEach(accounts, id: \.self) { dir in
-                    Text(dir.lastPathComponent).tag(String?.some(dir.path))
+                    Text(accountLabel(dir)).tag(String?.some(dir.path))
                 }
             }
             TextField("Diretório (~ por padrão)", text: $workingDir)

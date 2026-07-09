@@ -34,6 +34,22 @@ final class AppStateTests: XCTestCase {
                        [AppState.defaultMessage, Message(text: "oi", kind: .claude)])
     }
 
+    func testAddFavoritoRetornaMensagemCriadaOuExistente() {
+        let state = AppState(defaults: freshDefaults())
+        let created = state.addFavorite(text: "oi", kind: .claude)
+        XCTAssertEqual(created?.text, "oi")
+        XCTAssertNotNil(created?.uid)
+
+        let duplicate = state.addFavorite(text: "oi", kind: .claude)
+        XCTAssertEqual(duplicate, created)
+
+        let empty = state.addFavorite(text: "   ", kind: .claude)
+        XCTAssertNil(empty)
+
+        let sameAsDefault = state.addFavorite(text: "1+1", kind: .claude)
+        XCTAssertEqual(sameAsDefault, AppState.defaultMessage)
+    }
+
     func testMesmoTextoComKindsDiferentesSaoFavoritosDistintos() {
         let state = AppState(defaults: freshDefaults())
         state.addFavorite(text: "deploy", kind: .claude)

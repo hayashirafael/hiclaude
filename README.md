@@ -78,7 +78,7 @@ last dispatch result, plus **Pause/Resume**, **Settings…** and **Quit**.
 
 - **Accounts** — per account: alias, renewal mode (Off / Automatic /
   Scheduled), daily start time (Scheduled only, default 09:00), and which
-  message to send
+  message to send (pick from the library or create one inline)
 - **Messages** — the message library (Claude prompt or shell command, each
   with its own model/effort/safe-mode/working dir and a "show response"
   toggle)

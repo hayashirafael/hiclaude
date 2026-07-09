@@ -6,6 +6,11 @@ struct ContasView: View {
     @ObservedObject var state: AppState
     @State private var editingAlias: URL? = nil
     @State private var aliasDraft = ""
+    /// Conta para a qual o sheet "Novo…" foi aberto; nil = fechado.
+    @State private var newMessageFor: URL? = nil
+
+    /// Tag sentinela do item "Novo…" no picker de comando.
+    private static let newCommandSentinel = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
 
     var body: some View {
         Form {
@@ -24,6 +29,18 @@ struct ContasView: View {
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: Binding(
+            get: { newMessageFor != nil },
+            set: { if !$0 { newMessageFor = nil } })) {
+            MessageFormSheet(state: state, editing: nil) { created in
+                if let created, let dir = newMessageFor {
+                    var c = state.renewal(for: dir) ?? AccountRenewal()
+                    c.messageUID = created.uid
+                    state.setRenewal(dir, c)
+                }
+                newMessageFor = nil
+            }
+        }
     }
 
     @ViewBuilder
@@ -66,11 +83,13 @@ struct ContasView: View {
     }
 
     private func messagePicker(_ dir: URL) -> some View {
-        Picker("Mensagem", selection: messageBinding(dir)) {
-            Text("Mínimo (1+1)").tag(UUID?.none)
-            ForEach(state.allMessages) { msg in
+        Picker("Comando", selection: messageBinding(dir)) {
+            Text("1+1").tag(UUID?.none)
+            ForEach(state.favorites) { msg in
                 Text(msg.text).tag(msg.uid)
             }
+            Divider()
+            Text("Novo…").tag(UUID?.some(Self.newCommandSentinel))
         }
     }
 
@@ -130,6 +149,10 @@ struct ContasView: View {
         Binding(
             get: { state.renewal(for: dir)?.messageUID },
             set: { uid in
+                guard uid != Self.newCommandSentinel else {
+                    newMessageFor = dir
+                    return
+                }
                 var c = state.renewal(for: dir) ?? AccountRenewal()
                 c.messageUID = uid
                 state.setRenewal(dir, c)

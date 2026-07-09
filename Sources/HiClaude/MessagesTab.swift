@@ -23,7 +23,7 @@ struct MessagesTab: View {
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showingForm) {
-            MessageFormSheet(state: state, editing: editing) { showingForm = false }
+            MessageFormSheet(state: state, editing: editing) { _ in showingForm = false }
         }
     }
 
@@ -57,7 +57,7 @@ struct MessagesTab: View {
         if msg.model != nil { parts.append(msg.resolvedModel.label) }
         if msg.effort != nil { parts.append(msg.resolvedEffort.rawValue) }
         if msg.safeMode == false { parts.append("sem safe") }
-        if let c = msg.configDir, !c.isEmpty { parts.append(URL(fileURLWithPath: c).lastPathComponent) }
+        if let c = msg.configDir, !c.isEmpty { parts.append(state.label(for: URL(fileURLWithPath: c))) }
         if let w = msg.workingDir, !w.isEmpty { parts.append(URL(fileURLWithPath: w).lastPathComponent) }
         if msg.resolvedShowResponse { parts.append("resposta") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")

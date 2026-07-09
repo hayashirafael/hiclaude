@@ -231,17 +231,23 @@ final class AppState: ObservableObject {
     /// Próximas renovações por conta (espelho do RenewalEngine, para o menu e Geral).
     @Published var nextRenewals: [URL: Date] = [:]
 
+    /// Cria (ou reaproveita, se idêntica a uma existente) uma mensagem favorita.
+    /// Retorna a mensagem resultante com `uid` preenchido, ou nil se o texto for vazio.
+    @discardableResult
     func addFavorite(text: String, kind: Message.Kind,
                      model: Message.Model? = nil, effort: Message.Effort? = nil,
                      safeMode: Bool? = nil, configDir: String? = nil,
-                     workingDir: String? = nil, showResponse: Bool? = nil) {
+                     workingDir: String? = nil, showResponse: Bool? = nil) -> Message? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var msg = Message(text: t, kind: kind, model: model, effort: effort,
                           safeMode: safeMode, configDir: configDir,
                           workingDir: workingDir, showResponse: showResponse)
-        guard !t.isEmpty, msg != Self.defaultMessage, !favorites.contains(msg) else { return }
+        guard !t.isEmpty else { return nil }
+        if msg == Self.defaultMessage { return Self.defaultMessage }
+        if let existing = favorites.first(where: { $0 == msg }) { return existing }
         msg.uid = UUID()
         favorites.append(msg)
+        return msg
     }
 
     /// Substitui um favorito por uma versão editada. Preserva a posição na

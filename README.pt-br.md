@@ -78,7 +78,7 @@ renovação e o resultado do último disparo, além de **Pausar/Retomar**,
 
 - **Contas** — por conta: apelido, modo de renovação (Off / Automática /
   Programada), hora de início diária (só na Programada, padrão 09:00) e qual
-  mensagem enviar
+  mensagem enviar (escolha da biblioteca ou crie na hora)
 - **Mensagens** — a biblioteca de mensagens (prompt do Claude ou comando
   shell, cada uma com seu modelo/esforço/safe-mode/pasta de trabalho e um
   toggle de "mostrar resposta")
