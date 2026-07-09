@@ -406,7 +406,8 @@ final class AppState: ObservableObject {
         static let registeredAccounts = "registeredAccounts"
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard,
+         home: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.defaults = defaults
         self.paused = defaults.bool(forKey: Keys.paused)
         if let data = defaults.data(forKey: Keys.history),
@@ -427,8 +428,7 @@ final class AppState: ObservableObject {
         } else {
             // Migração única: quem atualizou vindo do scan por convenção mantém as
             // contas extras (ex.: ~/.claude2) sem precisar recadastrar.
-            self.registeredAccounts = Self.legacyConventionScan(
-                home: FileManager.default.homeDirectoryForCurrentUser)
+            self.registeredAccounts = Self.legacyConventionScan(home: home)
             defaults.set(self.registeredAccounts, forKey: Keys.registeredAccounts)
         }
     }

@@ -12,6 +12,13 @@ final class AppStateTests: XCTestCase {
         return d
     }
 
+    /// `UserDefaults` isolado, mas SEM pré-semear `registeredAccounts` — usado
+    /// só pelo teste que exercita a migração do scan legado no `init`, com um
+    /// `home` fake injetado (nunca a home real da máquina).
+    func rawDefaultsSemMigracao() -> UserDefaults {
+        UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
+    }
+
     /// Cria uma pasta de conta fake com a assinatura pedida.
     private func makeAccountDir(signature: String? = nil, subdir: String? = nil) throws -> URL {
         let fm = FileManager.default
@@ -416,5 +423,51 @@ final class AppStateTests: XCTestCase {
         let state = AppState(defaults: freshDefaults())
         let msgCodex = Message(text: "1+1", kind: .codex) // sem configDir
         XCTAssertEqual(state.effectiveConfigDir(for: msgCodex), AppState.defaultCodexConfigDir)
+    }
+
+    /// Fim a fim: quando `registeredAccounts` está ausente no UserDefaults, o
+    /// `init` roda o scan legado sobre a `home` injetada (nunca a real),
+    /// popula `registeredAccounts` com as contas extras (excluindo o
+    /// `.claude` default) e persiste — uma segunda instância sobre o mesmo
+    /// `UserDefaults` não repete o scan.
+    func testInitMigraScanLegadoDeHomeInjetadaEPersiste() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("home-init-\(UUID().uuidString)")
+        try fm.createDirectory(at: home.appendingPathComponent(".claude/projects"),
+                               withIntermediateDirectories: true) // default → excluído do scan
+        try fm.createDirectory(at: home.appendingPathComponent(".claude2/projects"),
+                               withIntermediateDirectories: true) // extra → deve migrar
+        defer { try? fm.removeItem(at: home) }
+
+        let defaults = rawDefaultsSemMigracao()
+        XCTAssertNil(defaults.array(forKey: "registeredAccounts"),
+                     "pré-condição: chave ausente para exercitar o ramo de migração")
+
+        let extra = home.appendingPathComponent(".claude2").standardizedFileURL.path
+        let state = AppState(defaults: defaults, home: home)
+        XCTAssertEqual(state.registeredAccounts, [extra])
+
+        // Persistiu no UserDefaults (não só em memória).
+        let persisted = defaults.array(forKey: "registeredAccounts") as? [String]
+        XCTAssertEqual(persisted, [extra])
+
+        // Segunda instância sobre o mesmo defaults não repete o scan: mesmo
+        // adicionando uma `.claude3` na home, a chave já presente é respeitada.
+        try fm.createDirectory(at: home.appendingPathComponent(".claude3/projects"),
+                               withIntermediateDirectories: true)
+        let state2 = AppState(defaults: defaults, home: home)
+        XCTAssertEqual(state2.registeredAccounts, [extra])
+    }
+
+    /// As contas padrão (~/.claude, ~/.codex) nunca são cadastradas — são
+    /// auto-detectadas. `registerAccount` nelas não deve alterar
+    /// `registeredAccounts`, mesmo retornando o provider detectado.
+    func testRegisterAccountNaPastaPadraoNaoCadastra() {
+        let state = AppState(defaults: freshDefaults())
+        state.registerAccount(AppState.defaultConfigDir)
+        XCTAssertTrue(state.registeredAccounts.isEmpty)
+
+        state.registerAccount(AppState.defaultCodexConfigDir)
+        XCTAssertTrue(state.registeredAccounts.isEmpty)
     }
 }
