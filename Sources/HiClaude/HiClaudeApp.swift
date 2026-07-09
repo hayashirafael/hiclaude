@@ -11,7 +11,6 @@ struct HiClaudeApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuContent(state: env.state, env: env)
-                .onAppear { Task { await env.refreshWindowStatus() } }
         } label: {
             MenuBarLabel(state: env.state)
         }
