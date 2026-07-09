@@ -34,13 +34,18 @@ final class AppEnvironment: ObservableObject {
             self?.state.nextRenewals = next
         }
 
-        // Sonda do CLI fora da thread principal: quando `claude` não está nos
-        // candidatos padrão, `locate()` faz spawn de um shell de login
-        // (`command -v claude`) — um stall real no launch. `claudeFound` já
-        // começa `true`, então o ícone de erro não pisca enquanto isso resolve.
+        // Sonda dos CLIs fora da thread principal: quando `claude`/`codex` não
+        // estão nos candidatos padrão, `locate()` faz spawn de um shell de
+        // login (`command -v ...`) — um stall real no launch. `cliFound` já
+        // começa `true` para os dois, então o ícone de erro não pisca enquanto
+        // isso resolve.
         Task.detached {
-            let found = CommandRunner.locate(.claude) != nil
-            await MainActor.run { state.claudeFound = found }
+            let claude = CommandRunner.locate(.claude) != nil
+            let codex = CommandRunner.locate(.codex) != nil
+            await MainActor.run {
+                state.cliFound[.claude] = claude
+                state.cliFound[.codex] = codex
+            }
         }
         handleWake() // catch-up do boot via mesmo caminho do wake/clock-change
 

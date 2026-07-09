@@ -146,7 +146,20 @@ final class AppState: ObservableObject {
 
     func recordEvent(_ event: FireEvent) { history.insert(event, at: 0) }
 
-    @Published var claudeFound = true
+    /// CLI encontrado por provider. Começa true para o ícone de erro não piscar
+    /// enquanto a sonda de launch resolve.
+    @Published var cliFound: [Provider: Bool] = [.claude: true, .codex: true]
+
+    /// CLIs ausentes que importam: Claude sempre; Codex só quando alguma conta
+    /// Codex está em renovação (a Fase 3 soma tarefas Codex habilitadas).
+    var missingCLIs: [Provider] {
+        Provider.allCases.filter { p in
+            guard cliFound[p] == false else { return false }
+            if p == .claude { return true }
+            return renewals.keys.contains { provider(for: URL(fileURLWithPath: $0)) == .codex }
+        }
+    }
+
     /// Mostrar o tempo restante da janela ("3h12") ao lado do ícone da barra.
     @Published var showRemainingInBar: Bool {
         didSet { defaults.set(showRemainingInBar, forKey: Keys.showRemainingInBar) }
@@ -177,27 +190,100 @@ final class AppState: ObservableObject {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
     }
 
+    /// Diretório de config padrão do Codex (`~/.codex`).
+    static var defaultCodexConfigDir: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
+    }
+
     /// Lista exibida na UI: o padrão embutido seguido dos favoritos do usuário.
     var allMessages: [Message] { [Self.defaultMessage, Self.defaultCodexMessage] + favorites }
 
-    /// Contas descobertas: diretórios `~/.claude*` que contenham uma subpasta
-    /// `projects` (assinatura de config do Claude Code). Sempre inclui o padrão.
-    /// Ordenado por path.
+    /// Cache de sessão do provider por conta (detect toca o disco; UI re-renderiza).
+    private var providerCache: [String: Provider] = [:]
+
+    /// Provider da conta pela assinatura do conteúdo, com cache por path.
+    /// Fallback `.claude` para pasta sem assinatura (ex.: `~/.claude` recém-criado)
+    /// — o app é sobre contas Claude antes de tudo.
+    func provider(for dir: URL) -> Provider {
+        let key = dir.standardizedFileURL.path
+        if let cached = providerCache[key] { return cached }
+        let value = Provider.detect(at: dir) ?? .claude
+        providerCache[key] = value
+        return value
+    }
+
+    /// Contas cadastradas pelo usuário (paths padronizados). Os defaults
+    /// (~/.claude, ~/.codex) nunca entram aqui — são auto-detectados.
+    @Published var registeredAccounts: [String] {
+        didSet { defaults.set(registeredAccounts, forKey: Keys.registeredAccounts) }
+    }
+
+    /// Contas exibidas: `~/.claude` sempre (comportamento atual); `~/.codex`
+    /// quando existe com assinatura Codex; cadastradas sempre (se a pasta sumiu,
+    /// a UI avisa em vez de esconder). Ordenado por provider (Claude primeiro)
+    /// e rótulo.
     func discoverAccounts() -> [URL] {
-        let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser
         var found: Set<URL> = [Self.defaultConfigDir.standardizedFileURL]
+        if Provider.detect(at: Self.defaultCodexConfigDir) == .codex {
+            found.insert(Self.defaultCodexConfigDir.standardizedFileURL)
+        }
+        for path in registeredAccounts {
+            found.insert(URL(fileURLWithPath: path).standardizedFileURL)
+        }
+        return found.sorted { a, b in
+            let (pa, pb) = (provider(for: a), provider(for: b))
+            if pa != pb { return pa == .claude } // Claude primeiro
+            return label(for: a).localizedCaseInsensitiveCompare(label(for: b)) == .orderedAscending
+        }
+    }
+
+    /// Contas de um provider, na ordem de discoverAccounts.
+    func accounts(for provider: Provider) -> [URL] {
+        discoverAccounts().filter { self.provider(for: $0) == provider }
+    }
+
+    /// Cadastra uma pasta de conta apontada pelo usuário. Retorna o provider
+    /// inferido pela assinatura, ou nil (pasta inválida — nada é persistido).
+    @discardableResult
+    func registerAccount(_ dir: URL) -> Provider? {
+        guard let detected = Provider.detect(at: dir) else { return nil }
+        let key = dir.standardizedFileURL.path
+        providerCache[key] = detected
+        let defaultPaths = [Self.defaultConfigDir.standardizedFileURL.path,
+                            Self.defaultCodexConfigDir.standardizedFileURL.path]
+        if !registeredAccounts.contains(key), !defaultPaths.contains(key) {
+            registeredAccounts.append(key)
+        }
+        return detected
+    }
+
+    /// Remove uma conta cadastrada da lista — não toca o disco; limpa a
+    /// renovação e o apelido daquele path.
+    func unregisterAccount(_ dir: URL) {
+        let key = dir.standardizedFileURL.path
+        registeredAccounts.removeAll { $0 == key }
+        renewals[key] = nil
+        aliases[key] = nil
+    }
+
+    /// Scan legado por convenção: `~/.claude*` com subpasta `projects`,
+    /// excluindo o default. Usado só na migração para `registeredAccounts`.
+    static func legacyConventionScan(home: URL) -> [String] {
+        let fm = FileManager.default
+        let defaultPath = home.appendingPathComponent(".claude").standardizedFileURL.path
+        var result: [String] = []
         if let names = try? fm.contentsOfDirectory(atPath: home.path) {
-            for name in names where name.hasPrefix(".claude") {
+            for name in names.sorted() where name.hasPrefix(".claude") {
                 let dir = home.appendingPathComponent(name)
                 var isDir: ObjCBool = false
                 let projects = dir.appendingPathComponent("projects")
-                if fm.fileExists(atPath: projects.path, isDirectory: &isDir), isDir.boolValue {
-                    found.insert(dir.standardizedFileURL)
+                if fm.fileExists(atPath: projects.path, isDirectory: &isDir), isDir.boolValue,
+                   dir.standardizedFileURL.path != defaultPath {
+                    result.append(dir.standardizedFileURL.path)
                 }
             }
         }
-        return found.sorted { $0.path < $1.path }
+        return result
     }
 
     /// Apelido opcional por conta (chave = path padronizado). Independente da
@@ -219,10 +305,11 @@ final class AppState: ObservableObject {
         renewals[dir.standardizedFileURL.path] = config
     }
 
-    /// Mensagem da renovação de uma conta: a fixada (se existir) ou o hi mínimo.
+    /// Mensagem da renovação de uma conta: a fixada (se existir) ou o hi mínimo
+    /// do provider da conta.
     func resolvedRenewalMessage(for dir: URL) -> Message {
         if let uid = renewal(for: dir)?.messageUID, let msg = message(withUID: uid) { return msg }
-        return Self.defaultMessage
+        return Self.defaultHi(for: provider(for: dir))
     }
 
     /// Cache de sessão do e-mail por conta (evita reler o .claude.json a cada render).
@@ -290,13 +377,15 @@ final class AppState: ObservableObject {
     }
 
     /// Conta efetiva de uma mensagem: o override se for diretório válido, senão
-    /// a conta padrão embutida (~/.claude). Nunca aponta para conta fantasma.
+    /// a conta padrão embutida do provider da mensagem (~/.claude ou ~/.codex).
+    /// Nunca aponta para conta fantasma.
     func effectiveConfigDir(for message: Message) -> URL {
-        guard let path = message.configDir, !path.isEmpty else { return Self.defaultConfigDir }
+        let fallback = message.kind == .codex ? Self.defaultCodexConfigDir : Self.defaultConfigDir
+        guard let path = message.configDir, !path.isEmpty else { return fallback }
         let url = URL(fileURLWithPath: path)
         var isDir: ObjCBool = false
         let ok = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
-        return ok ? url.standardizedFileURL : Self.defaultConfigDir
+        return ok ? url.standardizedFileURL : fallback
     }
 
     /// Resolve uma referência estável (uid) para a mensagem atual — default ou favorito.
@@ -314,6 +403,7 @@ final class AppState: ObservableObject {
         static let showRemainingInBar = "showRemainingInBar"
         static let aliases = "aliases"
         static let renewals = "renewals"
+        static let registeredAccounts = "registeredAccounts"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -332,6 +422,15 @@ final class AppState: ObservableObject {
         self.favorites = Self.loadFavorites(defaults)
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         self.renewals = Self.loadRenewals(defaults)
+        if let stored = defaults.array(forKey: Keys.registeredAccounts) as? [String] {
+            self.registeredAccounts = stored
+        } else {
+            // Migração única: quem atualizou vindo do scan por convenção mantém as
+            // contas extras (ex.: ~/.claude2) sem precisar recadastrar.
+            self.registeredAccounts = Self.legacyConventionScan(
+                home: FileManager.default.homeDirectoryForCurrentUser)
+            defaults.set(self.registeredAccounts, forKey: Keys.registeredAccounts)
+        }
     }
 
     /// Decodifica favoritos em JSON; se falhar, migra do formato legado

@@ -4,7 +4,28 @@ import XCTest
 @MainActor
 final class AppStateTests: XCTestCase {
     func freshDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
+        let d = UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
+        // Sem isso, o AppState migra o scan legado da máquina real (dev pode
+        // ter ~/.claude2, ~/.claude3 de verdade) e os testes ficam
+        // dependentes do ambiente. Pré-semear vazio pula a migração.
+        d.set([String](), forKey: "registeredAccounts")
+        return d
+    }
+
+    /// Cria uma pasta de conta fake com a assinatura pedida.
+    private func makeAccountDir(signature: String? = nil, subdir: String? = nil) throws -> URL {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("conta-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let signature {
+            try "{}".write(to: dir.appendingPathComponent(signature),
+                           atomically: true, encoding: .utf8)
+        }
+        if let subdir {
+            try fm.createDirectory(at: dir.appendingPathComponent(subdir),
+                                   withIntermediateDirectories: true)
+        }
+        return dir
     }
 
     func testFireResultSkippedRoundtripCodable() throws {
@@ -329,5 +350,71 @@ final class AppStateTests: XCTestCase {
         let state = AppState(defaults: freshDefaults())
         XCTAssertEqual(state.message(withUID: AppState.defaultCodexMessage.uid!),
                        AppState.defaultCodexMessage)
+    }
+
+    func testRegisterAccountInfereProviderEPersiste() throws {
+        let defaults = freshDefaults()
+        let state = AppState(defaults: defaults)
+        let dir = try makeAccountDir(signature: "auth.json") // nome livre, conteúdo Codex
+        XCTAssertEqual(state.registerAccount(dir), .codex)
+        XCTAssertTrue(state.registeredAccounts.contains(dir.standardizedFileURL.path))
+        XCTAssertTrue(state.discoverAccounts().contains(dir.standardizedFileURL))
+        // Duplicata → no-op.
+        XCTAssertEqual(state.registerAccount(dir), .codex)
+        XCTAssertEqual(state.registeredAccounts.filter { $0 == dir.standardizedFileURL.path }.count, 1)
+    }
+
+    func testRegisterAccountPastaSemAssinaturaNaoCadastra() throws {
+        let state = AppState(defaults: freshDefaults())
+        let dir = try makeAccountDir() // sem assinatura de nenhum provider
+        XCTAssertNil(state.registerAccount(dir))
+        XCTAssertTrue(state.registeredAccounts.isEmpty)
+    }
+
+    func testUnregisterLimpaRenovacaoEApelido() throws {
+        let state = AppState(defaults: freshDefaults())
+        let dir = try makeAccountDir(subdir: "projects")
+        state.registerAccount(dir)
+        state.setRenewal(dir, AccountRenewal(mode: .automatic))
+        state.setAlias(dir, "extra")
+        state.unregisterAccount(dir)
+        XCTAssertTrue(state.registeredAccounts.isEmpty)
+        XCTAssertNil(state.renewal(for: dir))
+        XCTAssertNil(state.alias(for: dir))
+    }
+
+    func testLegacyScanEncontraContasExtrasPorConvencao() throws {
+        // Migração única: ~/.claude* com projects/, excluindo o default ~/.claude.
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("home-\(UUID().uuidString)")
+        let fm = FileManager.default
+        try fm.createDirectory(at: home.appendingPathComponent(".claude/projects"),
+                               withIntermediateDirectories: true)
+        try fm.createDirectory(at: home.appendingPathComponent(".claude2/projects"),
+                               withIntermediateDirectories: true)
+        try fm.createDirectory(at: home.appendingPathComponent(".claude-vazio"),
+                               withIntermediateDirectories: true) // sem projects → fora
+        defer { try? fm.removeItem(at: home) }
+
+        let found = AppState.legacyConventionScan(home: home)
+        XCTAssertEqual(found, [home.appendingPathComponent(".claude2").standardizedFileURL.path])
+    }
+
+    func testProviderForFallbackClaudeParaPastaSemAssinatura() {
+        let state = AppState(defaults: freshDefaults())
+        // ~/.claude recém-instalado pode não ter assinatura ainda → .claude.
+        XCTAssertEqual(state.provider(for: URL(fileURLWithPath: "/nao/existe")), .claude)
+    }
+
+    func testMensagemDeRenovacaoDefaultPorProvider() throws {
+        let state = AppState(defaults: freshDefaults())
+        let contaCodex = try makeAccountDir(signature: "auth.json")
+        XCTAssertEqual(state.resolvedRenewalMessage(for: contaCodex), AppState.defaultCodexMessage)
+    }
+
+    func testEffectiveConfigDirFallbackPorProvider() {
+        let state = AppState(defaults: freshDefaults())
+        let msgCodex = Message(text: "1+1", kind: .codex) // sem configDir
+        XCTAssertEqual(state.effectiveConfigDir(for: msgCodex), AppState.defaultCodexConfigDir)
     }
 }

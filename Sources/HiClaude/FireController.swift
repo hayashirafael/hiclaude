@@ -56,7 +56,7 @@ final class FireController {
 
         switch await runner.run(message) {
         case .success(let output):
-            state.claudeFound = true
+            state.cliFound[message.kind == .codex ? .codex : .claude] = true
             let response = message.resolvedShowResponse && !output.isEmpty
                 ? String(output.prefix(Self.responseLimit)) : nil
             state.recordEvent(FireEvent(date: clock.now, result: .success,
@@ -66,7 +66,7 @@ final class FireController {
                 notifier.notifyResponse(messageText: message.text, response: response)
             }
         case .failure(let error):
-            if case .cliNotFound = error { state.claudeFound = false }
+            if case .cliNotFound(let provider) = error { state.cliFound[provider] = false }
             state.recordEvent(FireEvent(date: clock.now, result: .failure(message: error.userMessage),
                                         messageText: message.text, account: account, origin: origin))
             if origin != .manual { notifier.notifyFailure(message: error.userMessage) }

@@ -89,10 +89,10 @@ final class FireControllerTests: XCTestCase {
         XCTAssertTrue(notifier.messages.isEmpty)
     }
 
-    func testCliNaoEncontradoMarcaClaudeFound() async {
+    func testCliNaoEncontradoMarcaCliFound() async {
         runner.result = .failure(.cliNotFound(.claude))
         await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
-        XCTAssertFalse(state.claudeFound)
+        XCTAssertEqual(state.cliFound[.claude], false)
     }
 
     /// O controller envia exatamente a mensagem recebida (o chamador resolve).

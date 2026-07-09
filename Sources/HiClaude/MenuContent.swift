@@ -25,7 +25,7 @@ struct MenuBarLabel: View {
         return soonestEnd != nil ? "bubble.left.fill" : "bubble.left"
     }
 
-    private var hasProblem: Bool { !state.claudeFound || lastEventFailed }
+    private var hasProblem: Bool { !state.missingCLIs.isEmpty || lastEventFailed }
 
     private var lastEventFailed: Bool {
         if case .failure = state.lastEvent?.result { return true }
@@ -67,7 +67,10 @@ struct MenuContent: View {
     }
 
     private var headerLine: String {
-        if !state.claudeFound { return "CLI do Claude não encontrado — instale o Claude Code" }
+        if let missing = state.missingCLIs.first {
+            let instale = missing == .claude ? "Claude Code" : "Codex CLI"
+            return "CLI do \(missing.displayName) não encontrado — instale o \(instale)"
+        }
         if state.paused { return "Pausado" }
         let n = renewingAccounts.count
         return n == 1 ? "1 conta em renovação" : "\(n) contas em renovação"
