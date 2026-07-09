@@ -72,7 +72,7 @@ if paused.
 Click the menu icon for quick actions:
 
 - **Status** — next dispatch time and minutes remaining in the current 5-hour window
-- **Renewal lines** (`↻`) — each account's next auto-renewal; click to renew now
+- **Renewal lines** (`↻`) — each account's next auto-renewal time
 - **Last hi** — clickable when a saved response is available; opens the response
 - **Send hi now** — fire a dispatch immediately
 - **Pause / Resume** — suspend all scheduled dispatches and auto-renewals (pause affects all accounts)
@@ -100,8 +100,8 @@ The **Settings** window has four tabs:
 
 When enabled in **General**, each account automatically chains 5-hour usage windows by
 sending a default message (`1+1`) every 5 hours. Pause suspends all auto-renewals. The
-next renewal time for each account is shown in the menu; click the `↻` to renew
-immediately (useful after waking the Mac from sleep).
+next renewal time for each account is shown in the menu (e.g., "↻ Renews at 18:00
+(.claude)") as informational only.
 
 ## How it works
 

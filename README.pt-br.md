@@ -73,7 +73,7 @@ esmaecido se pausado.
 Clique no ícone do menu para ações rápidas:
 
 - **Status** — horário do próximo disparo e minutos restantes na janela de 5 horas
-- **Linhas de renovação** (`↻`) — próxima renovação automática de cada conta; clique para renovar agora
+- **Linhas de renovação** (`↻`) — horário da próxima renovação automática de cada conta
 - **Último hi** — clicável quando há resposta salva; abre a resposta
 - **Enviar hi agora** — dispara manualmente
 - **Pausar / Retomar** — suspende todos os disparos agendados e renovações automáticas (afeta todas as contas)
@@ -100,8 +100,8 @@ A janela de **Configurações** tem quatro abas:
 
 Quando ativada em **Geral**, cada conta renova automaticamente janelas de 5 horas enviando
 uma mensagem default (`1+1`) a cada 5 horas. Pausar suspende todas as renovações. O horário
-da próxima renovação de cada conta é mostrado no menu; clique no `↻` para renovar agora
-(útil após acordar o Mac do sono).
+da próxima renovação de cada conta é mostrado no menu (ex.: "↻ Renova às 18:00 (.claude)")
+apenas como informação.
 
 ## Como funciona
 
