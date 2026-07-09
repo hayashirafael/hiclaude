@@ -415,4 +415,42 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(c.alias(for: dir), "Pessoal")
         _ = b
     }
+
+    func testRenewalConfigPersisteEToggleOff() {
+        let defaults = freshDefaults()
+        let dir = URL(fileURLWithPath: "/tmp/.claude2")
+        let a = AppState(defaults: defaults)
+        XCTAssertNil(a.renewal(for: dir))
+        a.setRenewal(dir, AccountRenewal(mode: .scheduled, anchorMinutes: 7 * 60, messageUID: nil))
+        XCTAssertEqual(a.renewal(for: dir)?.mode, .scheduled)
+        XCTAssertEqual(a.renewal(for: dir)?.anchorMinutes, 7 * 60)
+        let b = AppState(defaults: defaults)
+        XCTAssertEqual(b.renewal(for: dir)?.mode, .scheduled)
+        b.setRenewal(dir, nil) // Off
+        XCTAssertNil(b.renewal(for: dir))
+        let c = AppState(defaults: defaults)
+        XCTAssertNil(c.renewal(for: dir))
+    }
+
+    /// Migração: renewAccounts [String] vira renovação Automática.
+    func testMigraRenewAccountsParaAutomatica() {
+        let defaults = freshDefaults()
+        defaults.set(["/tmp/.claude", "/tmp/.claude2"], forKey: "renewAccounts")
+        let state = AppState(defaults: defaults)
+        XCTAssertEqual(state.renewals.count, 2)
+        XCTAssertEqual(state.renewal(for: URL(fileURLWithPath: "/tmp/.claude"))?.mode, .automatic)
+        XCTAssertNil(state.renewal(for: URL(fileURLWithPath: "/tmp/.claude"))?.anchorMinutes)
+    }
+
+    func testResolvedRenewalMessageCaiNoDefault() {
+        let state = AppState(defaults: freshDefaults())
+        let dir = URL(fileURLWithPath: "/tmp/.claude2")
+        state.setRenewal(dir, AccountRenewal(mode: .automatic))
+        // Sem messageUID → hi mínimo.
+        XCTAssertEqual(state.resolvedRenewalMessage(for: dir), AppState.defaultMessage)
+        state.addFavorite(text: "deploy", kind: .claude)
+        let fav = state.favorites[0]
+        state.setRenewal(dir, AccountRenewal(mode: .automatic, anchorMinutes: nil, messageUID: fav.uid))
+        XCTAssertEqual(state.resolvedRenewalMessage(for: dir), fav)
+    }
 }

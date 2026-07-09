@@ -107,6 +107,17 @@ struct ScheduleEntry: Codable, Equatable, Identifiable {
     var messageUID: UUID? = nil
 }
 
+/// Configuração de renovação de uma Conta. Presença no dicionário `renewals`
+/// significa "renovando"; ausência = Off.
+struct AccountRenewal: Codable, Equatable {
+    enum Mode: String, Codable { case automatic, scheduled }
+    var mode: Mode = .automatic
+    /// Minutos desde a meia-noite; só relevante em `.scheduled`. nil = usar padrão.
+    var anchorMinutes: Int? = nil
+    /// Mensagem a disparar; nil = hi mínimo (`AppState.defaultMessage`).
+    var messageUID: UUID? = nil
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var schedules: [ScheduleEntry] {
@@ -262,6 +273,25 @@ final class AppState: ObservableObject {
         didSet { defaults.set(aliases, forKey: Keys.aliases) }
     }
 
+    /// Renovação por conta (chave = path padronizado). Presença = renovando.
+    @Published var renewals: [String: AccountRenewal] {
+        didSet { defaults.set(try? JSONEncoder().encode(renewals), forKey: Keys.renewals) }
+    }
+
+    static let defaultAnchorMinutes = 9 * 60
+
+    func renewal(for dir: URL) -> AccountRenewal? { renewals[dir.standardizedFileURL.path] }
+
+    func setRenewal(_ dir: URL, _ config: AccountRenewal?) {
+        renewals[dir.standardizedFileURL.path] = config
+    }
+
+    /// Mensagem da renovação de uma conta: a fixada (se existir) ou o hi mínimo.
+    func resolvedRenewalMessage(for dir: URL) -> Message {
+        if let uid = renewal(for: dir)?.messageUID, let msg = message(withUID: uid) { return msg }
+        return Self.defaultMessage
+    }
+
     /// Cache de sessão do e-mail por conta (evita reler o .claude.json a cada render).
     private var emailCache: [String: String?] = [:]
 
@@ -367,6 +397,7 @@ final class AppState: ObservableObject {
         static let showRemainingInBar = "showRemainingInBar"
         static let renewAccounts = "renewAccounts"
         static let aliases = "aliases"
+        static let renewals = "renewals"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -392,6 +423,7 @@ final class AppState: ObservableObject {
         }
         self.renewAccounts = (defaults.array(forKey: Keys.renewAccounts) as? [String]) ?? []
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
+        self.renewals = Self.loadRenewals(defaults)
     }
 
     /// Decodifica schedules; se ausente, migra do formato legado `times: [Int]`.
@@ -436,5 +468,20 @@ final class AppState: ObservableObject {
             return Message(text: legacy, kind: .claude)
         }
         return Self.defaultMessage
+    }
+
+    /// Decodifica renovações; se ausente, migra do formato legado
+    /// `renewAccounts: [String]` (todas como Automática).
+    private static func loadRenewals(_ defaults: UserDefaults) -> [String: AccountRenewal] {
+        if let data = defaults.data(forKey: Keys.renewals),
+           let decoded = try? JSONDecoder().decode([String: AccountRenewal].self, from: data) {
+            return decoded
+        }
+        if let legacy = defaults.array(forKey: Keys.renewAccounts) as? [String] {
+            var result: [String: AccountRenewal] = [:]
+            for path in legacy { result[path] = AccountRenewal(mode: .automatic) }
+            return result
+        }
+        return [:]
     }
 }
