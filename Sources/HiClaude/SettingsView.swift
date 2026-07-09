@@ -1,27 +1,50 @@
 import SwiftUI
 
-enum SettingsTab: Hashable { case schedules, messages, history, general }
+enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
+    case contas, mensagens, historico, geral
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .contas: return "Contas"
+        case .mensagens: return "Mensagens"
+        case .historico: return "Histórico"
+        case .geral: return "Geral"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .contas: return "person.crop.circle"
+        case .mensagens: return "bubble.left"
+        case .historico: return "clock.arrow.circlepath"
+        case .geral: return "gearshape"
+        }
+    }
+}
 
-/// Janela de configuração em abas, estilo Ajustes do Sistema.
+/// Janela de configuração em sidebar, estilo Ajustes do Sistema.
 struct SettingsView: View {
     @ObservedObject var state: AppState
-    let onChange: () -> Void
 
     var body: some View {
-        TabView(selection: $state.settingsTab) {
-            SchedulesTab(state: state, onChange: onChange)
-                .tabItem { Label("Horários", systemImage: "clock") }
-                .tag(SettingsTab.schedules)
-            MessagesTab(state: state)
-                .tabItem { Label("Mensagens", systemImage: "bubble.left") }
-                .tag(SettingsTab.messages)
-            HistoryTab(state: state)
-                .tabItem { Label("Histórico", systemImage: "clock.arrow.circlepath") }
-                .tag(SettingsTab.history)
-            GeneralTab(state: state)
-                .tabItem { Label("Geral", systemImage: "gearshape") }
-                .tag(SettingsTab.general)
+        NavigationSplitView {
+            List(SettingsSection.allCases, selection: $state.settingsSection) { section in
+                Label(section.title, systemImage: section.icon).tag(section)
+            }
+            .navigationSplitViewColumnWidth(180)
+        } detail: {
+            detail
+                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 440)
+        .frame(width: 640, height: 480)
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch state.settingsSection {
+        case .contas: ContasView(state: state)
+        case .mensagens: MessagesTab(state: state)
+        case .historico: HistoryTab(state: state)
+        case .geral: GeneralTab(state: state)
+        }
     }
 }

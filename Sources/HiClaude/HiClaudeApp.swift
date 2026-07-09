@@ -17,7 +17,7 @@ struct HiClaudeApp: App {
         .menuBarExtraStyle(.menu)
 
         Window("Configurações", id: "schedule") {
-            SettingsView(state: env.state) { env.reconfigure() }
+            SettingsView(state: env.state)
         }
         .windowResizability(.contentSize)
     }

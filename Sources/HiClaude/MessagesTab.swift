@@ -17,7 +17,7 @@ struct MessagesTab: View {
                 }
                 .buttonStyle(.plain)
             } footer: {
-                Text("Com Claude: abre a janela de 5h. Sem Claude: roda o texto como comando.")
+                Text("Biblioteca de mensagens. Atribua uma a cada conta na aba Contas. Com Claude: abre a janela de 5h. Sem Claude: roda o texto como comando.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -30,11 +30,6 @@ struct MessagesTab: View {
     @ViewBuilder
     private func row(_ msg: Message) -> some View {
         HStack(alignment: .top) {
-            Button { state.setActiveMessage(msg) } label: {
-                Image(systemName: msg == state.resolvedMessage
-                      ? "largecircle.fill.circle" : "circle")
-            }
-            .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 1) {
                 Text(msg.text)
                 if let badge = configBadge(msg) {

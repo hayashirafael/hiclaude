@@ -183,8 +183,8 @@ final class AppState: ObservableObject {
     @Published var showRemainingInBar: Bool {
         didSet { defaults.set(showRemainingInBar, forKey: Keys.showRemainingInBar) }
     }
-    /// Aba selecionada na janela de Configurações (deep-link a partir do menu).
-    @Published var settingsTab: SettingsTab = .schedules
+    /// Seção selecionada na janela de Configurações (deep-link a partir do menu).
+    @Published var settingsSection: SettingsSection = .contas
 
     static let defaultMessage = Message(
         text: "1+1", kind: .claude,
