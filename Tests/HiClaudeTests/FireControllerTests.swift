@@ -16,7 +16,7 @@ final class MockDetector: SessionDetecting {
     }
 }
 
-final class MockRunner: ClaudeRunning {
+final class MockRunner: CommandRunning {
     var result: Result<String, RunnerError> = .success("")
     var calls = 0
     var lastMessage: Message?
@@ -90,7 +90,7 @@ final class FireControllerTests: XCTestCase {
     }
 
     func testCliNaoEncontradoMarcaClaudeFound() async {
-        runner.result = .failure(.cliNotFound)
+        runner.result = .failure(.cliNotFound(.claude))
         await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
         XCTAssertFalse(state.claudeFound)
     }

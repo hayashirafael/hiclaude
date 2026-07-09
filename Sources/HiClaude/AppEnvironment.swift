@@ -20,7 +20,7 @@ final class AppEnvironment: ObservableObject {
         self.state = state
         self.detector = detector
         self.controller = FireController(state: state, detector: detector,
-                                         runner: ClaudeRunner(configDir: AppState.defaultConfigDir),
+                                         runner: CommandRunner(configDir: AppState.defaultConfigDir),
                                          notifier: SystemNotifier())
         self.renewalEngine = RenewalEngine(detector: detector)
 
@@ -35,11 +35,11 @@ final class AppEnvironment: ObservableObject {
         }
 
         // Sonda do CLI fora da thread principal: quando `claude` não está nos
-        // candidatos padrão, `locateClaude()` faz spawn de um shell de login
+        // candidatos padrão, `locate()` faz spawn de um shell de login
         // (`command -v claude`) — um stall real no launch. `claudeFound` já
         // começa `true`, então o ícone de erro não pisca enquanto isso resolve.
         Task.detached {
-            let found = ClaudeRunner.locateClaude() != nil
+            let found = CommandRunner.locate(.claude) != nil
             await MainActor.run { state.claudeFound = found }
         }
         handleWake() // catch-up do boot via mesmo caminho do wake/clock-change

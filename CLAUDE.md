@@ -46,8 +46,9 @@ globally-active message.
 - `SessionDetector.swift` — active window end from transcripts.
 - `FireController.swift` — orchestrates one dispatch: skip when a window is
   already active (Claude messages only), record to history, `isRunning` guard.
-- `ClaudeRunner.swift` — subprocess: `claude -p --model … --effort …
-  [--safe-mode] "<text>"` or login-shell command; pins `CLAUDE_CONFIG_DIR`
+- `CommandRunner.swift` — subprocess: `claude -p --model … --effort …
+  [--safe-mode] "<text>"`, `codex exec --model … --sandbox read-only …
+  "<text>"`, or login-shell command; pins `CLAUDE_CONFIG_DIR`/`CODEX_HOME`
   per dispatch; 60s timeout.
 - UI: `MenuContent.swift` (per-account status menu), `SettingsView.swift`
   (sidebar: Contas · Mensagens · Histórico · Geral → `ContasView`,

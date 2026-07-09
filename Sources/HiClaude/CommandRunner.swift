@@ -1,20 +1,21 @@
 import Foundation
 
 enum RunnerError: Error, Equatable {
-    case cliNotFound
+    case cliNotFound(Provider)
     case timeout
     case failed(String)
 
     var userMessage: String {
         switch self {
-        case .cliNotFound: return "CLI do Claude não encontrado"
-        case .timeout: return "claude -p não respondeu em 60s"
+        case .cliNotFound(let provider):
+            return "CLI do \(provider.displayName) não encontrado"
+        case .timeout: return "o comando não respondeu em 60s"
         case .failed(let message): return message
         }
     }
 }
 
-protocol ClaudeRunning {
+protocol CommandRunning {
     func run(_ message: Message) async -> Result<String, RunnerError>
 }
 
@@ -68,27 +69,31 @@ final class PipeBuffer: @unchecked Sendable {
     }
 }
 
-struct ClaudeRunner: ClaudeRunning {
+struct CommandRunner: CommandRunning {
     var timeout: TimeInterval = 60
     var binaryOverride: URL? // testes
     var shellOverride: URL? // testes
-    /// Conta Claude a mirar. Fixado no `CLAUDE_CONFIG_DIR` do subprocesso para
-    /// não herdar silenciosamente o valor do shell que lançou o app — senão o
-    /// ping abre a janela de 5h numa conta diferente da que o usuário observa.
+    /// Conta a mirar. Fixado no env do provider (`CLAUDE_CONFIG_DIR`/
+    /// `CODEX_HOME`) do subprocesso para não herdar silenciosamente o valor
+    /// do shell que lançou o app — senão o ping abre a janela de 5h numa
+    /// conta diferente da que o usuário observa.
     var configDir: URL?
 
     /// Caminhos comuns de instalação; fallback via shell de login cobre
     /// nvm/asdf e instalações exóticas (importante para open source).
-    static let candidatePaths = [
-        "~/.local/bin/claude",
-        "~/.claude/local/claude",
-        "/opt/homebrew/bin/claude",
-        "/usr/local/bin/claude",
-    ]
+    static func candidatePaths(for provider: Provider) -> [String] {
+        switch provider {
+        case .claude:
+            return ["~/.local/bin/claude", "~/.claude/local/claude",
+                    "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
+        case .codex:
+            return ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "~/.local/bin/codex"]
+        }
+    }
 
-    static func locateClaude() -> URL? {
+    static func locate(_ provider: Provider) -> URL? {
         let fm = FileManager.default
-        for path in candidatePaths {
+        for path in candidatePaths(for: provider) {
             let expanded = NSString(string: path).expandingTildeInPath
             if fm.isExecutableFile(atPath: expanded) {
                 return URL(fileURLWithPath: expanded)
@@ -97,7 +102,7 @@ struct ClaudeRunner: ClaudeRunning {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shell)
-        process.arguments = ["-l", "-c", "command -v claude"]
+        process.arguments = ["-l", "-c", "command -v \(provider.cliName)"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
@@ -115,8 +120,8 @@ struct ClaudeRunner: ClaudeRunning {
         let process = Process()
         switch message.kind {
         case .claude:
-            guard let binary = binaryOverride ?? Self.locateClaude() else {
-                return .failure(.cliNotFound)
+            guard let binary = binaryOverride ?? Self.locate(.claude) else {
+                return .failure(.cliNotFound(.claude))
             }
             process.executableURL = binary
             // Args montados a partir da config da mensagem (defaults: Haiku,
@@ -136,8 +141,20 @@ struct ClaudeRunner: ClaudeRunning {
             process.executableURL = shellOverride ?? URL(fileURLWithPath: shell)
             process.arguments = ["-l", "-c", message.text]
         case .codex:
-            // Codex execution — implementado em Task 3 (CommandRunner executa codex exec)
-            return .failure(.cliNotFound)
+            guard let binary = binaryOverride ?? Self.locate(.codex) else {
+                return .failure(.cliNotFound(.codex))
+            }
+            process.executableURL = binary
+            // Ping mínimo: sandbox read-only e sem exigir repositório git (o
+            // diretório default é o home). Reasoning via -c (TOML) por não haver
+            // flag dedicada no codex exec 0.143.0.
+            process.arguments = ["exec",
+                                 "--model", message.resolvedCodexModel,
+                                 "--sandbox", "read-only",
+                                 "--skip-git-repo-check",
+                                 "--color", "never",
+                                 "-c", "model_reasoning_effort=\"\(message.resolvedCodexReasoning.rawValue)\"",
+                                 message.text]
         }
         let home = NSHomeDirectory()
         // Diretório de trabalho: override da mensagem (se não vazio) senão o home.
@@ -150,13 +167,19 @@ struct ClaudeRunner: ClaudeRunning {
         var env = ProcessInfo.processInfo.environment
         let extraPath = "/opt/homebrew/bin:/usr/local/bin:\(home)/.local/bin"
         env["PATH"] = [env["PATH"], extraPath].compactMap { $0 }.joined(separator: ":")
-        // Sempre fixa a conta alvo. Prioridade: override da mensagem → conta
-        // injetada (global) → ~/.claude. Definir explicitamente sobrescreve
-        // qualquer CLAUDE_CONFIG_DIR herdado do ambiente.
+        // Sempre fixa a conta alvo no env do provider da mensagem. Prioridade:
+        // override da mensagem → conta injetada (só Claude) → default do provider.
+        // Definir explicitamente sobrescreve qualquer valor herdado do ambiente.
         let messageConfigDir = (message.configDir?.isEmpty == false)
             ? URL(fileURLWithPath: message.configDir!) : nil
-        env["CLAUDE_CONFIG_DIR"] = (messageConfigDir ?? configDir
-            ?? URL(fileURLWithPath: home).appendingPathComponent(".claude")).path
+        switch message.kind {
+        case .claude, .shell:
+            env["CLAUDE_CONFIG_DIR"] = (messageConfigDir ?? configDir
+                ?? URL(fileURLWithPath: home).appendingPathComponent(".claude")).path
+        case .codex:
+            env["CODEX_HOME"] = (messageConfigDir
+                ?? URL(fileURLWithPath: home).appendingPathComponent(".codex")).path
+        }
         process.environment = env
 
         let outPipe = Pipe()

@@ -15,14 +15,14 @@ struct NullNotifier: Notifying {
 final class FireController {
     private let state: AppState
     private let detector: SessionDetecting
-    private let runner: ClaudeRunning
+    private let runner: CommandRunning
     private let notifier: Notifying
     private let clock: Clock
     private var isRunning = false
 
     static let responseLimit = 4000
 
-    init(state: AppState, detector: SessionDetecting, runner: ClaudeRunning,
+    init(state: AppState, detector: SessionDetecting, runner: CommandRunning,
          notifier: Notifying, clock: Clock = SystemClock()) {
         self.state = state
         self.detector = detector
@@ -66,7 +66,7 @@ final class FireController {
                 notifier.notifyResponse(messageText: message.text, response: response)
             }
         case .failure(let error):
-            if error == .cliNotFound { state.claudeFound = false }
+            if case .cliNotFound = error { state.claudeFound = false }
             state.recordEvent(FireEvent(date: clock.now, result: .failure(message: error.userMessage),
                                         messageText: message.text, account: account, origin: origin))
             if origin != .manual { notifier.notifyFailure(message: error.userMessage) }

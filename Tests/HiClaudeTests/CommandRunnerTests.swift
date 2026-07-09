@@ -1,7 +1,7 @@
 import XCTest
 @testable import HiClaude
 
-final class ClaudeRunnerTests: XCTestCase {
+final class CommandRunnerTests: XCTestCase {
     /// Cria um script executável que simula o binário `claude`.
     func makeScript(_ body: String) -> URL {
         let url = FileManager.default.temporaryDirectory
@@ -17,7 +17,7 @@ final class ClaudeRunnerTests: XCTestCase {
     func testEnviaComandoMinimoDeTokens() async throws {
         let argsFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-args-\(UUID().uuidString).txt")
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 5,
             binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
         )
@@ -36,7 +36,7 @@ final class ClaudeRunnerTests: XCTestCase {
     func testRepassaPromptCustomComFlagsFixos() async throws {
         let argsFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-args-\(UUID().uuidString).txt")
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 5,
             binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
         )
@@ -57,7 +57,7 @@ final class ClaudeRunnerTests: XCTestCase {
     func testArgsRefletemConfigDaMensagem() async throws {
         let argsFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-args-\(UUID().uuidString).txt")
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 5,
             binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
         )
@@ -81,7 +81,7 @@ final class ClaudeRunnerTests: XCTestCase {
             .appendingPathComponent("wd-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 5,
             binaryOverride: makeScript("pwd -P > '\(pwdFile.path)'; exit 0")
         )
@@ -102,7 +102,7 @@ final class ClaudeRunnerTests: XCTestCase {
             .appendingPathComponent("global-\(UUID().uuidString)")
         let daMensagem = FileManager.default.temporaryDirectory
             .appendingPathComponent("msg-\(UUID().uuidString)")
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 5,
             binaryOverride: makeScript("printf '%s' \"$CLAUDE_CONFIG_DIR\" > '\(envFile.path)'; exit 0"),
             configDir: global
@@ -119,7 +119,7 @@ final class ClaudeRunnerTests: XCTestCase {
     func testComandoCruRodaViaShellSemPrefixoClaude() async throws {
         let argsFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("shell-args-\(UUID().uuidString).txt")
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 5,
             binaryOverride: makeScript("echo NAO-DEVE-CHAMAR-CLAUDE >&2; exit 42"),
             shellOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
@@ -142,7 +142,7 @@ final class ClaudeRunnerTests: XCTestCase {
             .appendingPathComponent("env-\(UUID().uuidString).txt")
         let conta = FileManager.default.temporaryDirectory
             .appendingPathComponent("conta-\(UUID().uuidString)")
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 5,
             binaryOverride: makeScript("printf '%s' \"$CLAUDE_CONFIG_DIR\" > '\(envFile.path)'; exit 0"),
             configDir: conta
@@ -161,7 +161,7 @@ final class ClaudeRunnerTests: XCTestCase {
         defer { unsetenv("CLAUDE_CONFIG_DIR") }
         let envFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("env-\(UUID().uuidString).txt")
-        let runner = ClaudeRunner( // configDir nil -> default
+        let runner = CommandRunner( // configDir nil -> default
             timeout: 5,
             binaryOverride: makeScript("printf '%s' \"$CLAUDE_CONFIG_DIR\" > '\(envFile.path)'; exit 0")
         )
@@ -172,26 +172,26 @@ final class ClaudeRunnerTests: XCTestCase {
     }
 
     func testCapturaStdoutNoSucesso() async {
-        let runner = ClaudeRunner(timeout: 5,
+        let runner = CommandRunner(timeout: 5,
                                   binaryOverride: makeScript("echo 'resposta do claude'; exit 0"))
         let result = await runner.run(Message(text: "1+1", kind: .claude))
         XCTAssertEqual(result, .success("resposta do claude"))
     }
 
     func testSucessoQuandoExitZero() async {
-        let runner = ClaudeRunner(timeout: 5, binaryOverride: makeScript("exit 0"))
+        let runner = CommandRunner(timeout: 5, binaryOverride: makeScript("exit 0"))
         let result = await runner.run(Message(text: "1+1", kind: .claude))
         XCTAssertEqual(result, .success(""))
     }
 
     func testFalhaCapturaStderr() async {
-        let runner = ClaudeRunner(timeout: 5, binaryOverride: makeScript("echo boom >&2; exit 1"))
+        let runner = CommandRunner(timeout: 5, binaryOverride: makeScript("echo boom >&2; exit 1"))
         let result = await runner.run(Message(text: "1+1", kind: .claude))
         XCTAssertEqual(result, .failure(.failed("boom")))
     }
 
     func testTimeoutMataOProcesso() async {
-        let runner = ClaudeRunner(timeout: 1, binaryOverride: makeScript("sleep 10"))
+        let runner = CommandRunner(timeout: 1, binaryOverride: makeScript("sleep 10"))
         let result = await runner.run(Message(text: "1+1", kind: .claude))
         XCTAssertEqual(result, .failure(.timeout))
     }
@@ -201,7 +201,7 @@ final class ClaudeRunnerTests: XCTestCase {
     /// filho, o processo nunca termina e sendHi() reporta .timeout
     /// erroneamente. Este script emite bem mais que 64KB antes de sair 0.
     func testNaoTravaComStdoutMaiorQueBufferDoPipe() async {
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 10,
             binaryOverride: makeScript("head -c 200000 /dev/zero | tr '\\0' 'x'; exit 0")
         )
@@ -220,7 +220,7 @@ final class ClaudeRunnerTests: XCTestCase {
     /// despachado ainda e se perder, virando "exit N" em vez da mensagem
     /// real. O drain final sincrono garante a captura completa.
     func testCapturaStderrEscritoImediatamenteAntesDoExit() async {
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 5,
             binaryOverride: makeScript("printf 'erro fatal na cli\\n' >&2; exit 3")
         )
@@ -232,7 +232,7 @@ final class ClaudeRunnerTests: XCTestCase {
     /// deve ser capturado por completo, sem truncar. Usamos uma linha
     /// reconhecivel no fim para provar que a cauda chegou.
     func testCapturaStderrGrandeCompleto() async {
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 10,
             binaryOverride: makeScript(
                 "head -c 200000 /dev/zero | tr '\\0' 'x' >&2; printf 'FIM-DA-STDERR\\n' >&2; exit 1"
@@ -259,7 +259,7 @@ final class ClaudeRunnerTests: XCTestCase {
     /// do fix, o decode deve recuar ate o ultimo prefixo UTF-8 valido e
     /// devolver os 262143 'x' com sucesso.
     func testStdoutMaiorQueCapComCaractereMultibyteNoLimiteNaoViraStringVazia() async {
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 10,
             binaryOverride: makeScript(
                 "head -c 262143 /dev/zero | tr '\\0' 'x'; printf 'á'; printf 'MARCADOR-DEPOIS-DO-CAP'; exit 0"
@@ -284,7 +284,7 @@ final class ClaudeRunnerTests: XCTestCase {
     /// so que na branch de timeout. A espera pos-terminate deve ser
     /// limitada (grace + SIGKILL) e retornar .timeout em tempo limitado.
     func testTimeoutLimitadoMesmoComFilhoQueIgnoraSIGTERM() async {
-        let runner = ClaudeRunner(
+        let runner = CommandRunner(
             timeout: 1,
             binaryOverride: makeScript("trap '' TERM; sleep 30")
         )
@@ -293,6 +293,48 @@ final class ClaudeRunnerTests: XCTestCase {
         let elapsed = Date().timeIntervalSince(start)
         XCTAssertEqual(result, .failure(.timeout))
         XCTAssertLessThan(elapsed, 10, "sendHi() nao retornou em tempo limitado: \(elapsed)s")
+    }
+
+    private func makeExecutable(_ script: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fake-\(UUID().uuidString)")
+        try script.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
+    /// Modo Codex: `codex exec` com modelo/reasoning resolvidos da mensagem e
+    /// `CODEX_HOME` fixado a partir de `configDir` (mesmo padrão do Claude).
+    func testCodexMontaArgsEFixaCodexHome() async throws {
+        let script = """
+        #!/bin/sh
+        echo "ARGS:$@"
+        echo "HOME_CODEX:${CODEX_HOME}"
+        """
+        let bin = try makeExecutable(script)
+        var msg = Message(text: "1+1", kind: .codex)
+        msg.configDir = "/tmp/conta-codex"
+        let runner = CommandRunner(binaryOverride: bin)
+        let result = await runner.run(msg)
+        let output = try result.get()
+        XCTAssertTrue(output.contains("exec"))
+        XCTAssertTrue(output.contains("--model gpt-5.1-codex-mini"))
+        XCTAssertTrue(output.contains("--sandbox read-only"))
+        XCTAssertTrue(output.contains("--skip-git-repo-check"))
+        XCTAssertTrue(output.contains("--color never"))
+        XCTAssertTrue(output.contains(#"model_reasoning_effort="low""#))
+        XCTAssertTrue(output.contains("1+1"))
+        XCTAssertTrue(output.contains("HOME_CODEX:/tmp/conta-codex"))
+    }
+
+    /// Sem `configDir` na mensagem, o Codex mira `~/.codex` (paridade com o
+    /// default `~/.claude` do modo Claude).
+    func testCodexSemConfigDirUsaCodexHomePadrao() async throws {
+        let script = "#!/bin/sh\necho \"HOME_CODEX:${CODEX_HOME}\""
+        let bin = try makeExecutable(script)
+        let runner = CommandRunner(binaryOverride: bin)
+        let output = try (await runner.run(Message(text: "1+1", kind: .codex))).get()
+        XCTAssertTrue(output.hasSuffix(".codex"))
     }
 }
 
