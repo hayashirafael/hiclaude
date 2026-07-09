@@ -12,6 +12,7 @@ final class AppEnvironment: ObservableObject {
     private let detector: SessionDetector
     private var observers: [NSObjectProtocol] = []
     private var cancellables: Set<AnyCancellable> = []
+    private var statusTimer: Timer?
 
     init() {
         let state = AppState()
@@ -51,6 +52,13 @@ final class AppEnvironment: ObservableObject {
         })
 
         Task { @MainActor [weak self] in await self?.refreshWindowStatus() }
+
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.statusTick() }
+        }
+        timer.tolerance = 10
+        RunLoop.main.add(timer, forMode: .common)
+        statusTimer = timer
 
         // Trocar de conta global (menu ou janela) recompõe o runner (fallback de
         // conta) e reflete a janela na UI. `dropFirst` ignora o valor inicial.
@@ -102,6 +110,11 @@ final class AppEnvironment: ObservableObject {
 
     func fireNow() async {
         await controller.fire(message: state.resolvedMessage, origin: .manual)
+    }
+
+    /// Tick periódico: re-detecta a janela ativa (alimenta ícone e "3h12").
+    func statusTick() async {
+        await refreshWindowStatus()
     }
 
     func refreshWindowStatus() async {

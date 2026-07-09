@@ -168,6 +168,10 @@ final class AppState: ObservableObject {
 
     @Published var claudeFound = true
     @Published var activeWindowEnd: Date?
+    /// Mostrar o tempo restante da janela ("3h12") ao lado do ícone da barra.
+    @Published var showRemainingInBar: Bool {
+        didSet { defaults.set(showRemainingInBar, forKey: Keys.showRemainingInBar) }
+    }
     /// Aba selecionada na janela de Configurações (deep-link a partir do menu).
     @Published var settingsTab: SettingsTab = .schedules
 
@@ -305,6 +309,7 @@ final class AppState: ObservableObject {
         static let favorites = "favorites"
         static let activeMessage = "activeMessage"
         static let claudeConfigDir = "claudeConfigDir"
+        static let showRemainingInBar = "showRemainingInBar"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -320,6 +325,7 @@ final class AppState: ObservableObject {
         } else {
             self.history = []
         }
+        self.showRemainingInBar = defaults.bool(forKey: Keys.showRemainingInBar)
         self.favorites = Self.loadFavorites(defaults)
         self.activeMessage = Self.loadActiveMessage(defaults)
         if let path = defaults.string(forKey: Keys.claudeConfigDir) {

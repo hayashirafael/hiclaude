@@ -13,7 +13,7 @@ struct HiClaudeApp: App {
             MenuContent(state: env.state, env: env)
                 .onAppear { Task { await env.refreshWindowStatus() } }
         } label: {
-            MenuBarIcon(state: env.state)
+            MenuBarLabel(state: env.state)
         }
         .menuBarExtraStyle(.menu)
 

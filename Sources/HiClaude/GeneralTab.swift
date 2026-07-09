@@ -16,6 +16,7 @@ struct GeneralTab: View {
                         get: { LoginItem.isEnabled },
                         set: { LoginItem.setEnabled($0) }))
                 }
+                Toggle("Tempo restante na barra", isOn: $state.showRemainingInBar)
             } footer: {
                 Text("Conta Claude padrão (CLAUDE_CONFIG_DIR) — cada mensagem pode sobrescrever.")
                     .font(.caption).foregroundStyle(.secondary)

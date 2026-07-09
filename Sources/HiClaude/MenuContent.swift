@@ -1,16 +1,27 @@
 import SwiftUI
 
-struct MenuBarIcon: View {
+/// Label da barra: o ícone reflete a janela de 5h (preenchido = ativa),
+/// exclamação = erro, esmaecido = pausado; texto opcional com o restante.
+struct MenuBarLabel: View {
     @ObservedObject var state: AppState
 
     var body: some View {
-        Image(systemName: name)
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .opacity(state.paused && !hasProblem ? 0.5 : 1)
+            if state.showRemainingInBar, let end = state.activeWindowEnd, end > Date() {
+                Text(Fmt.remaining(until: end, from: Date()))
+            }
+        }
     }
 
-    private var name: String {
-        if !state.claudeFound || lastEventFailed { return "exclamationmark.bubble" }
-        return state.paused ? "bubble.left" : "bubble.left.fill"
+    private var symbol: String {
+        if hasProblem { return "exclamationmark.bubble" }
+        if let end = state.activeWindowEnd, end > Date() { return "bubble.left.fill" }
+        return "bubble.left"
     }
+
+    private var hasProblem: Bool { !state.claudeFound || lastEventFailed }
 
     private var lastEventFailed: Bool {
         if case .failure = state.lastEvent?.result { return true }

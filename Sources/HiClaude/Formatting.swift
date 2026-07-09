@@ -19,4 +19,10 @@ enum Fmt {
     }()
 
     static func dayTime(_ date: Date) -> String { dayTimeFormatter.string(from: date) }
+
+    /// Tempo restante compacto para a barra: "3h12".
+    static func remaining(until end: Date, from now: Date) -> String {
+        let secs = max(0, Int(end.timeIntervalSince(now)))
+        return "\(secs / 3600)h" + String(format: "%02d", (secs % 3600) / 60)
+    }
 }
