@@ -36,14 +36,22 @@ struct MenuContent: View {
 
     var body: some View {
         Text(statusLine)
-        if let event = state.lastEvent {
-            Text(eventLine(event))
-        }
         if let end = state.activeWindowEnd, end > Date() {
-            Text("Janela ativa até \(Fmt.hhmm(end))")
+            Text("Janela ativa até \(Fmt.hhmm(end)) (\(Fmt.remaining(until: end, from: Date())))")
         }
         ForEach(state.nextRenewals.sorted(by: { $0.value < $1.value }), id: \.key) { account, date in
             Text("↻ Renova às \(Fmt.hhmm(date)) (\(account.lastPathComponent))")
+        }
+        if let event = state.lastEvent {
+            if event.response != nil {
+                Button(eventLine(event)) {
+                    state.settingsTab = .history
+                    openWindow(id: "schedule")
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            } else {
+                Text(eventLine(event))
+            }
         }
         Text("Conta: \(state.resolvedConfigDir.lastPathComponent)")
         Divider()
@@ -81,7 +89,11 @@ struct MenuContent: View {
     private var statusLine: String {
         if !state.claudeFound { return "CLI do Claude não encontrado — instale o Claude Code" }
         if state.paused { return "Pausado" }
-        if let next = env.nextFireDate { return "Ativo — próximo: \(Fmt.hhmm(next))" }
+        if let next = env.nextFire {
+            let text = state.resolvedMessage(forMinutes: next.minutes).text
+            let short = text.count > 24 ? String(text.prefix(24)) + "…" : text
+            return "Ativo — próximo: \(Fmt.hhmm(next.date)) · \(short)"
+        }
         return "Ativo — nenhum horário configurado"
     }
 
@@ -89,7 +101,7 @@ struct MenuContent: View {
         let time = Fmt.hhmm(event.date)
         switch event.result {
         case .success:
-            return "Último hi: \(time) ✓"
+            return event.response != nil ? "Último hi: \(time) ✓ — ver resposta" : "Último hi: \(time) ✓"
         case .skipped(let until):
             return "Pulado \(time) — janela já ativa até \(Fmt.hhmm(until))"
         case .failure(let message):

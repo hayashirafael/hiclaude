@@ -97,7 +97,7 @@ final class AppEnvironment: ObservableObject {
         reconfigureRenewals()
     }
 
-    var nextFireDate: Date? { engine.nextFireDate }
+    var nextFire: (date: Date, minutes: Int)? { engine.nextFire }
 
     func reconfigure() {
         engine.configure(times: state.times, paused: state.paused)
