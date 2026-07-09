@@ -238,6 +238,24 @@ final class AppState: ObservableObject {
         claudeConfigDir = url.standardizedFileURL
     }
 
+    /// Contas com renovação automática ligada (paths standardizados).
+    @Published var renewAccounts: [String] {
+        didSet { defaults.set(renewAccounts, forKey: Keys.renewAccounts) }
+    }
+
+    func isRenewOn(_ dir: URL) -> Bool {
+        renewAccounts.contains(dir.standardizedFileURL.path)
+    }
+
+    func setRenew(_ dir: URL, enabled: Bool) {
+        let path = dir.standardizedFileURL.path
+        if enabled {
+            if !renewAccounts.contains(path) { renewAccounts.append(path) }
+        } else {
+            renewAccounts.removeAll { $0 == path }
+        }
+    }
+
     func addFavorite(text: String, kind: Message.Kind,
                      model: Message.Model? = nil, effort: Message.Effort? = nil,
                      safeMode: Bool? = nil, configDir: String? = nil,
@@ -310,6 +328,7 @@ final class AppState: ObservableObject {
         static let activeMessage = "activeMessage"
         static let claudeConfigDir = "claudeConfigDir"
         static let showRemainingInBar = "showRemainingInBar"
+        static let renewAccounts = "renewAccounts"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -333,6 +352,7 @@ final class AppState: ObservableObject {
         } else {
             self.claudeConfigDir = Self.defaultConfigDir
         }
+        self.renewAccounts = (defaults.array(forKey: Keys.renewAccounts) as? [String]) ?? []
     }
 
     /// Decodifica schedules; se ausente, migra do formato legado `times: [Int]`.

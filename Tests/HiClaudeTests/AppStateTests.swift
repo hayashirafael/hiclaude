@@ -381,4 +381,19 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(decoded.origin)
         XCTAssertNil(decoded.response)
     }
+
+    func testRenewAccountsPersisteEToggle() {
+        let defaults = freshDefaults()
+        let dir = URL(fileURLWithPath: "/tmp/conta-renew")
+        let a = AppState(defaults: defaults)
+        XCTAssertFalse(a.isRenewOn(dir))
+        a.setRenew(dir, enabled: true)
+        XCTAssertTrue(a.isRenewOn(dir))
+        a.setRenew(dir, enabled: true) // idempotente
+        XCTAssertEqual(a.renewAccounts.count, 1)
+        let b = AppState(defaults: defaults)
+        XCTAssertTrue(b.isRenewOn(dir))
+        b.setRenew(dir, enabled: false)
+        XCTAssertFalse(b.isRenewOn(dir))
+    }
 }
