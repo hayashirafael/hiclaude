@@ -2,14 +2,35 @@
 
 [English](README.md) | **Português**
 
-App de menu bar para macOS que dispara `claude -p` em horários fixos para abrir a
-janela de uso de 5h do plano Claude — e pula o disparo se já houver uma janela ativa.
-Swift + SwiftUI (`MenuBarExtra`), sem dependências externas.
+App de menu bar para macOS que mantém as janelas de uso de 5h do seu plano
+Claude sempre abertas — por conta, automaticamente. Swift + SwiftUI
+(`MenuBarExtra`), sem dependências externas.
+
+## Por quê
+
+Os planos Claude (Pro/Max) abrem uma janela de uso de 5h a partir do primeiro
+prompt. Quem usa pesado quer a janela já aberta na hora de sentar para
+trabalhar — não gastar a primeira hora dela aquecendo. O HiClaude renova cada
+conta sozinho, e nunca dispara se já existe uma janela ativa: ele detecta a
+janela corrente passivamente pelos transcripts locais do Claude Code, sem
+nenhuma chamada de rede própria.
+
+## Recursos
+
+- **Renovação por conta** — Off / **Automática** (encadeia janelas de 5h
+  continuamente) / **Programada** (ancorada a uma hora de início diária, com
+  uma pausa noturna natural de ~4h)
+- **Multi-conta** — detecta cada pasta de config `~/.claude*`, mostra o
+  e-mail logado, aceita apelidos
+- **Mensagens configuráveis** — um prompt do Claude com modelo, esforço,
+  safe-mode e pasta de trabalho selecionáveis — ou qualquer comando shell
+- **Histórico** — disparos recentes com status e resposta expansível
+- **Pausar/Retomar** global e **Iniciar com o Mac** opcional
 
 ## Requisitos
 
 - macOS 13+
-- [Claude Code](https://claude.com/claude-code) instalado e logado (o binário `claude` no `PATH`)
+- [Claude Code](https://claude.com/claude-code) instalado e logado
 - Para build a partir do código: Swift 5.9+ (Xcode ou Command Line Tools)
 
 ## Instalação
@@ -19,103 +40,70 @@ Swift + SwiftUI (`MenuBarExtra`), sem dependências externas.
 ```bash
 brew tap hayashirafael/tap
 brew trust --cask hayashirafael/tap/hiclaude
-brew install --cask hiclaude
+brew install --cask hiclaude   # depois: brew upgrade --cask hiclaude
 ```
 
-Para atualizar depois:
+### DMG
 
-```bash
-brew upgrade --cask hiclaude
-```
+Baixe o `HiClaude-<versão>.dmg` da [última release](../../releases/latest) e
+arraste o **HiClaude** para **Applications**.
 
-O HiClaude é assinado ad-hoc, não notarizado. Na primeira abertura, o macOS
-Gatekeeper pode bloquear o app; use **Ajustes do Sistema → Privacidade e
-Segurança → Abrir Assim Mesmo** ou remova o quarantine:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/HiClaude.app
-```
-
-### Via release (DMG)
-
-1. Baixe o `HiClaude-<versão>.dmg` da [última release](../../releases/latest).
-2. Abra o DMG e arraste o **HiClaude** para a pasta **Applications**.
-3. Na primeira abertura: clique-direito no app → **Abrir** (o build é assinado
-   ad-hoc, não notarizado, então o Gatekeeper avisa uma vez). Alternativa, remover
-   o quarantine:
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/HiClaude.app
-   ```
-
-Depois de instalado em `/Applications`, o HiClaude aparece no Spotlight e no
-Launchpad (busque "HiClaude"), mesmo rodando só na menu bar.
+> O HiClaude é assinado ad-hoc, não notarizado. Na primeira abertura o
+> Gatekeeper pode bloquear: use **Ajustes do Sistema → Privacidade e
+> Segurança → Abrir Assim Mesmo**, ou remova o quarantine com
+> `xattr -dr com.apple.quarantine /Applications/HiClaude.app`.
 
 ### A partir do código
 
 ```bash
 git clone https://github.com/hayashirafael/hiclaude.git
 cd hiclaude
-swift test            # roda a suíte de testes
-./scripts/make-app.sh # gera build/HiClaude.app (assinado ad-hoc, LSUIElement)
-./scripts/make-dmg.sh # gera build/HiClaude-<versão>.dmg (requer `brew install create-dmg`)
+swift test            # suíte de testes
+./scripts/make-app.sh # build/HiClaude.app (assinado ad-hoc)
+./scripts/make-dmg.sh # build/HiClaude-<versão>.dmg (requer `brew install create-dmg`)
 open build/HiClaude.app
 ```
 
-O ícone do app é gerado no build a partir de `assets/AppIcon.png` (um único master
-1024×1024); o script deriva todos os tamanhos do `.iconset` e compila o `.icns`.
-
 ## Uso
 
-Fica na menu bar (sem ícone no Dock). O ícone se enche/esvazia refletindo a janela
-corrente de 5 horas; mostra um `!` de erro se a CLI não for encontrada, e fica
-esmaecido se pausado.
+O HiClaude vive na menu bar (sem ícone no Dock). O ícone fica preenchido
+enquanto há uma renovação armada, mostra `!` em erro e esmaece quando pausado;
+opcionalmente mostra também o tempo até a próxima janela vencer.
 
-Clique no ícone do menu para ações rápidas:
+O menu lista cada conta em renovação com o modo, o horário da próxima
+renovação e o resultado do último disparo, além de **Pausar/Retomar**,
+**Configurações…** e **Sair**.
 
-- **Status** — horário do próximo disparo e minutos restantes na janela de 5 horas
-- **Linhas de renovação** (`↻`) — horário da próxima renovação automática de cada conta
-- **Último hi** — clicável quando há resposta salva; abre a resposta
-- **Enviar hi agora** — dispara manualmente
-- **Pausar / Retomar** — suspende todos os disparos agendados e renovações automáticas (afeta todas as contas)
-- **Mensagem** — escolher rápido a mensagem ativa, ou **Gerenciar…** para abrir Configurações
-- **Configurações…** — abre a janela de configuração
-- **Sair**
+**Configurações** é uma janela em sidebar com quatro seções:
 
-### Janela de Configurações
-
-A janela de **Configurações** tem quatro abas:
-
-- **Horários** — adicionar/remover/editar horários diários de disparo (default: 07:00). Cada horário
-  pode fixar uma mensagem específica ou seguir a mensagem ativa global. Se o Mac estava
-  dormindo, o disparo ocorre ao acordar (catch-up).
-- **Mensagens** — gerenciar a lista de mensagens. Defina uma como ativa (é o default em cada
-  horário, a menos que sobrescrito). Cada mensagem tem um toggle **Mostrar resposta** para
-  exibir a resposta na menu bar após o disparo.
-- **Histórico** — ver os últimos 20 disparos com horários, status e a mensagem enviada. Clique
-  em qualquer linha para expandir e ler a resposta completa.
-- **Geral** — defina a conta padrão para disparos, toggle "Iniciar com o Mac" (`SMAppService`),
-  mostrar minutos restantes na menu bar e ativar/desativar renovação automática por conta.
-
-### Renovação Automática
-
-Quando ativada em **Geral**, cada conta renova automaticamente janelas de 5 horas enviando
-uma mensagem default (`1+1`) a cada 5 horas. Pausar suspende todas as renovações. O horário
-da próxima renovação de cada conta é mostrado no menu (ex.: "↻ Renova às 18:00 (.claude)")
-apenas como informação.
+- **Contas** — por conta: apelido, modo de renovação (Off / Automática /
+  Programada), hora de início diária (só na Programada, padrão 09:00) e qual
+  mensagem enviar
+- **Mensagens** — a biblioteca de mensagens (prompt do Claude ou comando
+  shell, cada uma com seu modelo/esforço/safe-mode/pasta de trabalho e um
+  toggle de "mostrar resposta")
+- **Histórico** — disparos recentes; clique numa linha para ler a resposta
+  completa
+- **Geral** — Iniciar com o Mac, tempo restante na menu bar
 
 ## Como funciona
 
-Os planos Claude (Pro/Max) abrem janelas de uso de 5h a partir do primeiro prompt. Nos
-horários configurados, o HiClaude executa:
+Antes de cada disparo, o HiClaude lê os transcripts locais da conta em
+`<conta>/projects/**.jsonl` (streaming linha a linha, por `mtime`) e
+reconstrói a janela de 5h corrente. Se houver uma ativa, o disparo é pulado.
+
+Um disparo executa:
 
 ```
-claude -p --model claude-haiku-4-5 --effort low --safe-mode "<mensagem ativa>"
+claude -p --model <modelo> --effort <esforço> [--safe-mode] "<texto>"
 ```
 
-Haiku, esforço baixo e `--safe-mode` (pula CLAUDE.md/skills/MCP) mantêm o custo baixo —
-só o suficiente para abrir a janela. A mensagem é a que você deixou ativa (default
-`1+1`, um ping mínimo em tokens).
+com `CLAUDE_CONFIG_DIR` fixado na conta alvo. Os padrões — Haiku, esforço
+baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e a mensagem `1+1` — fazem
+dele o ping mais barato possível que abre a janela. Mensagens shell rodam
+pelo seu shell de login.
 
-Antes de disparar, ele lê passivamente os transcripts locais do Claude Code em
-`~/.claude/projects/**.jsonl` (streaming linha a linha, por `mtime`) e reconstrói a
-janela de 5h corrente. Se já houver uma ativa, o disparo é pulado.
+**Automática** arma no fim da janela detectada e encadeia a próxima.
+**Programada** dispara na âncora diária + 0/5/10/15h (quatro janelas por dia,
+deixando o gap de ~4h antes da próxima âncora) e recupera disparos perdidos
+durante o sleep enquanto a janela deles ainda vale.
