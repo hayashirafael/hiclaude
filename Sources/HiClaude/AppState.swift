@@ -256,6 +256,40 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Apelido opcional por conta (chave = path padronizado). Independente da
+    /// renovação estar ligada.
+    @Published var aliases: [String: String] {
+        didSet { defaults.set(aliases, forKey: Keys.aliases) }
+    }
+
+    /// Cache de sessão do e-mail por conta (evita reler o .claude.json a cada render).
+    private var emailCache: [String: String?] = [:]
+
+    /// E-mail logado na conta (oauthAccount.emailAddress), com cache.
+    func email(for dir: URL) -> String? {
+        let key = dir.standardizedFileURL.path
+        if let cached = emailCache[key] { return cached }
+        let value = AccountIdentity.email(forConfigDir: dir)
+        emailCache[key] = value
+        return value
+    }
+
+    func alias(for dir: URL) -> String? {
+        let a = aliases[dir.standardizedFileURL.path]
+        return (a?.isEmpty ?? true) ? nil : a
+    }
+
+    func setAlias(_ dir: URL, _ alias: String?) {
+        let key = dir.standardizedFileURL.path
+        let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty { aliases[key] = trimmed } else { aliases[key] = nil }
+    }
+
+    /// Rótulo exibido: apelido → e-mail → nome da pasta.
+    func label(for dir: URL) -> String {
+        alias(for: dir) ?? email(for: dir) ?? dir.lastPathComponent
+    }
+
     /// Próximas renovações por conta (espelho do RenewalEngine, para o menu e Geral).
     @Published var nextRenewals: [URL: Date] = [:]
 
@@ -332,6 +366,7 @@ final class AppState: ObservableObject {
         static let claudeConfigDir = "claudeConfigDir"
         static let showRemainingInBar = "showRemainingInBar"
         static let renewAccounts = "renewAccounts"
+        static let aliases = "aliases"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -356,6 +391,7 @@ final class AppState: ObservableObject {
             self.claudeConfigDir = Self.defaultConfigDir
         }
         self.renewAccounts = (defaults.array(forKey: Keys.renewAccounts) as? [String]) ?? []
+        self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
     }
 
     /// Decodifica schedules; se ausente, migra do formato legado `times: [Int]`.

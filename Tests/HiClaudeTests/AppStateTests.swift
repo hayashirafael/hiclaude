@@ -396,4 +396,23 @@ final class AppStateTests: XCTestCase {
         b.setRenew(dir, enabled: false)
         XCTAssertFalse(b.isRenewOn(dir))
     }
+
+    func testApelidoPersisteEDefineRotulo() {
+        let defaults = freshDefaults()
+        let dir = URL(fileURLWithPath: "/tmp/.claude9")
+        let a = AppState(defaults: defaults)
+        XCTAssertNil(a.alias(for: dir))
+        // Sem apelido nem e-mail (dir inexistente) → rótulo cai no nome da pasta.
+        XCTAssertEqual(a.label(for: dir), ".claude9")
+        a.setAlias(dir, "Trabalho")
+        XCTAssertEqual(a.alias(for: dir), "Trabalho")
+        XCTAssertEqual(a.label(for: dir), "Trabalho")
+        a.setAlias(dir, "   ") // vazio/whitespace limpa
+        XCTAssertNil(a.alias(for: dir))
+        let b = AppState(defaults: defaults)
+        a.setAlias(dir, "Pessoal")
+        let c = AppState(defaults: defaults)
+        XCTAssertEqual(c.alias(for: dir), "Pessoal")
+        _ = b
+    }
 }
