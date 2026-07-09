@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Seção Contas: por conta, identidade + apelido + modo de renovação
 /// (Off/Automática/Programada) + âncora + mensagem + status.
@@ -8,27 +9,59 @@ struct ContasView: View {
     @State private var aliasDraft = ""
     /// Conta para a qual o sheet "Novo…" foi aberto; nil = fechado.
     @State private var newMessageFor: URL? = nil
+    @State private var invalidFolderAlert = false
 
     /// Tag sentinela do item "Novo…" no picker de comando.
     private static let newCommandSentinel = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
 
     var body: some View {
         Form {
-            ForEach(state.discoverAccounts(), id: \.self) { dir in
-                Section {
-                    header(dir)
-                    modePicker(dir)
-                    if state.renewal(for: dir)?.mode == .scheduled {
-                        anchorPicker(dir)
-                    }
-                    if state.renewal(for: dir) != nil {
-                        messagePicker(dir)
-                        Text(statusText(dir)).font(.caption).foregroundStyle(.secondary)
+            ForEach(Provider.allCases, id: \.self) { provider in
+                let accounts = state.accounts(for: provider)
+                ForEach(accounts, id: \.self) { dir in
+                    Section {
+                        if state.cliFound[provider] == false {
+                            Label("CLI do \(provider.displayName) não encontrado — instale para renovar esta conta",
+                                  systemImage: "exclamationmark.triangle")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                        if !FileManager.default.fileExists(atPath: dir.path) {
+                            Label("pasta não encontrada — remova da lista ou restaure a pasta",
+                                  systemImage: "questionmark.folder")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                        header(dir)
+                        modePicker(dir)
+                        if state.renewal(for: dir)?.mode == .scheduled {
+                            anchorPicker(dir)
+                        }
+                        if state.renewal(for: dir) != nil {
+                            messagePicker(dir)
+                            Text(statusText(dir)).font(.caption).foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        if dir == accounts.first { Text(provider.displayName) }
                     }
                 }
             }
+            Section {
+                Button {
+                    addAccount()
+                } label: {
+                    Label("Adicionar conta…", systemImage: "plus.circle")
+                }
+                .buttonStyle(.plain)
+            } footer: {
+                Text("Aponte a pasta de config de uma conta (Claude Code ou Codex) — o nome é livre; o tipo é inferido pelo conteúdo.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
+        .alert("Pasta inválida", isPresented: $invalidFolderAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("A pasta escolhida não parece uma pasta de config do Claude Code nem do Codex.")
+        }
         .sheet(isPresented: Binding(
             get: { newMessageFor != nil },
             set: { if !$0 { newMessageFor = nil } })) {
@@ -41,6 +74,19 @@ struct ContasView: View {
                 newMessageFor = nil
             }
         }
+    }
+
+    /// Abre o NSOpenPanel para cadastrar uma conta; pasta sem assinatura → alerta.
+    private func addAccount() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true // ~/.claude2 e afins são pastas ocultas
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+        panel.prompt = "Adicionar"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if state.registerAccount(url) == nil { invalidFolderAlert = true }
     }
 
     @ViewBuilder
@@ -56,6 +102,9 @@ struct ContasView: View {
                 if let email = state.email(for: dir), email != state.label(for: dir) {
                     Text(email).font(.caption2).foregroundStyle(.secondary)
                 }
+                if !state.accounts(for: .codex).isEmpty {
+                    Text(state.provider(for: dir).displayName).font(.caption2).foregroundStyle(.tertiary)
+                }
             }
             Spacer()
             Button {
@@ -65,6 +114,13 @@ struct ContasView: View {
                 Image(systemName: editingAlias == dir ? "checkmark" : "pencil")
             }
             .buttonStyle(.plain)
+            if state.registeredAccounts.contains(dir.standardizedFileURL.path) {
+                Button { state.unregisterAccount(dir) } label: {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.plain)
+                .help("Remover da lista (não apaga nada do disco)")
+            }
         }
     }
 
@@ -83,13 +139,26 @@ struct ContasView: View {
     }
 
     private func messagePicker(_ dir: URL) -> some View {
-        Picker("Comando", selection: messageBinding(dir)) {
-            Text("1+1").tag(UUID?.none)
-            ForEach(state.favorites) { msg in
+        let provider = state.provider(for: dir)
+        return Picker("Comando", selection: messageBinding(dir)) {
+            Text(AppState.defaultHi(for: provider).text).tag(UUID?.none)
+            ForEach(compatibleFavorites(provider)) { msg in
                 Text(msg.text).tag(msg.uid)
             }
             Divider()
             Text("Novo…").tag(UUID?.some(Self.newCommandSentinel))
+        }
+    }
+
+    /// Favoritos que fazem sentido para renovar uma conta do provider: o kind
+    /// do próprio provider (abre a janela) e shell (script do usuário).
+    private func compatibleFavorites(_ provider: Provider) -> [Message] {
+        state.favorites.filter { msg in
+            switch msg.kind {
+            case .shell: return true
+            case .claude: return provider == .claude
+            case .codex: return provider == .codex
+            }
         }
     }
 
