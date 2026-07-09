@@ -42,8 +42,29 @@ final class PipeBuffer: @unchecked Sendable {
         lock.lock()
         let snapshot = data
         lock.unlock()
-        return String(data: snapshot, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return Self.validUTF8String(from: snapshot)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// `append` corta no `maxBytes` sem olhar para fronteiras de caractere,
+    /// então o corte pode cair no meio de uma sequência UTF-8 multibyte
+    /// (acentos, emojis). Nesse caso `String(data:encoding:.utf8)` falha
+    /// para o `Data` inteiro. Em vez de perder tudo, recua byte a byte (no
+    /// máximo 3, o tamanho da maior sequência UTF-8 incompleta possível) até
+    /// achar um prefixo válido.
+    private static func validUTF8String(from data: Data) -> String {
+        if let string = String(data: data, encoding: .utf8) {
+            return string
+        }
+        let minLength = max(0, data.count - 3)
+        var length = data.count
+        while length > minLength {
+            length -= 1
+            if let string = String(data: data.prefix(length), encoding: .utf8) {
+                return string
+            }
+        }
+        return ""
     }
 }
 

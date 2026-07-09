@@ -248,6 +248,36 @@ final class ClaudeRunnerTests: XCTestCase {
         }
     }
 
+    /// Regressao (revisao Task 6, achado "Important"): o cap de PipeBuffer
+    /// (256 KiB) corta o Data em um limite de bytes que nao respeita
+    /// fronteiras de caractere UTF-8. Este script emite exatamente
+    /// 262143 'x' seguidos de "á" (2 bytes) e mais texto, de forma que o
+    /// corte de maxBytes (262144 bytes) caia bem no meio da sequencia
+    /// multibyte de "á" — sobra so o primeiro byte dela no buffer. Antes do
+    /// fix, `String(data:encoding:.utf8)` falhava para o Data inteiro e
+    /// `trimmedString()` devolvia "" (perdendo toda a saida valida). Depois
+    /// do fix, o decode deve recuar ate o ultimo prefixo UTF-8 valido e
+    /// devolver os 262143 'x' com sucesso.
+    func testStdoutMaiorQueCapComCaractereMultibyteNoLimiteNaoViraStringVazia() async {
+        let runner = ClaudeRunner(
+            timeout: 10,
+            binaryOverride: makeScript(
+                "head -c 262143 /dev/zero | tr '\\0' 'x'; printf 'á'; printf 'MARCADOR-DEPOIS-DO-CAP'; exit 0"
+            )
+        )
+        let result = await runner.run(Message(text: "1+1", kind: .claude))
+        if case .success(let output) = result {
+            XCTAssertFalse(output.isEmpty,
+                            "corte no meio de UTF-8 multibyte nao deveria zerar a string inteira")
+            XCTAssertEqual(output.count, 262143,
+                            "esperava os 262143 'x' antes do byte incompleto de 'á'")
+            XCTAssertTrue(output.allSatisfy { $0 == "x" },
+                          "saida deveria conter apenas 'x' (byte incompleto de 'á' descartado)")
+        } else {
+            XCTFail("esperava sucesso, obtido \(result)")
+        }
+    }
+
     /// Regressao (re-review #2): terminate() so manda SIGTERM. Um filho que
     /// ignora SIGTERM faria um waitUntilExit() travar para sempre, e
     /// sendHi() nunca retornaria — o mesmo bug que o fix original matou,
