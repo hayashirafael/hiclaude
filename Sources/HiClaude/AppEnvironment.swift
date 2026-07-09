@@ -31,11 +31,8 @@ final class AppEnvironment: ObservableObject {
         }
 
         renewalEngine.onRenew = { [weak self] account in
-            // Sem self não há como nem executar nem reagendar o retry — não
-            // há nada de útil a fazer além de reportar "não executou".
             guard let self else { return false }
-            // Renovação = ping mínimo (1+1 default) fixado na conta a renovar.
-            var msg = AppState.defaultMessage
+            var msg = self.state.resolvedRenewalMessage(for: account)
             msg.configDir = account.path
             return await self.controller.fire(message: msg, origin: .renewal)
         }
@@ -92,7 +89,7 @@ final class AppEnvironment: ObservableObject {
             .store(in: &cancellables)
 
         // Ligar/desligar renovação por conta reconfigura o engine.
-        state.$renewAccounts
+        state.$renewals
             .dropFirst()
             .sink { [weak self] _ in self?.reconfigureRenewals() }
             .store(in: &cancellables)
@@ -111,18 +108,19 @@ final class AppEnvironment: ObservableObject {
         reconfigureRenewals() // pausar suspende as renovações também
     }
 
-    /// Reconfigura o RenewalEngine com as contas marcadas que ainda existem.
+    /// Reconfigura o RenewalEngine com as contas em renovação que ainda existem.
     private func reconfigureRenewals() {
-        let accounts = state.renewAccounts
-            .map { URL(fileURLWithPath: $0) }
-            .filter { url in
-                var isDir: ObjCBool = false
-                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-                    && isDir.boolValue
+        var configs: [URL: AccountRenewal] = [:]
+        for (path, config) in state.renewals {
+            let url = URL(fileURLWithPath: path)
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                configs[url.standardizedFileURL] = config
             }
+        }
         let paused = state.paused
         Task { @MainActor [weak self] in
-            await self?.renewalEngine.configure(accounts: accounts, paused: paused)
+            await self?.renewalEngine.configure(renewals: configs, paused: paused)
         }
     }
 
