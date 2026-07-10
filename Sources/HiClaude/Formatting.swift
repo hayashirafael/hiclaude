@@ -25,4 +25,20 @@ enum Fmt {
         let secs = max(0, Int(end.timeIntervalSince(now)))
         return "\(secs / 3600)h" + String(format: "%02d", (secs % 3600) / 60)
     }
+
+    /// "qua 08:00" — dia da semana curto + hora, para próximas execuções.
+    static let weekdayTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("EEE HH:mm")
+        return f
+    }()
+
+    static func weekdayTime(_ date: Date) -> String {
+        weekdayTimeFormatter.string(from: date)
+    }
+
+    /// Minutos desde a meia-noite → "08:00".
+    static func minutes(_ minutes: Int) -> String {
+        String(format: "%02d:%02d", minutes / 60, minutes % 60)
+    }
 }
