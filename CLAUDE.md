@@ -26,10 +26,25 @@ globally-active message.
     fires only if the missed slot's 5h window still covers now AND no detected
     window is active.
 - **hi** — the dispatch that opens/renews a window.
-- **Message** — the content of a hi: either a Claude prompt (configurable
-  model, effort, safe-mode, working dir) or a raw shell command. Default
-  message: `1+1` · Haiku · low effort · safe-mode (uid `…0001`,
-  `AppState.defaultMessage`).
+- **Message** — the content of a hi: a Claude prompt (configurable model,
+  effort, safe-mode, working dir), a Codex prompt (configurable model,
+  reasoning effort, account), or a raw shell command. Default message: `1+1`
+  · Haiku · low effort · safe-mode (uid `…0001`, `AppState.defaultMessage`);
+  Codex has its own minimal default (`AppState.defaultCodexMessage`, uid
+  `…0002`).
+- **Provider** — `claude` or `codex`, the axis that differentiates account
+  discovery, window detection and dispatch (`Provider.swift`). Detected by
+  folder *content*, not name (`Provider.detect(at:)`): `.claude.json` →
+  claude; else `auth.json` → codex; else `projects/` → claude; else
+  `sessions/` → codex; else no signature (`nil`). Each provider carries its
+  own transcripts subpath (`projects`/`sessions`), env var
+  (`CLAUDE_CONFIG_DIR`/`CODEX_HOME`) and CLI binary name.
+- **Tarefa** (`ScheduledTask`) — a command fired at fixed times × weekdays
+  (`AgendaMath.swift`), independent of any account's renewal. Managed in the
+  Horários section (`HorariosView.swift`) and driven by `TaskScheduler`,
+  which arms one timer per enabled task and — on wake or launch — fires a
+  single catch-up per task for the most recent occurrence missed since its
+  last fire (never a burst of backlogged fires for a long sleep).
 
 ## Architecture map
 
@@ -46,13 +61,22 @@ globally-active message.
 - `SessionDetector.swift` — active window end from transcripts.
 - `FireController.swift` — orchestrates one dispatch: skip when a window is
   already active (Claude messages only), record to history, `isRunning` guard.
+- `Provider.swift` — the claude/codex axis: folder-content detection,
+  transcripts subpath, env var, CLI binary name, display name.
 - `CommandRunner.swift` — subprocess: `claude -p --model … --effort …
   [--safe-mode] "<text>"`, `codex exec --model … --sandbox read-only …
   "<text>"`, or login-shell command; pins `CLAUDE_CONFIG_DIR`/`CODEX_HOME`
   per dispatch; 60s timeout.
-- UI: `MenuContent.swift` (per-account status menu), `SettingsView.swift`
-  (sidebar: Contas · Mensagens · Histórico · Geral → `ContasView`,
-  `MessagesTab`, `HistoryTab`, `GeneralTab`).
+- `AgendaMath.swift` — pure functions for the Horários cycle (fixed times ×
+  weekdays): `nextOccurrence`, `lastMissedOccurrence` (single catch-up on
+  wake).
+- `TaskScheduler.swift` — per-task timers driven by `AgendaMath`, mirrors
+  `RenewalEngine`'s pattern (120s dedupe, `pendingRetry` for dispatches
+  discarded by the controller's `isRunning` guard).
+- UI: `MenuContent.swift` (per-account status menu + next-task line),
+  `SettingsView.swift` (sidebar: Contas · Horários · Comandos · Histórico ·
+  Geral → `ContasView`, `HorariosView`, `MessagesTab`, `HistoryTab`,
+  `GeneralTab`).
 
 ## Commands
 

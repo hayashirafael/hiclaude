@@ -20,10 +20,13 @@ nenhuma chamada de rede própria.
 - **Renovação por conta** — Off / **Automática** (encadeia janelas de 5h
   continuamente) / **Programada** (ancorada a uma hora de início diária, com
   uma pausa noturna natural de ~4h)
-- **Multi-conta** — detecta cada pasta de config `~/.claude*`, mostra o
-  e-mail logado, aceita apelidos
-- **Mensagens configuráveis** — um prompt do Claude com modelo, esforço,
-  safe-mode e pasta de trabalho selecionáveis — ou qualquer comando shell
+- **Multi-conta, Claude e Codex** — detecta cada pasta de config `~/.claude*`
+  e uma conta Codex em `~/.codex`, mostra o e-mail logado, aceita apelidos
+- **Comandos configuráveis** — um prompt do Claude (modelo, esforço,
+  safe-mode, pasta de trabalho), um prompt do Codex (modelo, esforço de
+  raciocínio), ou qualquer comando shell
+- **Horários** — tarefas independentes que disparam um comando em horários
+  fixos × dias da semana, sem depender do estado de renovação de nenhuma conta
 - **Histórico** — disparos recentes com status e resposta expansível
 - **Pausar/Retomar** global e **Iniciar com o Mac** opcional
 
@@ -71,39 +74,55 @@ enquanto há uma renovação armada, mostra `!` em erro e esmaece quando pausado
 opcionalmente mostra também o tempo até a próxima janela vencer.
 
 O menu lista cada conta em renovação com o modo, o horário da próxima
-renovação e o resultado do último disparo, além de **Pausar/Retomar**,
-**Configurações…** e **Sair**.
+renovação e o resultado do último disparo; uma linha da próxima tarefa
+agendada (se houver); além de **Pausar/Retomar**, **Configurações…** e
+**Sair**.
 
-**Configurações** é uma janela em sidebar com quatro seções:
+**Configurações** é uma janela em sidebar com cinco seções:
 
 - **Contas** — por conta: apelido, modo de renovação (Off / Automática /
   Programada), hora de início diária (só na Programada, padrão 09:00) e qual
-  mensagem enviar (escolha da biblioteca ou crie na hora)
-- **Mensagens** — a biblioteca de mensagens (prompt do Claude ou comando
-  shell, cada uma com seu modelo/esforço/safe-mode/pasta de trabalho e um
-  toggle de "mostrar resposta")
+  comando enviar (escolha da biblioteca ou crie na hora)
+- **Horários** — tarefas independentes: um comando disparado em horários
+  fixos × dias da semana, sem depender do estado de renovação de nenhuma conta
+- **Comandos** — a biblioteca de comandos (prompt do Claude, prompt do Codex,
+  ou comando shell, cada um com seu modelo/esforço/raciocínio/safe-mode/pasta
+  de trabalho e um toggle de "mostrar resposta")
 - **Histórico** — disparos recentes; clique numa linha para ler a resposta
   completa
 - **Geral** — Iniciar com o Mac, tempo restante na menu bar
 
 ## Como funciona
 
-Antes de cada disparo, o HiClaude lê os transcripts locais da conta em
-`<conta>/projects/**.jsonl` (streaming linha a linha, por `mtime`) e
-reconstrói a janela de 5h corrente. Se houver uma ativa, o disparo é pulado.
+Antes de cada disparo Claude/Codex, o HiClaude lê os transcripts locais da
+conta (`<conta>/projects/**.jsonl` no Claude, `sessions/**.jsonl` no Codex,
+streaming linha a linha, por `mtime`) e reconstrói a janela de 5h corrente.
+Se houver uma ativa, o disparo é pulado.
 
-Um disparo executa:
+Um disparo Claude executa:
 
 ```
 claude -p --model <modelo> --effort <esforço> [--safe-mode] "<texto>"
 ```
 
 com `CLAUDE_CONFIG_DIR` fixado na conta alvo. Os padrões — Haiku, esforço
-baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e a mensagem `1+1` — fazem
-dele o ping mais barato possível que abre a janela. Mensagens shell rodam
-pelo seu shell de login.
+baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e o comando `1+1` — fazem
+dele o ping mais barato possível que abre a janela. Um disparo Codex executa
+`codex exec --model <modelo> --sandbox read-only -c
+model_reasoning_effort=<esforço> "<texto>"` com `CODEX_HOME` fixado no lugar.
+Comandos shell rodam pelo seu shell de login.
+
+Qual conta é Claude ou Codex é inferido pelo conteúdo da pasta, não pelo nome:
+um `.claude.json` ou subpasta `projects/` indica Claude; um `auth.json` ou
+subpasta `sessions/` indica Codex.
 
 **Automática** arma no fim da janela detectada e encadeia a próxima.
 **Programada** dispara na âncora diária + 0/5/10/15h (quatro janelas por dia,
 deixando o gap de ~4h antes da próxima âncora) e recupera disparos perdidos
 durante o sleep enquanto a janela deles ainda vale.
+
+As tarefas de **Horários** rodam independentes de qualquer conta: cada uma
+dispara seu comando nos horários fixos × dias da semana marcados. No wake (ou
+no launch), uma tarefa dispara no máximo uma vez para recuperar a ocorrência
+mais recente que perdeu — um sleep longo nunca gera uma rajada de disparos
+atrasados.

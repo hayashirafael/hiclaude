@@ -20,10 +20,14 @@ network calls of its own.
 - **Per-account renewal** — Off / **Automatic** (chains 5-hour windows
   continuously) / **Scheduled** (anchored to a daily start time, with a
   natural ~4h overnight break)
-- **Multi-account** — detects every `~/.claude*` config dir, shows the
-  logged-in email, supports custom aliases
-- **Configurable messages** — a Claude prompt with selectable model, effort,
-  safe-mode and working directory — or any shell command
+- **Multi-account, Claude and Codex** — detects every `~/.claude*` config dir
+  plus a Codex account at `~/.codex`, shows the logged-in email, supports
+  custom aliases
+- **Configurable commands** — a Claude prompt (model, effort, safe-mode,
+  working directory), a Codex prompt (model, reasoning effort), or any shell
+  command
+- **Horários (schedule)** — independent tasks that fire a command at fixed
+  times × weekdays, regardless of any account's renewal state
 - **History** — recent dispatches with status and expandable response
 - Global **Pause/Resume** and optional **Launch at Login**
 
@@ -72,37 +76,52 @@ renewal is armed, shows `!` on error, and fades when paused; optionally it
 also shows the time until the next window expires.
 
 The menu lists each renewing account with its mode, next renewal time and
-last dispatch result, plus **Pause/Resume**, **Settings…** and **Quit**.
+last dispatch result; a line for the next scheduled task (if any); plus
+**Pause/Resume**, **Settings…** and **Quit**.
 
-**Settings** is a sidebar window with four sections:
+**Settings** is a sidebar window with five sections:
 
 - **Accounts** — per account: alias, renewal mode (Off / Automatic /
   Scheduled), daily start time (Scheduled only, default 09:00), and which
-  message to send (pick from the library or create one inline)
-- **Messages** — the message library (Claude prompt or shell command, each
-  with its own model/effort/safe-mode/working dir and a "show response"
-  toggle)
+  command to send (pick from the library or create one inline)
+- **Horários** — independent tasks: a command fired at fixed times × weekdays,
+  regardless of any account's renewal state
+- **Comandos** — the command library (Claude prompt, Codex prompt, or shell
+  command, each with its own model/effort/reasoning/safe-mode/working dir and
+  a "show response" toggle)
 - **History** — recent dispatches; click a row to read the full response
 - **General** — Launch at Login, time remaining in the menu bar
 
 ## How it works
 
-Before each dispatch, HiClaude streams the account's local transcripts at
-`<account>/projects/**.jsonl` (line by line, ordered by `mtime`) and
-reconstructs the current 5-hour window. If one is active, the run is skipped.
+Before each Claude/Codex dispatch, HiClaude streams the account's local
+transcripts (`<account>/projects/**.jsonl` for Claude, `sessions/**.jsonl` for
+Codex, line by line, ordered by `mtime`) and reconstructs the current 5-hour
+window. If one is active, the run is skipped.
 
-A dispatch runs:
+A Claude dispatch runs:
 
 ```
 claude -p --model <model> --effort <effort> [--safe-mode] "<text>"
 ```
 
 with `CLAUDE_CONFIG_DIR` pinned to the target account. The defaults — Haiku,
-low effort, `--safe-mode` (skips CLAUDE.md/skills/MCP) and the message `1+1` —
-make it the cheapest possible ping that opens the window. Shell messages run
-through your login shell instead.
+low effort, `--safe-mode` (skips CLAUDE.md/skills/MCP) and the command `1+1` —
+make it the cheapest possible ping that opens the window. A Codex dispatch
+runs `codex exec --model <model> --sandbox read-only -c
+model_reasoning_effort=<effort> "<text>"` with `CODEX_HOME` pinned instead.
+Shell commands run through your login shell.
+
+Which account is Claude vs. Codex is inferred from folder content, not name:
+a `.claude.json` or `projects/` subfolder means Claude; an `auth.json` or
+`sessions/` subfolder means Codex.
 
 **Automatic** arms at the end of the detected window and chains the next one.
 **Scheduled** fires at the daily anchor + 0/5/10/15h (four windows a day,
 leaving the ~4h gap before the next anchor) and catches up dispatches missed
 during sleep while their window still applies.
+
+**Horários** tasks run independently of any account: each fires its command at
+its fixed times × weekdays. On wake (or launch), a task fires at most once to
+catch up the most recent occurrence it missed — a long sleep never triggers a
+burst of backlogged fires.

@@ -56,6 +56,10 @@ struct MenuContent: View {
                 Text(statusLine(for: account))
             }
         }
+        if let entry = state.nextTaskEntry {
+            Divider()
+            Text("Próxima tarefa: \(entry.task.name ?? state.resolvedTaskMessage(for: entry.task).text) · \(Fmt.weekdayTime(entry.date))")
+        }
         Divider()
         Button(state.paused ? "Retomar" : "Pausar") { env.togglePause() }
         Button("Configurações…") {
@@ -79,6 +83,8 @@ struct MenuContent: View {
     private func statusLine(for account: URL) -> String {
         let mode = state.renewal(for: account)?.mode == .scheduled ? "programada" : "automática"
         var parts = [mode]
+        let temCodex = renewingAccounts.contains { state.provider(for: $0) == .codex }
+        if temCodex { parts.insert(state.provider(for: account).displayName, at: 0) }
         if let next = state.nextRenewals[account.standardizedFileURL], next > Date() {
             parts.append("renova \(Fmt.hhmm(next))")
         } else {
