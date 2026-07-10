@@ -485,7 +485,8 @@ final class AppStateTests: XCTestCase {
     func testTasksPersistemEDecodificam() throws {
         let defaults = freshDefaults()
         let state = AppState(defaults: defaults)
-        let task = ScheduledTask(uid: UUID(), name: "bom dia", commandUID: nil,
+        let task = ScheduledTask(uid: UUID(), name: "bom dia",
+                                 command: Message(text: "bom dia", kind: .claude),
                                  times: [8 * 60], weekdays: [2, 3, 4, 5, 6], enabled: true)
         state.tasks = [task]
         let reloaded = AppState(defaults: defaults)
@@ -509,5 +510,121 @@ final class AppStateTests: XCTestCase {
         state.nextTaskFires = [t1.uid: Date().addingTimeInterval(7200),
                                t2.uid: Date().addingTimeInterval(3600)]
         XCTAssertEqual(state.nextTaskEntry?.task.uid, t2.uid)
+    }
+
+    // MARK: - Migração para agendamentos unificados
+
+    func testMigraTarefaLegadaEmbutindoOFavorito() throws {
+        let d = freshDefaults()
+        let favUID = UUID()
+        let fav = Message(text: "olá mundo", kind: .claude, model: .opus, uid: favUID)
+        d.set(try JSONEncoder().encode([fav]), forKey: "favorites")
+        // Tarefa no formato legado: commandUID, sem command/repetition.
+        let legadoJSON = """
+        [{"uid":"\(UUID().uuidString)","commandUID":"\(favUID.uuidString)",
+          "times":[480],"weekdays":[2],"enabled":true}]
+        """
+        d.set(legadoJSON.data(using: .utf8)!, forKey: "tasks")
+
+        let state = AppState(defaults: d)
+        XCTAssertEqual(state.tasks.count, 1)
+        XCTAssertEqual(state.tasks[0].resolvedCommand.text, "olá mundo")
+        XCTAssertEqual(state.tasks[0].resolvedCommand.model, .opus)
+        XCTAssertNil(state.tasks[0].resolvedCommand.uid, "cópia embutida não pertence à biblioteca")
+        XCTAssertEqual(state.tasks[0].repetition, .fixed)
+        XCTAssertNil(d.object(forKey: "favorites"), "biblioteca removida após embutir")
+    }
+
+    func testMigraTarefaLegadaSemComandoParaHiPadrao() throws {
+        let d = freshDefaults()
+        let legadoJSON = """
+        [{"uid":"\(UUID().uuidString)","times":[600],"weekdays":[1,7],"enabled":false}]
+        """
+        d.set(legadoJSON.data(using: .utf8)!, forKey: "tasks")
+        let state = AppState(defaults: d)
+        XCTAssertEqual(state.tasks[0].resolvedCommand.text, "1+1")
+        XCTAssertEqual(state.tasks[0].resolvedCommand.kind, .claude)
+        XCTAssertFalse(state.tasks[0].enabled)
+    }
+
+    func testMigraRenovacaoAutomaticaParaAgendamentoContinuo() throws {
+        let d = freshDefaults()
+        let conta = try makeAccountDir(signature: ".claude.json")
+        d.set(try JSONEncoder().encode([conta.path: AccountRenewal(mode: .automatic)]),
+              forKey: "renewals")
+        let state = AppState(defaults: d)
+        XCTAssertEqual(state.tasks.count, 1)
+        XCTAssertEqual(state.tasks[0].repetition, .continuous)
+        XCTAssertEqual(state.tasks[0].resolvedCommand.configDir, conta.path)
+        XCTAssertEqual(state.tasks[0].resolvedCommand.kind, .claude)
+        XCTAssertTrue(state.tasks[0].enabled)
+        XCTAssertNil(d.object(forKey: "renewals"), "chave legada removida")
+    }
+
+    func testMigraRenovacaoProgramadaParaQuatroHorariosFixos() throws {
+        let d = freshDefaults()
+        let conta = try makeAccountDir(signature: ".claude.json")
+        var renewal = AccountRenewal(mode: .scheduled)
+        renewal.anchorMinutes = 9 * 60 + 15 // 09:15
+        d.set(try JSONEncoder().encode([conta.path: renewal]), forKey: "renewals")
+        let state = AppState(defaults: d)
+        XCTAssertEqual(state.tasks[0].repetition, .fixed)
+        // 09:15 + 0/5/10/15h, mod 24h, ordenado: 00:15, 09:15, 14:15, 19:15.
+        XCTAssertEqual(state.tasks[0].times, [15, 555, 855, 1155])
+        XCTAssertEqual(state.tasks[0].weekdays, Set(1...7))
+    }
+
+    func testMigracaoRodaUmaVezSo() throws {
+        let d = freshDefaults()
+        let conta = try makeAccountDir(signature: ".claude.json")
+        d.set(try JSONEncoder().encode([conta.path: AccountRenewal(mode: .automatic)]),
+              forKey: "renewals")
+        _ = AppState(defaults: d)
+        let state2 = AppState(defaults: d)
+        XCTAssertEqual(state2.tasks.count, 1, "segunda inicialização não duplica")
+    }
+
+    // MARK: - accountDir / activeScheduleCount
+
+    func testAccountDirDeShellENil() {
+        let state = AppState(defaults: freshDefaults())
+        let task = ScheduledTask(uid: UUID(), command: Message(text: "ls", kind: .shell))
+        XCTAssertNil(state.accountDir(for: task))
+    }
+
+    func testAccountDirComPastaSumidaENil() {
+        let state = AppState(defaults: freshDefaults())
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = "/tmp/nao-existe-\(UUID().uuidString)"
+        let task = ScheduledTask(uid: UUID(), command: cmd)
+        XCTAssertNil(state.accountDir(for: task))
+    }
+
+    func testAccountDirSemConfigDirCaiNoDefaultDoProvider() {
+        let state = AppState(defaults: freshDefaults())
+        let claude = ScheduledTask(uid: UUID(), command: Message(text: "1+1", kind: .claude))
+        XCTAssertEqual(state.accountDir(for: claude),
+                       AppState.defaultConfigDir.standardizedFileURL)
+        let codex = ScheduledTask(uid: UUID(), command: Message(text: "1+1", kind: .codex))
+        XCTAssertEqual(state.accountDir(for: codex),
+                       AppState.defaultCodexConfigDir.standardizedFileURL)
+    }
+
+    func testActiveScheduleCountContaSoHabilitadosDaConta() throws {
+        let state = AppState(defaults: freshDefaults())
+        let conta = try makeAccountDir(signature: ".claude.json")
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = conta.path
+        state.tasks = [
+            ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous),
+            ScheduledTask(uid: UUID(), command: cmd, times: [480], weekdays: Set(1...7)),
+            {
+                var t = ScheduledTask(uid: UUID(), command: cmd, times: [600], weekdays: [2])
+                t.enabled = false
+                return t
+            }(),
+            ScheduledTask(uid: UUID(), command: Message(text: "ls", kind: .shell)),
+        ]
+        XCTAssertEqual(state.activeScheduleCount(for: conta), 2)
     }
 }

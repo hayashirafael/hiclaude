@@ -109,8 +109,8 @@ extension Message {
     var resolvedShowResponse: Bool { showResponse ?? false }
 }
 
-/// Configuração de renovação de uma Conta. Presença no dicionário `renewals`
-/// significa "renovando"; ausência = Off.
+/// LEGADO: configuração de renovação por conta, pré-agendamentos unificados.
+/// Só a migração do init decodifica; nada mais grava esse tipo.
 struct AccountRenewal: Codable, Equatable {
     enum Mode: String, Codable { case automatic, scheduled }
     var mode: Mode = .automatic
@@ -120,21 +120,48 @@ struct AccountRenewal: Codable, Equatable {
     var messageUID: UUID? = nil
 }
 
-/// Uma tarefa da agenda: comando disparado em horários fixos × dias da
-/// semana, independente da renovação das contas.
-struct ScheduledTask: Codable, Identifiable, Equatable {
+/// Um agendamento: prompt embutido disparado de forma contínua (a cada janela
+/// de 5h da conta) ou em horários fixos × dias da semana.
+struct ScheduledTask: Identifiable, Equatable {
+    enum Repetition: String, Codable { case continuous, fixed }
+
     var uid: UUID
     /// Rótulo opcional; sem nome, a UI exibe o texto do comando.
     var name: String? = nil
-    /// Comando da biblioteca; nil = hi padrão (1+1 Claude).
+    /// Referência legada à biblioteca de comandos. Só a migração lê;
+    /// nil em tudo que o app grava desde os agendamentos unificados.
     var commandUID: UUID? = nil
-    /// Minutos desde a meia-noite, 1 ou mais (08:00 → 480).
-    var times: [Int]
-    /// Dias da semana no padrão do Calendar (1 = domingo … 7 = sábado).
-    var weekdays: Set<Int>
+    /// Prompt embutido. A migração garante non-nil; leia via `resolvedCommand`.
+    var command: Message? = nil
+    var repetition: Repetition = .fixed
+    /// Minutos desde a meia-noite; só relevante em `.fixed`.
+    var times: [Int] = []
+    /// Dias da semana no padrão do Calendar (1 = domingo … 7 = sábado); só `.fixed`.
+    var weekdays: Set<Int> = []
     var enabled: Bool = true
 
     var id: UUID { uid }
+    var resolvedCommand: Message { command ?? AppState.defaultMessage }
+}
+
+extension ScheduledTask: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case uid, name, commandUID, command, repetition, times, weekdays, enabled
+    }
+
+    /// Decode tolerante: JSON legado (sem command/repetition) entra com os
+    /// defaults e é completado pela migração no init do AppState.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uid = try c.decode(UUID.self, forKey: .uid)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        commandUID = try c.decodeIfPresent(UUID.self, forKey: .commandUID)
+        command = try c.decodeIfPresent(Message.self, forKey: .command)
+        repetition = try c.decodeIfPresent(Repetition.self, forKey: .repetition) ?? .fixed
+        times = try c.decodeIfPresent([Int].self, forKey: .times) ?? []
+        weekdays = try c.decodeIfPresent(Set<Int>.self, forKey: .weekdays) ?? []
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+    }
 }
 
 @MainActor
@@ -168,9 +195,7 @@ final class AppState: ObservableObject {
         Provider.allCases.filter { p in
             guard cliFound[p] == false else { return false }
             if p == .claude { return true }
-            let renovando = renewals.keys.contains { provider(for: URL(fileURLWithPath: $0)) == .codex }
-            let agendado = tasks.contains { $0.enabled && resolvedTaskMessage(for: $0).kind == .codex }
-            return renovando || agendado
+            return tasks.contains { $0.enabled && $0.resolvedCommand.kind == .codex }
         }
     }
 
@@ -342,10 +367,32 @@ final class AppState: ObservableObject {
         return Self.defaultHi(for: provider(for: dir))
     }
 
-    /// Comando de uma tarefa: o referenciado, ou o hi padrão se foi apagado.
-    func resolvedTaskMessage(for task: ScheduledTask) -> Message {
-        if let uid = task.commandUID, let msg = message(withUID: uid) { return msg }
-        return Self.defaultMessage
+    /// Comando de uma tarefa. Shim de transição: os call sites migram para
+    /// `task.resolvedCommand` na reescrita das views.
+    func resolvedTaskMessage(for task: ScheduledTask) -> Message { task.resolvedCommand }
+
+    /// Conta que um agendamento mira: o configDir do comando (se a pasta ainda
+    /// existe), senão a conta padrão do provider. nil para shell (não mira
+    /// conta) e para configDir cuja pasta sumiu (a UI avisa; nada dispara).
+    func accountDir(for task: ScheduledTask) -> URL? {
+        let cmd = task.resolvedCommand
+        guard cmd.kind != .shell else { return nil }
+        if let path = cmd.configDir, !path.isEmpty {
+            let url = URL(fileURLWithPath: path)
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+                  isDir.boolValue else { return nil }
+            return url.standardizedFileURL
+        }
+        return (cmd.kind == .codex ? Self.defaultCodexConfigDir : Self.defaultConfigDir)
+            .standardizedFileURL
+    }
+
+    /// Agendamentos habilitados que miram a conta — o "N agendamentos ativos"
+    /// da aba Contas.
+    func activeScheduleCount(for dir: URL) -> Int {
+        let key = dir.standardizedFileURL
+        return tasks.filter { $0.enabled && accountDir(for: $0) == key }.count
     }
 
     /// Cache de sessão do e-mail por conta (evita reler o .claude.json a cada render).
@@ -460,14 +507,43 @@ final class AppState: ObservableObject {
             self.history = []
         }
         self.showRemainingInBar = defaults.bool(forKey: Keys.showRemainingInBar)
-        self.favorites = Self.loadFavorites(defaults)
+        let legacyFavorites = Self.loadFavorites(defaults)
+        self.favorites = legacyFavorites
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         self.renewals = Self.loadRenewals(defaults)
+        var loadedTasks: [ScheduledTask] = []
         if let data = defaults.data(forKey: Keys.tasks),
            let decoded = try? JSONDecoder().decode([ScheduledTask].self, from: data) {
-            self.tasks = decoded
-        } else {
-            self.tasks = []
+            loadedTasks = decoded
+        }
+        // Migração de mão única para agendamentos unificados: embute o
+        // favorito nas tarefas legadas e converte renovações em agendamentos.
+        var migrou = false
+        for i in loadedTasks.indices where loadedTasks[i].command == nil {
+            loadedTasks[i].command = Self.embeddedCommand(
+                uid: loadedTasks[i].commandUID, favorites: legacyFavorites)
+            loadedTasks[i].commandUID = nil
+            migrou = true
+        }
+        let legacyRenewals = Self.loadRenewals(defaults)
+        if !legacyRenewals.isEmpty {
+            for (path, renewal) in legacyRenewals.sorted(by: { $0.key < $1.key }) {
+                loadedTasks.append(Self.migratedRenewalTask(
+                    path: path, renewal: renewal, favorites: legacyFavorites))
+            }
+            migrou = true
+        }
+        if defaults.object(forKey: Keys.renewals) != nil
+            || defaults.object(forKey: "renewAccounts") != nil {
+            defaults.removeObject(forKey: Keys.renewals)
+            defaults.removeObject(forKey: "renewAccounts")
+        }
+        if migrou, defaults.object(forKey: Keys.favorites) != nil {
+            defaults.removeObject(forKey: Keys.favorites)
+        }
+        self.tasks = loadedTasks
+        if migrou {
+            defaults.set(try? JSONEncoder().encode(loadedTasks), forKey: Keys.tasks)
         }
         if let stored = defaults.array(forKey: Keys.registeredAccounts) as? [String] {
             self.registeredAccounts = stored
@@ -512,5 +588,47 @@ final class AppState: ObservableObject {
             return result
         }
         return [:]
+    }
+
+    /// Cópia embutida do favorito referenciado (ou hi padrão). uid zerado:
+    /// o prompt passa a pertencer ao agendamento, não à biblioteca.
+    private static func embeddedCommand(uid: UUID?, favorites: [Message]) -> Message {
+        var msg: Message
+        if let uid, uid == defaultCodexMessage.uid {
+            msg = defaultCodexMessage
+        } else if let uid, let fav = favorites.first(where: { $0.uid == uid }) {
+            msg = fav
+        } else {
+            msg = defaultMessage
+        }
+        msg.uid = nil
+        return msg
+    }
+
+    /// Renovação legada → agendamento: Automática vira contínua; Programada
+    /// vira horários fixos com as 4 janelas do ciclo ancorado (âncora +
+    /// 0/5/10/15h), todos os dias.
+    private static func migratedRenewalTask(path: String, renewal: AccountRenewal,
+                                            favorites: [Message]) -> ScheduledTask {
+        let provider = Provider.detect(at: URL(fileURLWithPath: path)) ?? .claude
+        var command: Message
+        if let uid = renewal.messageUID, let fav = favorites.first(where: { $0.uid == uid }) {
+            command = fav
+        } else {
+            command = defaultHi(for: provider)
+        }
+        command.uid = nil
+        command.configDir = path
+        var task = ScheduledTask(uid: UUID(), command: command)
+        switch renewal.mode {
+        case .automatic:
+            task.repetition = .continuous
+        case .scheduled:
+            let anchor = renewal.anchorMinutes ?? defaultAnchorMinutes
+            task.repetition = .fixed
+            task.times = (0..<4).map { (anchor + $0 * 300) % 1440 }.sorted()
+            task.weekdays = Set(1...7)
+        }
+        return task
     }
 }
