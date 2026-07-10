@@ -58,7 +58,21 @@ struct MessageFormSheet: View {
         // Conta é por provider (~/.claude* vs ~/.codex*); trocar o Tipo sem
         // limpar a conta persistiria um configDir do provider errado (hi na
         // conta errada — ex.: `codex exec` com CODEX_HOME de pasta Claude).
-        .onChange(of: kind) { _ in account = nil }
+        // O reset é CONDICIONAL: o load() de um favorito não-Claude também
+        // dispara este onChange (kind inicia .claude e o load o troca DEPOIS
+        // de setar `account`), e um reset incondicional apagaria a conta
+        // salva ao simplesmente abrir "Editar". Se a conta já é válida para
+        // o novo kind, não há nada para limpar.
+        .onChange(of: kind) { newKind in
+            guard let current = account else { return }
+            let valid: Bool
+            switch newKind {
+            case .claude: valid = state.accounts(for: .claude).contains { $0.path == current }
+            case .codex: valid = state.accounts(for: .codex).contains { $0.path == current }
+            case .shell: valid = false
+            }
+            if !valid { account = nil }
+        }
     }
 
     private func load() {
