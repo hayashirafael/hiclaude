@@ -17,19 +17,19 @@ network calls of its own.
 
 ## Features
 
-- **Per-account renewal** — Off / **Automatic** (chains 5-hour windows
-  continuously) / **Scheduled** (anchored to a daily start time, with a
-  natural ~4h overnight break)
-- **Multi-account, Claude and Codex** — detects every `~/.claude*` config dir
-  plus a Codex account at `~/.codex` on first launch (a one-time migration);
-  afterwards, add more accounts anytime via "Add account…" — shows the
-  logged-in email, supports custom aliases
+- **Unified agendamentos** — one concept for everything scheduled. Each
+  agendamento carries an embedded command and a repetition: **Continuous**
+  (chains 5-hour windows 24/7 — the old automatic renewal) or **Fixed times**
+  (times × weekdays). Managed in the **Horários** section
 - **Configurable commands** — a Claude prompt (model, effort, safe-mode,
   working directory), a Codex prompt (model, reasoning effort), or any shell
-  command
-- **Horários (schedule)** — independent tasks that fire a command at fixed
-  times × weekdays, regardless of any account's renewal state
-- **History** — recent dispatches with status and expandable response
+  command — embedded directly in the agendamento
+- **Multi-account, Claude and Codex** — the default dirs (`~/.claude` and
+  `~/.codex`) are always detected; other `~/.claude*` dirs are picked up once,
+  on first launch, and from then on you add accounts anytime via
+  "Add account…" — shows the logged-in email, supports custom aliases
+- **History** — recent dispatches with status and expandable response (full
+  error detail on failures)
 - Global **Pause/Resume** and optional **Launch at Login**
 
 ## Requirements
@@ -75,24 +75,24 @@ open build/HiClaude.app
 ## Usage
 
 HiClaude lives in the menu bar (no Dock icon). The icon is filled while a
-renewal is armed, shows `!` on error, and fades when paused; optionally it
+window is active, shows `!` on error, and fades when paused; optionally it
 also shows the time until the next window expires.
 
-The menu lists each renewing account with its mode, next renewal time and
-last dispatch result; a line for the next scheduled task (if any); plus
+The menu lists each account with an active agendamento — its next dispatch
+time and last result; a line for the next task (if any); plus
 **Pause/Resume**, **Settings…** and **Quit**.
 
-**Settings** is a sidebar window with five sections:
+**Settings** is a sidebar window with four sections:
 
-- **Accounts** — per account: alias, renewal mode (Off / Automatic /
-  Scheduled), daily start time (Scheduled only, default 09:00), and which
-  command to send (pick from the library or create one inline)
-- **Horários** — independent tasks: a command fired at fixed times × weekdays,
-  regardless of any account's renewal state
-- **Comandos** — the command library (Claude prompt, Codex prompt, or shell
-  command, each with its own model/effort/reasoning/safe-mode/working dir and
-  a "show response" toggle)
-- **History** — recent dispatches; click a row to read the full response
+- **Accounts** — informative: for each account, the logged-in identity /
+  alias, provider, local folder, and how many active agendamentos target it.
+  Add or remove accounts here
+- **Horários** — the single list of agendamentos. Each has a name, a type
+  (Claude / Codex / shell command) with its own config, an account, and a
+  repetition — **Continuous** (a 5-hour-window renewal, max one per account)
+  or **Fixed times** (times × weekdays). One form creates or edits any of them
+- **History** — recent dispatches; click a row to read the full response or
+  error detail
 - **General** — Launch at Login, time remaining in the menu bar
 
 ## How it works
@@ -100,7 +100,9 @@ last dispatch result; a line for the next scheduled task (if any); plus
 Before each Claude/Codex dispatch, HiClaude streams the account's local
 transcripts (`<account>/projects/**.jsonl` for Claude, `sessions/**.jsonl` for
 Codex, line by line, ordered by `mtime`) and reconstructs the current 5-hour
-window. If one is active, the run is skipped.
+window. If one is active, the run is skipped. A Claude window starts at the
+top of the hour of its first message (mirroring how the plan counts it); a
+Codex window starts at the exact time.
 
 A Claude dispatch runs:
 
@@ -111,20 +113,20 @@ claude -p --model <model> --effort <effort> [--safe-mode] "<text>"
 with `CLAUDE_CONFIG_DIR` pinned to the target account. The defaults — Haiku,
 low effort, `--safe-mode` (skips CLAUDE.md/skills/MCP) and the command `1+1` —
 make it the cheapest possible ping that opens the window. A Codex dispatch
-runs `codex exec --model <model> --sandbox read-only -c
-model_reasoning_effort=<effort> "<text>"` with `CODEX_HOME` pinned instead.
-Shell commands run through your login shell.
+runs `codex exec [--model <model>] --sandbox read-only [-c
+model_reasoning_effort=<effort>] "<text>"` with `CODEX_HOME` pinned instead,
+and has its own minimal built-in `1+1` default. When you leave the Codex model
+(or reasoning) unset, HiClaude omits the flag so the account's own
+`config.toml` default is used — the only value guaranteed to be accepted by
+the account's plan. Shell commands run through your login shell.
 
 Which account is Claude vs. Codex is inferred from folder content, not name:
 a `.claude.json` or `projects/` subfolder means Claude; an `auth.json` or
 `sessions/` subfolder means Codex.
 
-**Automatic** arms at the end of the detected window and chains the next one.
-**Scheduled** fires at the daily anchor + 0/5/10/15h (four windows a day,
-leaving the ~4h gap before the next anchor) and catches up dispatches missed
-during sleep while their window still applies.
-
-**Horários** tasks run independently of any account: each fires its command at
-its fixed times × weekdays. On wake (or launch), a task fires at most once to
-catch up the most recent occurrence it missed — a long sleep never triggers a
-burst of backlogged fires.
+A **Continuous** agendamento arms at the end of the detected window and chains
+the next one, 24/7. A **Fixed times** agendamento fires at its times ×
+weekdays; on wake (or launch) it fires at most once to catch up the most
+recent occurrence it missed — a long sleep never triggers a burst of
+backlogged fires. The old *Scheduled* renewal (daily anchor + 0/5/10/15h) is
+simply a fixed-times agendamento with four times after migration.

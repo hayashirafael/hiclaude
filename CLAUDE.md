@@ -16,22 +16,26 @@ globally-active message.
 - **Window** — the plan's 5-hour usage block. Inferred passively by streaming
   the local transcripts at `<account>/projects/**.jsonl`; the app never calls
   the CLI or the network to detect it.
-- **Renewal** — presence of an account in `AppState.renewals`
-  (`[path: AccountRenewal]`; absence = Off). Two modes:
-  - `automatic` — arms at the end of the detected window and chains 5h windows
-    24/7 (daily anchor drifts).
-  - `scheduled` — anchored to a daily start time (default 09:00,
-    `AppState.defaultAnchorMinutes`). Fires at anchor + 0/5/10/15h
-    (4 windows/day), leaving an emergent ~4h night gap. Post-sleep catch-up
-    fires only if the missed slot's 5h window still covers now AND no detected
-    window is active.
+- **Agendamento** (`ScheduledTask`) — the single unified concept: a command
+  dispatched either **continuously** or on **fixed times**. Carries an embedded
+  prompt (`command: Message`), an optional name, an `enabled` toggle, and a
+  `repetition`:
+  - `continuous` — arms at the end of the detected window and chains 5h windows
+    24/7 (the old *automatic renewal*); driven by `RenewalEngine`, keyed by the
+    account the command targets. Max one continuous agendamento per account
+    (`AppState.hasContinuousConflict`).
+  - `fixed` — fixed times × weekdays (`AgendaMath`), driven by `TaskScheduler`,
+    with a single catch-up on wake. The old *scheduled renewal* (anchor +
+    0/5/10/15h) is just four fixed times after migration.
+  There is no `AppState.renewals` dict and no command library any more.
 - **hi** — the dispatch that opens/renews a window.
-- **Message** — the content of a hi: a Claude prompt (configurable model,
-  effort, safe-mode, working dir), a Codex prompt (configurable model,
-  reasoning effort, account), or a raw shell command. Default message: `1+1`
-  · Haiku · low effort · safe-mode (uid `…0001`, `AppState.defaultMessage`);
-  Codex has its own minimal default (`AppState.defaultCodexMessage`, uid
-  `…0002`).
+- **Message** — the embedded content of an agendamento: a Claude prompt
+  (configurable model, effort, safe-mode, working dir), a Codex prompt
+  (configurable model, reasoning effort, account), or a raw shell command.
+  Default message: `1+1` · Haiku · low effort · safe-mode (uid `…0001`,
+  `AppState.defaultMessage`); Codex has its own minimal default
+  (`AppState.defaultCodexMessage`, uid `…0002`). Codex with no explicit model
+  omits `--model` (and reasoning) so the account's `config.toml` default wins.
 - **Provider** — `claude` or `codex`, the axis that differentiates account
   discovery, window detection and dispatch (`Provider.swift`). Detected by
   folder *content*, not name (`Provider.detect(at:)`): `.claude.json` →
@@ -39,44 +43,41 @@ globally-active message.
   `sessions/` → codex; else no signature (`nil`). Each provider carries its
   own transcripts subpath (`projects`/`sessions`), env var
   (`CLAUDE_CONFIG_DIR`/`CODEX_HOME`) and CLI binary name.
-- **Tarefa** (`ScheduledTask`) — a command fired at fixed times × weekdays
-  (`AgendaMath.swift`), independent of any account's renewal. Managed in the
-  Horários section (`HorariosView.swift`) and driven by `TaskScheduler`,
-  which arms one timer per enabled task and — on wake or launch — fires a
-  single catch-up per task for the most recent occurrence missed since its
-  last fire (never a burst of backlogged fires for a long sleep).
-
 ## Architecture map
 
 - `AppState.swift` — central observable state, UserDefaults persistence,
-  legacy migrations (`renewAccounts` → automatic renewals; raw string keys
-  `"renewAccounts"`/`"lastEvent"` are intentional there).
-- `AppEnvironment.swift` — composition root; wires engine ↔ controller,
-  observes sleep/wake and `$renewals`.
-- `RenewalEngine.swift` — per-account timers by mode, 120s dedupe,
-  `pendingRetry` for dispatches discarded by the controller's `isRunning`
-  guard.
-- `ScheduleMath.swift` — pure functions for the scheduled cycle
-  (`nextScheduledRenewal`, `missedScheduledRenewal`).
+  one-way migrations to unified agendamentos: legacy tasks get their referenced
+  favorite embedded (`command`); legacy renewals become agendamentos
+  (`automatic` → `continuous`, `scheduled` → four `fixed` times); the
+  `renewals`/`renewAccounts`/`favorites` keys are then removed. Raw string keys
+  (`"renewAccounts"`/`"lastEvent"`) are intentional there.
+- `AppEnvironment.swift` — composition root; wires both engines ↔ controller,
+  observes sleep/wake and `$tasks` (single `reconfigureSchedules`: continuous
+  agendamentos feed `RenewalEngine`, fixed ones `TaskScheduler`).
+- `RenewalEngine.swift` — accounts with a continuous agendamento; per-account
+  timers armed at the detected window end, 120s dedupe, `pendingRetry` for
+  dispatches discarded by the controller's `isRunning` guard.
 - `SessionDetector.swift` — active window end from transcripts.
 - `FireController.swift` — orchestrates one dispatch: skip when a window is
   already active (Claude messages only), record to history, `isRunning` guard.
 - `Provider.swift` — the claude/codex axis: folder-content detection,
   transcripts subpath, env var, CLI binary name, display name.
 - `CommandRunner.swift` — subprocess: `claude -p --model … --effort …
-  [--safe-mode] "<text>"`, `codex exec --model … --sandbox read-only …
-  "<text>"`, or login-shell command; pins `CLAUDE_CONFIG_DIR`/`CODEX_HOME`
-  per dispatch; 60s timeout.
-- `AgendaMath.swift` — pure functions for the Horários cycle (fixed times ×
-  weekdays): `nextOccurrence`, `lastMissedOccurrence` (single catch-up on
-  wake).
-- `TaskScheduler.swift` — per-task timers driven by `AgendaMath`, mirrors
-  `RenewalEngine`'s pattern (120s dedupe, `pendingRetry` for dispatches
-  discarded by the controller's `isRunning` guard).
+  [--safe-mode] "<text>"`, `codex exec [--model …] --sandbox read-only …
+  [-c model_reasoning_effort=…] "<text>"` (model/reasoning flags omitted when
+  unset → account default), or login-shell command; pins
+  `CLAUDE_CONFIG_DIR`/`CODEX_HOME` per dispatch; 60s timeout.
+- `AgendaMath.swift` — pure functions for the fixed cycle (times × weekdays):
+  `nextOccurrence`, `lastMissedOccurrence` (single catch-up on wake), and
+  `date(bySettingMinutes:ofDay:calendar:)`.
+- `TaskScheduler.swift` — per-agendamento timers (fixed ones) driven by
+  `AgendaMath`, mirrors `RenewalEngine`'s pattern (120s dedupe, `pendingRetry`
+  for dispatches discarded by the controller's `isRunning` guard).
 - UI: `MenuContent.swift` (per-account status menu + next-task line),
-  `SettingsView.swift` (sidebar: Contas · Horários · Comandos · Histórico ·
-  Geral → `ContasView`, `HorariosView`, `MessagesTab`, `HistoryTab`,
-  `GeneralTab`).
+  `SettingsView.swift` (sidebar: Contas · Horários · Histórico · Geral →
+  `ContasView` (informative: provider/folder/active-schedule count),
+  `HorariosView` (the unified agendamento list) + `AgendamentoFormSheet`,
+  `HistoryTab`, `GeneralTab`).
 
 ## Commands
 
@@ -96,6 +97,11 @@ swift run HiClaude              # run the menu bar app locally
 - TDD: write the failing test first. Tests use fakes (`Clock`,
   `SessionDetecting`) — never real timers or sleeps.
 - Commit prefixes: `feat:` / `fix:` / `refactor:` / `docs:` / `test:`.
+- READMEs: `README.md` is English, `README.pt-br.md` is Portuguese (there is
+  no `README.en.md`); keep them in sync and verify every behavioral claim
+  against the source before writing it.
+- SourceKit/LSP diagnostics go stale after files change (false "no member"
+  errors); trust `swift build` / `swift test`, not the diagnostics.
 
 ## Repo hygiene
 
