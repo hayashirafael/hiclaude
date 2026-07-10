@@ -6,7 +6,7 @@ enum FireResult: Codable, Equatable {
     case failure(message: String)
 }
 
-enum FireOrigin: String, Codable { case scheduled, manual, renewal }
+enum FireOrigin: String, Codable { case scheduled, manual, renewal, agenda }
 
 struct FireEvent: Codable, Equatable {
     let date: Date
@@ -168,13 +168,26 @@ final class AppState: ObservableObject {
     @Published var cliFound: [Provider: Bool] = [.claude: true, .codex: true]
 
     /// CLIs ausentes que importam: Claude sempre; Codex só quando alguma conta
-    /// Codex está em renovação (a Fase 3 soma tarefas Codex habilitadas).
+    /// Codex está em renovação ou alguma tarefa da agenda usa Codex.
     var missingCLIs: [Provider] {
         Provider.allCases.filter { p in
             guard cliFound[p] == false else { return false }
             if p == .claude { return true }
-            return renewals.keys.contains { provider(for: URL(fileURLWithPath: $0)) == .codex }
+            let renovando = renewals.keys.contains { provider(for: URL(fileURLWithPath: $0)) == .codex }
+            let agendado = tasks.contains { $0.enabled && resolvedTaskMessage(for: $0).kind == .codex }
+            return renovando || agendado
         }
+    }
+
+    /// Próximos disparos por tarefa (espelho do TaskScheduler, para a UI).
+    @Published var nextTaskFires: [UUID: Date] = [:]
+
+    /// Próxima tarefa a disparar (para o menu da barra).
+    var nextTaskEntry: (task: ScheduledTask, date: Date)? {
+        let future = nextTaskFires.filter { $0.value > Date() }
+        guard let entry = future.min(by: { $0.value < $1.value }),
+              let task = tasks.first(where: { $0.uid == entry.key }) else { return nil }
+        return (task, entry.value)
     }
 
     /// Mostrar o tempo restante da janela ("3h12") ao lado do ícone da barra.

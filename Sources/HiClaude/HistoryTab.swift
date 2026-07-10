@@ -55,6 +55,7 @@ struct HistoryTab: View {
 
     private func symbol(_ event: FireEvent) -> String {
         if event.origin == .renewal { return "arrow.triangle.2.circlepath" }
+        if event.origin == .agenda { return "calendar" }
         switch event.result {
         case .success: return "checkmark.circle"
         case .skipped: return "arrow.uturn.right.circle"
@@ -85,6 +86,7 @@ struct HistoryTab: View {
         switch event.origin {
         case .manual: parts.append("manual")
         case .renewal: parts.append("renovação")
+        case .agenda: parts.append("agenda")
         case .scheduled, .none: break
         }
         return parts.joined(separator: " · ")

@@ -496,4 +496,16 @@ final class AppStateTests: XCTestCase {
                                  times: [600], weekdays: [1], enabled: true)
         XCTAssertEqual(state.resolvedTaskMessage(for: task), AppState.defaultMessage)
     }
+
+    func testNextTaskEntryEscolheAMenorData() {
+        let state = AppState(defaults: freshDefaults())
+        let t1 = ScheduledTask(uid: UUID(), name: "a", commandUID: nil,
+                               times: [480], weekdays: [2], enabled: true)
+        let t2 = ScheduledTask(uid: UUID(), name: "b", commandUID: nil,
+                               times: [600], weekdays: [2], enabled: true)
+        state.tasks = [t1, t2]
+        state.nextTaskFires = [t1.uid: Date().addingTimeInterval(7200),
+                               t2.uid: Date().addingTimeInterval(3600)]
+        XCTAssertEqual(state.nextTaskEntry?.task.uid, t2.uid)
+    }
 }

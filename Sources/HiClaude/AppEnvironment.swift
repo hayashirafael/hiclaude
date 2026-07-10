@@ -10,6 +10,7 @@ final class AppEnvironment: ObservableObject {
     private let controller: FireController
     private let detector: SessionDetector
     private let renewalEngine: RenewalEngine
+    private let taskScheduler: TaskScheduler
     private var observers: [NSObjectProtocol] = []
     private var cancellables: Set<AnyCancellable> = []
     private var statusTimer: Timer?
@@ -23,6 +24,7 @@ final class AppEnvironment: ObservableObject {
                                          runner: CommandRunner(configDir: AppState.defaultConfigDir),
                                          notifier: SystemNotifier())
         self.renewalEngine = RenewalEngine(detector: detector)
+        self.taskScheduler = TaskScheduler()
 
         renewalEngine.onRenew = { [weak self] account in
             guard let self else { return false }
@@ -32,6 +34,15 @@ final class AppEnvironment: ObservableObject {
         }
         renewalEngine.onStatus = { [weak self] next in
             self?.state.nextRenewals = next
+        }
+
+        taskScheduler.onFire = { [weak self] task in
+            guard let self else { return false }
+            let msg = self.state.resolvedTaskMessage(for: task)
+            return await self.controller.fire(message: msg, origin: .agenda)
+        }
+        taskScheduler.onStatus = { [weak self] next in
+            self?.state.nextTaskFires = next
         }
 
         // Sonda dos CLIs fora da thread principal: quando `claude`/`codex` não
@@ -74,11 +85,19 @@ final class AppEnvironment: ObservableObject {
             .sink { [weak self] _ in self?.reconfigureRenewals() }
             .store(in: &cancellables)
         reconfigureRenewals()
+
+        // Ligar/desligar tarefas ou editar a agenda reconfigura o scheduler.
+        state.$tasks
+            .dropFirst()
+            .sink { [weak self] _ in self?.reconfigureTasks() }
+            .store(in: &cancellables)
+        reconfigureTasks()
     }
 
     func togglePause() {
         state.paused.toggle()
         reconfigureRenewals()
+        reconfigureTasks()
     }
 
     /// Reconfigura o RenewalEngine com as contas em renovação que ainda existem.
@@ -97,12 +116,25 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    /// Tick periódico: re-arma as renovações (alimenta ícone e "3h12" na barra).
+    /// Reconfigura o TaskScheduler com as tarefas atuais.
+    private func reconfigureTasks() {
+        let tasks = state.tasks
+        let paused = state.paused
+        Task { @MainActor [weak self] in
+            await self?.taskScheduler.configure(tasks: tasks, paused: paused)
+        }
+    }
+
+    /// Tick periódico: re-arma as renovações e a agenda (alimenta ícone e "3h12" na barra).
     func statusTick() async {
         await renewalEngine.rearmAll()
+        await taskScheduler.rearmAll()
     }
 
     private func handleWake() {
-        Task { @MainActor [weak self] in await self?.renewalEngine.handleWake() }
+        Task { @MainActor [weak self] in
+            await self?.renewalEngine.handleWake()
+            await self?.taskScheduler.handleWake()
+        }
     }
 }
