@@ -141,6 +141,9 @@ struct L10n {
         text(en: "This account already has a continuous schedule.",
              pt: "Esta conta já tem um agendamento contínuo.")
     }
+    var continuousConflictTitle: String {
+        text(en: "Continuous schedule conflict", pt: "Conflito de agendamento contínuo")
+    }
     var repetition: String { text(en: "Repetition", pt: "Repetição") }
     var time: String { text(en: "Time", pt: "Horário") }
     var addTime: String { text(en: "Add time", pt: "Adicionar horário") }

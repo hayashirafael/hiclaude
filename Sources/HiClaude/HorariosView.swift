@@ -6,6 +6,7 @@ struct HorariosView: View {
     @ObservedObject var state: AppState
     @State private var showingForm = false
     @State private var editing: ScheduledTask? = nil
+    @State private var conflictAlert = false
     private var strings: L10n { state.strings }
 
     var body: some View {
@@ -18,6 +19,11 @@ struct HorariosView: View {
         }
         .sheet(isPresented: $showingForm) {
             AgendamentoFormSheet(state: state, editing: editing) { showingForm = false }
+        }
+        .alert(strings.continuousConflictTitle, isPresented: $conflictAlert) {
+            Button(strings.ok, role: .cancel) {}
+        } message: {
+            Text(strings.continuousConflict)
         }
     }
 
@@ -121,8 +127,7 @@ struct HorariosView: View {
         Binding(
             get: { state.tasks.first { $0.uid == task.uid }?.enabled ?? false },
             set: { on in
-                guard let idx = state.tasks.firstIndex(where: { $0.uid == task.uid }) else { return }
-                state.tasks[idx].enabled = on
+                if !state.setTaskEnabled(task, on) { conflictAlert = true }
             })
     }
 }

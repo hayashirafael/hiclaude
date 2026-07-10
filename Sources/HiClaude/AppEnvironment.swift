@@ -108,6 +108,9 @@ final class AppEnvironment: ObservableObject {
     /// Reconfigura os dois motores a partir da lista unificada: contínuos
     /// alimentam o RenewalEngine (por conta), fixos o TaskScheduler.
     private func reconfigureSchedules() {
+        // Contínuo com pasta ausente não entra no set (nunca arma); registra a
+        // falha no histórico, uma vez, para paridade com o caminho fixo.
+        state.recordMissingFolderContinuous()
         var accounts: Set<URL> = []
         for task in state.tasks where task.enabled && task.repetition == .continuous {
             if let dir = state.accountDir(for: task) { accounts.insert(dir) }
