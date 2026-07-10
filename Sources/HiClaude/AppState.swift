@@ -349,11 +349,14 @@ final class AppState: ObservableObject {
     func addFavorite(text: String, kind: Message.Kind,
                      model: Message.Model? = nil, effort: Message.Effort? = nil,
                      safeMode: Bool? = nil, configDir: String? = nil,
-                     workingDir: String? = nil, showResponse: Bool? = nil) -> Message? {
+                     workingDir: String? = nil, showResponse: Bool? = nil,
+                     codexModel: String? = nil,
+                     codexReasoning: Message.CodexReasoning? = nil) -> Message? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var msg = Message(text: t, kind: kind, model: model, effort: effort,
                           safeMode: safeMode, configDir: configDir,
-                          workingDir: workingDir, showResponse: showResponse)
+                          workingDir: workingDir, uid: nil, showResponse: showResponse,
+                          codexModel: codexModel, codexReasoning: codexReasoning)
         guard !t.isEmpty else { return nil }
         if msg == Self.defaultMessage { return Self.defaultMessage }
         if msg == Self.defaultCodexMessage { return Self.defaultCodexMessage }

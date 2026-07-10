@@ -233,6 +233,15 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(b.favorites.first!.resolvedShowResponse)
     }
 
+    func testAddFavoriteComConfigCodex() {
+        let state = AppState(defaults: freshDefaults())
+        let msg = state.addFavorite(text: "resumo do dia", kind: .codex,
+                                    codexModel: "gpt-5.1-codex", codexReasoning: .high)
+        XCTAssertEqual(msg?.kind, .codex)
+        XCTAssertEqual(msg?.codexModel, "gpt-5.1-codex")
+        XCTAssertEqual(msg?.codexReasoning, .high)
+    }
+
     func testHistoricoCapEm20MaisRecentePrimeiro() {
         let state = AppState(defaults: freshDefaults())
         for i in 0..<25 {
