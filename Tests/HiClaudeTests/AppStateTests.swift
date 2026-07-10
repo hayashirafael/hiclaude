@@ -299,42 +299,14 @@ final class AppStateTests: XCTestCase {
         _ = b
     }
 
-    func testRenewalConfigPersisteEToggleOff() {
-        let defaults = freshDefaults()
-        let dir = URL(fileURLWithPath: "/tmp/.claude2")
-        let a = AppState(defaults: defaults)
-        XCTAssertNil(a.renewal(for: dir))
-        a.setRenewal(dir, AccountRenewal(mode: .scheduled, anchorMinutes: 7 * 60, messageUID: nil))
-        XCTAssertEqual(a.renewal(for: dir)?.mode, .scheduled)
-        XCTAssertEqual(a.renewal(for: dir)?.anchorMinutes, 7 * 60)
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.renewal(for: dir)?.mode, .scheduled)
-        b.setRenewal(dir, nil) // Off
-        XCTAssertNil(b.renewal(for: dir))
-        let c = AppState(defaults: defaults)
-        XCTAssertNil(c.renewal(for: dir))
-    }
-
-    /// Migração: renewAccounts [String] vira renovação Automática.
-    func testMigraRenewAccountsParaAutomatica() {
+    /// Migração legada: `renewAccounts [String]` vira agendamentos contínuos.
+    func testMigraRenewAccountsParaAgendamentosContinuos() {
         let defaults = freshDefaults()
         defaults.set(["/tmp/.claude", "/tmp/.claude2"], forKey: "renewAccounts")
         let state = AppState(defaults: defaults)
-        XCTAssertEqual(state.renewals.count, 2)
-        XCTAssertEqual(state.renewal(for: URL(fileURLWithPath: "/tmp/.claude"))?.mode, .automatic)
-        XCTAssertNil(state.renewal(for: URL(fileURLWithPath: "/tmp/.claude"))?.anchorMinutes)
-    }
-
-    func testResolvedRenewalMessageCaiNoDefault() {
-        let state = AppState(defaults: freshDefaults())
-        let dir = URL(fileURLWithPath: "/tmp/.claude2")
-        state.setRenewal(dir, AccountRenewal(mode: .automatic))
-        // Sem messageUID → hi mínimo.
-        XCTAssertEqual(state.resolvedRenewalMessage(for: dir), AppState.defaultMessage)
-        state.addFavorite(text: "deploy", kind: .claude)
-        let fav = state.favorites[0]
-        state.setRenewal(dir, AccountRenewal(mode: .automatic, anchorMinutes: nil, messageUID: fav.uid))
-        XCTAssertEqual(state.resolvedRenewalMessage(for: dir), fav)
+        XCTAssertEqual(state.tasks.count, 2)
+        XCTAssertTrue(state.tasks.allSatisfy { $0.repetition == .continuous })
+        XCTAssertNil(defaults.object(forKey: "renewAccounts"), "chave legada removida")
     }
 
     func testMensagemCodexSemModeloFicaNilEFazRoundTrip() throws {
@@ -389,16 +361,26 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(state.registeredAccounts.isEmpty)
     }
 
-    func testUnregisterLimpaRenovacaoEApelido() throws {
+    func testUnregisterLimpaCadastroEApelido() throws {
         let state = AppState(defaults: freshDefaults())
         let dir = try makeAccountDir(subdir: "projects")
         state.registerAccount(dir)
-        state.setRenewal(dir, AccountRenewal(mode: .automatic))
         state.setAlias(dir, "extra")
         state.unregisterAccount(dir)
         XCTAssertTrue(state.registeredAccounts.isEmpty)
-        XCTAssertNil(state.renewal(for: dir))
         XCTAssertNil(state.alias(for: dir))
+    }
+
+    func testUnregisterDesabilitaAgendamentosDaConta() throws {
+        let d = freshDefaults()
+        let state = AppState(defaults: d)
+        let conta = try makeAccountDir(signature: ".claude.json")
+        state.registerAccount(conta)
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = conta.path
+        state.tasks = [ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous)]
+        state.unregisterAccount(conta)
+        XCTAssertFalse(state.tasks[0].enabled)
     }
 
     func testLegacyScanEncontraContasExtrasPorConvencao() throws {
@@ -422,12 +404,6 @@ final class AppStateTests: XCTestCase {
         let state = AppState(defaults: freshDefaults())
         // ~/.claude recém-instalado pode não ter assinatura ainda → .claude.
         XCTAssertEqual(state.provider(for: URL(fileURLWithPath: "/nao/existe")), .claude)
-    }
-
-    func testMensagemDeRenovacaoDefaultPorProvider() throws {
-        let state = AppState(defaults: freshDefaults())
-        let contaCodex = try makeAccountDir(signature: "auth.json")
-        XCTAssertEqual(state.resolvedRenewalMessage(for: contaCodex), AppState.defaultCodexMessage)
     }
 
     func testEffectiveConfigDirFallbackPorProvider() {

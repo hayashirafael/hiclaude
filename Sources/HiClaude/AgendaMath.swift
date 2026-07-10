@@ -3,6 +3,10 @@ import Foundation
 /// Funções puras da agenda: horários fixos (minutos desde a meia-noite) ×
 /// dias da semana (padrão do Calendar: 1 = domingo … 7 = sábado).
 enum AgendaMath {
+    static func date(bySettingMinutes minutes: Int, ofDay day: Date, calendar: Calendar) -> Date? {
+        calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: day)
+    }
+
     /// Próxima ocorrência estritamente após `now`. nil se horários ou dias
     /// estiverem vazios.
     static func nextOccurrence(times: [Int], weekdays: Set<Int>, after now: Date,
@@ -13,7 +17,7 @@ enum AgendaMath {
             else { continue }
             guard weekdays.contains(calendar.component(.weekday, from: day)) else { continue }
             for minutes in times.sorted() {
-                guard let fire = ScheduleMath.date(bySettingMinutes: minutes, ofDay: day,
+                guard let fire = date(bySettingMinutes: minutes, ofDay: day,
                                                    calendar: calendar) else { continue }
                 if fire > now { return fire } // dias e horários ascendentes → primeiro > now é o mínimo
             }
@@ -32,7 +36,7 @@ enum AgendaMath {
             else { continue }
             guard weekdays.contains(calendar.component(.weekday, from: day)) else { continue }
             for minutes in times {
-                guard let fire = ScheduleMath.date(bySettingMinutes: minutes, ofDay: day,
+                guard let fire = date(bySettingMinutes: minutes, ofDay: day,
                                                    calendar: calendar) else { continue }
                 if fire > since, fire <= now, best == nil || fire > best! {
                     best = fire

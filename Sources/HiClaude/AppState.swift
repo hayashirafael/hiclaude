@@ -312,13 +312,18 @@ final class AppState: ObservableObject {
         return detected
     }
 
-    /// Remove uma conta cadastrada da lista — não toca o disco; limpa a
-    /// renovação e o apelido daquele path.
+    /// Remove uma conta cadastrada da lista — não toca o disco; limpa o
+    /// apelido e desabilita os agendamentos que miravam a conta.
     func unregisterAccount(_ dir: URL) {
         let key = dir.standardizedFileURL.path
         registeredAccounts.removeAll { $0 == key }
-        renewals[key] = nil
         aliases[key] = nil
+        for i in tasks.indices {
+            if let cfg = tasks[i].resolvedCommand.configDir,
+               URL(fileURLWithPath: cfg).standardizedFileURL.path == key {
+                tasks[i].enabled = false
+            }
+        }
     }
 
     /// Scan legado por convenção: `~/.claude*` com subpasta `projects`,
@@ -347,25 +352,8 @@ final class AppState: ObservableObject {
         didSet { defaults.set(aliases, forKey: Keys.aliases) }
     }
 
-    /// Renovação por conta (chave = path padronizado). Presença = renovando.
-    @Published var renewals: [String: AccountRenewal] {
-        didSet { defaults.set(try? JSONEncoder().encode(renewals), forKey: Keys.renewals) }
-    }
-
-    static let defaultAnchorMinutes = 9 * 60
-
-    func renewal(for dir: URL) -> AccountRenewal? { renewals[dir.standardizedFileURL.path] }
-
-    func setRenewal(_ dir: URL, _ config: AccountRenewal?) {
-        renewals[dir.standardizedFileURL.path] = config
-    }
-
-    /// Mensagem da renovação de uma conta: a fixada (se existir) ou o hi mínimo
-    /// do provider da conta.
-    func resolvedRenewalMessage(for dir: URL) -> Message {
-        if let uid = renewal(for: dir)?.messageUID, let msg = message(withUID: uid) { return msg }
-        return Self.defaultHi(for: provider(for: dir))
-    }
+    /// Âncora padrão do modo Programada legado — só a migração usa.
+    private static let defaultAnchorMinutes = 9 * 60
 
     /// Comando de uma tarefa. Shim de transição: os call sites migram para
     /// `task.resolvedCommand` na reescrita das views.
@@ -510,7 +498,6 @@ final class AppState: ObservableObject {
         let legacyFavorites = Self.loadFavorites(defaults)
         self.favorites = legacyFavorites
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
-        self.renewals = Self.loadRenewals(defaults)
         var loadedTasks: [ScheduledTask] = []
         if let data = defaults.data(forKey: Keys.tasks),
            let decoded = try? JSONDecoder().decode([ScheduledTask].self, from: data) {
