@@ -217,12 +217,14 @@ final class AppState: ObservableObject {
     /// Seção selecionada na janela de Configurações (deep-link a partir do menu).
     @Published var settingsSection: SettingsSection = .contas
 
-    static let defaultMessage = Message(
+    // nonisolated: valores imutáveis usados fora do ator (ex.:
+    // `ScheduledTask.resolvedCommand`, que é um tipo não-isolado).
+    nonisolated static let defaultMessage = Message(
         text: "1+1", kind: .claude,
         uid: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
 
     /// Hi mínimo Codex — análogo ao defaultMessage, para contas Codex.
-    static let defaultCodexMessage = Message(
+    nonisolated static let defaultCodexMessage = Message(
         text: "1+1", kind: .codex,
         uid: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!)
 
