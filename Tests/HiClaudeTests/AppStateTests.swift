@@ -337,10 +337,12 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.resolvedRenewalMessage(for: dir), fav)
     }
 
-    func testMensagemCodexDecodificaEDefaults() throws {
+    func testMensagemCodexSemModeloFicaNilEFazRoundTrip() throws {
+        // Sem escolha explícita, modelo/reasoning ficam nil (o Codex herda o
+        // default da conta em vez de o app forçar um modelo).
         let msg = Message(text: "oi", kind: .codex)
-        XCTAssertEqual(msg.resolvedCodexModel, "gpt-5.1-codex-mini")
-        XCTAssertEqual(msg.resolvedCodexReasoning, .low)
+        XCTAssertNil(msg.codexModel)
+        XCTAssertNil(msg.codexReasoning)
         let data = try JSONEncoder().encode(msg)
         let decoded = try JSONDecoder().decode(Message.self, from: data)
         XCTAssertEqual(decoded, msg)

@@ -14,7 +14,7 @@ struct MessageFormSheet: View {
     @State private var effort: Message.Effort = Message.defaultEffort
     @State private var safeMode = Message.defaultSafeMode
     @State private var codexModel = ""
-    @State private var codexReasoning: Message.CodexReasoning = Message.defaultCodexReasoning
+    @State private var codexReasoning: Message.CodexReasoning = .low
     @State private var showResponse = false
     @State private var account: String? = nil
     @State private var workingDir = ""
@@ -83,7 +83,7 @@ struct MessageFormSheet: View {
         effort = msg.resolvedEffort
         safeMode = msg.resolvedSafeMode
         codexModel = msg.codexModel ?? ""
-        codexReasoning = msg.resolvedCodexReasoning
+        codexReasoning = msg.codexReasoning ?? .low
         showResponse = msg.resolvedShowResponse
         account = msg.configDir
         workingDir = msg.workingDir ?? ""
@@ -116,7 +116,7 @@ struct MessageFormSheet: View {
             showResponse: showResponse ? true : nil,
             codexModel: kind == .codex && !codexModel.trimmingCharacters(in: .whitespaces).isEmpty
                 ? codexModel.trimmingCharacters(in: .whitespaces) : nil,
-            codexReasoning: kind == .codex && codexReasoning != Message.defaultCodexReasoning
+            codexReasoning: kind == .codex && codexReasoning != .low
                 ? codexReasoning : nil)
         if let editing {
             state.updateFavorite(editing, to: msg)
@@ -170,7 +170,7 @@ struct ClaudeConfigForm: View {
 
 /// Bloco de configuração de uma mensagem Codex (modelo/reasoning/conta/dir).
 struct CodexConfigForm: View {
-    @Binding var model: String        // vazio = default (gpt-5.1-codex-mini)
+    @Binding var model: String        // vazio = default da conta (config.toml)
     @Binding var reasoning: Message.CodexReasoning
     @Binding var configDir: String?   // nil = ~/.codex
     @Binding var workingDir: String
@@ -179,7 +179,7 @@ struct CodexConfigForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TextField("Modelo (\(Message.defaultCodexModel) por padrão)", text: $model)
+            TextField("Modelo (padrão da conta)", text: $model)
             Picker("Reasoning", selection: $reasoning) {
                 ForEach(Message.CodexReasoning.allCases, id: \.self) { r in
                     Text(r.rawValue).tag(r)

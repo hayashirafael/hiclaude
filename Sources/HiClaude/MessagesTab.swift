@@ -64,8 +64,8 @@ struct MessagesTab: View {
             if msg.safeMode == false { parts.append("sem safe") }
         }
         if msg.kind == .codex {
-            if msg.codexModel != nil { parts.append(msg.resolvedCodexModel) }
-            if msg.codexReasoning != nil { parts.append(msg.resolvedCodexReasoning.rawValue) }
+            if let m = msg.codexModel { parts.append(m) }
+            if let r = msg.codexReasoning { parts.append(r.rawValue) }
         }
         if let c = msg.configDir, !c.isEmpty { parts.append(state.label(for: URL(fileURLWithPath: c))) }
         if let w = msg.workingDir, !w.isEmpty { parts.append(URL(fileURLWithPath: w).lastPathComponent) }

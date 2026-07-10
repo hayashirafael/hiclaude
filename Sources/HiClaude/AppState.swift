@@ -107,11 +107,6 @@ extension Message {
     var resolvedEffort: Effort { effort ?? Self.defaultEffort }
     var resolvedSafeMode: Bool { safeMode ?? Self.defaultSafeMode }
     var resolvedShowResponse: Bool { showResponse ?? false }
-
-    static let defaultCodexModel = "gpt-5.1-codex-mini"
-    static let defaultCodexReasoning: CodexReasoning = .low
-    var resolvedCodexModel: String { codexModel ?? Self.defaultCodexModel }
-    var resolvedCodexReasoning: CodexReasoning { codexReasoning ?? Self.defaultCodexReasoning }
 }
 
 /// Configuração de renovação de uma Conta. Presença no dicionário `renewals`
