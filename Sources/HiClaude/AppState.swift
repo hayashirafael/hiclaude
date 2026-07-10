@@ -231,11 +231,7 @@ final class AppState: ObservableObject {
         provider == .codex ? defaultCodexMessage : defaultMessage
     }
 
-    @Published var favorites: [Message] {
-        didSet { defaults.set(try? JSONEncoder().encode(favorites), forKey: Keys.favorites) }
-    }
-
-    /// Tarefas da agenda (seção Horários).
+    /// Agendamentos (seção Horários) — a lista unificada.
     @Published var tasks: [ScheduledTask] {
         didSet { defaults.set(try? JSONEncoder().encode(tasks), forKey: Keys.tasks) }
     }
@@ -249,9 +245,6 @@ final class AppState: ObservableObject {
     static var defaultCodexConfigDir: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
     }
-
-    /// Lista exibida na UI: o padrão embutido seguido dos favoritos do usuário.
-    var allMessages: [Message] { [Self.defaultMessage, Self.defaultCodexMessage] + favorites }
 
     /// Cache de sessão do provider por conta (detect toca o disco; UI re-renderiza).
     private var providerCache: [String: Provider] = [:]
@@ -355,10 +348,6 @@ final class AppState: ObservableObject {
     /// Âncora padrão do modo Programada legado — só a migração usa.
     private static let defaultAnchorMinutes = 9 * 60
 
-    /// Comando de uma tarefa. Shim de transição: os call sites migram para
-    /// `task.resolvedCommand` na reescrita das views.
-    func resolvedTaskMessage(for task: ScheduledTask) -> Message { task.resolvedCommand }
-
     /// Conta que um agendamento mira: o configDir do comando (se a pasta ainda
     /// existe), senão a conta padrão do provider. nil para shell (não mira
     /// conta) e para configDir cuja pasta sumiu (a UI avisa; nada dispara).
@@ -381,6 +370,17 @@ final class AppState: ObservableObject {
     func activeScheduleCount(for dir: URL) -> Int {
         let key = dir.standardizedFileURL
         return tasks.filter { $0.enabled && accountDir(for: $0) == key }.count
+    }
+
+    /// Já existe outro agendamento contínuo habilitado mirando a mesma conta?
+    /// (Dois contínuos na mesma conta disparariam em dobro a cada janela.)
+    func hasContinuousConflict(_ candidate: ScheduledTask) -> Bool {
+        guard candidate.repetition == .continuous,
+              let dir = accountDir(for: candidate) else { return false }
+        return tasks.contains {
+            $0.uid != candidate.uid && $0.enabled && $0.repetition == .continuous
+                && accountDir(for: $0) == dir
+        }
     }
 
     /// Cache de sessão do e-mail por conta (evita reler o .claude.json a cada render).
@@ -414,42 +414,6 @@ final class AppState: ObservableObject {
     /// Próximas renovações por conta (espelho do RenewalEngine, para o menu e Geral).
     @Published var nextRenewals: [URL: Date] = [:]
 
-    /// Cria (ou reaproveita, se idêntica a uma existente) uma mensagem favorita.
-    /// Retorna a mensagem resultante com `uid` preenchido, ou nil se o texto for vazio.
-    @discardableResult
-    func addFavorite(text: String, kind: Message.Kind,
-                     model: Message.Model? = nil, effort: Message.Effort? = nil,
-                     safeMode: Bool? = nil, configDir: String? = nil,
-                     workingDir: String? = nil, showResponse: Bool? = nil,
-                     codexModel: String? = nil,
-                     codexReasoning: Message.CodexReasoning? = nil) -> Message? {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        var msg = Message(text: t, kind: kind, model: model, effort: effort,
-                          safeMode: safeMode, configDir: configDir,
-                          workingDir: workingDir, uid: nil, showResponse: showResponse,
-                          codexModel: codexModel, codexReasoning: codexReasoning)
-        guard !t.isEmpty else { return nil }
-        if msg == Self.defaultMessage { return Self.defaultMessage }
-        if msg == Self.defaultCodexMessage { return Self.defaultCodexMessage }
-        if let existing = favorites.first(where: { $0 == msg }) { return existing }
-        msg.uid = UUID()
-        favorites.append(msg)
-        return msg
-    }
-
-    /// Substitui um favorito por uma versão editada. Preserva a posição na
-    /// lista e o uid.
-    func updateFavorite(_ old: Message, to new: Message) {
-        guard let idx = favorites.firstIndex(of: old) else { return }
-        var updated = new
-        updated.uid = favorites[idx].uid ?? UUID()
-        favorites[idx] = updated
-    }
-
-    func removeFavorite(_ msg: Message) {
-        favorites.removeAll { $0 == msg }
-    }
-
     /// Conta efetiva de uma mensagem: o override se for diretório válido, senão
     /// a conta padrão embutida do provider da mensagem (~/.claude ou ~/.codex).
     /// Nunca aponta para conta fantasma.
@@ -460,13 +424,6 @@ final class AppState: ObservableObject {
         var isDir: ObjCBool = false
         let ok = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
         return ok ? url.standardizedFileURL : fallback
-    }
-
-    /// Resolve uma referência estável (uid) para a mensagem atual — default ou favorito.
-    func message(withUID uid: UUID) -> Message? {
-        if uid == Self.defaultMessage.uid { return Self.defaultMessage }
-        if uid == Self.defaultCodexMessage.uid { return Self.defaultCodexMessage }
-        return favorites.first { $0.uid == uid }
     }
 
     private let defaults: UserDefaults
@@ -495,8 +452,7 @@ final class AppState: ObservableObject {
             self.history = []
         }
         self.showRemainingInBar = defaults.bool(forKey: Keys.showRemainingInBar)
-        let legacyFavorites = Self.loadFavorites(defaults)
-        self.favorites = legacyFavorites
+        let legacyFavorites = Self.loadLegacyFavorites(defaults)
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         var loadedTasks: [ScheduledTask] = []
         if let data = defaults.data(forKey: Keys.tasks),
@@ -542,24 +498,17 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Decodifica favoritos em JSON; se falhar, migra do formato legado
-    /// (`[String]`, todos tratados como `.claude`).
-    private static func loadFavorites(_ defaults: UserDefaults) -> [Message] {
-        var loaded: [Message]
+    /// LEGADO: decodifica os favoritos persistidos pela versão com biblioteca
+    /// de comandos — só a migração do init lê, para embutir nos agendamentos.
+    private static func loadLegacyFavorites(_ defaults: UserDefaults) -> [Message] {
         if let data = defaults.data(forKey: Keys.favorites),
            let decoded = try? JSONDecoder().decode([Message].self, from: data) {
-            loaded = decoded
-        } else if let legacy = defaults.array(forKey: Keys.favorites) as? [String] {
-            loaded = legacy.map { Message(text: $0, kind: .claude) }
-        } else {
-            return []
+            return decoded
         }
-        // Migração: garante uid estável persistido (referências horário→mensagem).
-        if loaded.contains(where: { $0.uid == nil }) {
-            for i in loaded.indices where loaded[i].uid == nil { loaded[i].uid = UUID() }
-            defaults.set(try? JSONEncoder().encode(loaded), forKey: Keys.favorites)
+        if let legacy = defaults.array(forKey: Keys.favorites) as? [String] {
+            return legacy.map { Message(text: $0, kind: .claude) }
         }
-        return loaded
+        return []
     }
 
     /// Decodifica renovações; se ausente, migra do formato legado

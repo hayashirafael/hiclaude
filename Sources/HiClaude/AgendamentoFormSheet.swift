@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Formulário de criação/edição de mensagem, em sheet.
-struct MessageFormSheet: View {
+/// Formulário único de agendamento: tipo (Claude/Codex/Comando), prompt com
+/// personalização por tipo, e repetição (contínua ou horários fixos).
+struct AgendamentoFormSheet: View {
     @ObservedObject var state: AppState
-    /// Mensagem sendo editada; nil = modo "adicionar".
-    let editing: Message?
-    /// Chamado ao fechar: nil se cancelado, a mensagem criada/editada se salvo.
-    let onDone: (Message?) -> Void
+    /// Agendamento em edição; nil = modo "adicionar".
+    let editing: ScheduledTask?
+    let onDone: () -> Void
 
-    @State private var text = ""
+    @State private var name = ""
+    @State private var text = "1+1"
     @State private var kind: Message.Kind = .claude
     @State private var model: Message.Model = Message.defaultModel
     @State private var effort: Message.Effort = Message.defaultEffort
@@ -18,10 +19,17 @@ struct MessageFormSheet: View {
     @State private var showResponse = false
     @State private var account: String? = nil
     @State private var workingDir = ""
+    @State private var repetition: ScheduledTask.Repetition = .fixed
+    @State private var times: [Int] = [9 * 60]
+    @State private var weekdays: Set<Int> = Set(1...7)
+    @State private var enabled = true
+
+    private static let dayLetters = ["D", "S", "T", "Q", "Q", "S", "S"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(editing == nil ? "Novo comando" : "Editar comando").font(.headline)
+            Text(editing == nil ? "Novo agendamento" : "Editar agendamento").font(.headline)
+            TextField("Nome (opcional)", text: $name)
             TextField("Mensagem ou comando", text: $text)
             Picker("Tipo", selection: $kind) {
                 Text("Claude").tag(Message.Kind.claude)
@@ -43,27 +51,42 @@ struct MessageFormSheet: View {
             }
             Toggle("Mostrar resposta (histórico + notificação)", isOn: $showResponse)
                 .toggleStyle(.checkbox)
+            Divider()
+            repetitionPicker
+            if repetition == .fixed {
+                timesEditor
+                weekdaysEditor
+            } else {
+                Text("Renova ao fim de cada janela de 5h da conta, 24/7.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if continuousConflict {
+                    Label("Esta conta já tem um agendamento contínuo.",
+                          systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            }
+            Toggle("Habilitado", isOn: $enabled).toggleStyle(.checkbox)
             HStack {
                 Spacer()
-                Button("Cancelar") { onDone(nil) }
+                Button("Cancelar") { onDone() }
                     .keyboardShortcut(.cancelAction)
                 Button(editing == nil ? "Adicionar" : "Salvar") { commit() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!isValid)
             }
         }
         .padding(20)
-        .frame(width: 340)
+        .frame(width: 380)
         .onAppear(perform: load)
-        // Conta é por provider (~/.claude* vs ~/.codex*); trocar o Tipo sem
-        // limpar a conta persistiria um configDir do provider errado (hi na
-        // conta errada — ex.: `codex exec` com CODEX_HOME de pasta Claude).
-        // O reset é CONDICIONAL: o load() de um favorito não-Claude também
-        // dispara este onChange (kind inicia .claude e o load o troca DEPOIS
-        // de setar `account`), e um reset incondicional apagaria a conta
-        // salva ao simplesmente abrir "Editar". Se a conta já é válida para
-        // o novo kind, não há nada para limpar.
+        // Conta é por provider; trocar o Tipo sem limpar conta incompatível
+        // persistiria um configDir do provider errado (mesma lógica do antigo
+        // MessageFormSheet). Shell não mira conta e não pode ser contínuo.
         .onChange(of: kind) { newKind in
+            if newKind == .shell {
+                account = nil
+                if repetition == .continuous { repetition = .fixed }
+                return
+            }
             guard let current = account else { return }
             let valid: Bool
             switch newKind {
@@ -75,8 +98,90 @@ struct MessageFormSheet: View {
         }
     }
 
+    private var repetitionPicker: some View {
+        Picker("Repetição", selection: $repetition) {
+            Text("Horários fixos").tag(ScheduledTask.Repetition.fixed)
+            if kind != .shell {
+                Text("Contínua (janela de 5h)").tag(ScheduledTask.Repetition.continuous)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var timesEditor: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(times.indices, id: \.self) { idx in
+                HStack {
+                    DatePicker("Horário", selection: timeBinding(idx),
+                               displayedComponents: .hourAndMinute)
+                    if times.count > 1 {
+                        Button { times.remove(at: idx) } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            Button {
+                times.append((times.max() ?? 9 * 60) + 60)
+            } label: {
+                Label("Adicionar horário", systemImage: "plus.circle")
+            }
+            .buttonStyle(.plain)
+            .font(.caption)
+        }
+    }
+
+    private func timeBinding(_ idx: Int) -> Binding<Date> {
+        Binding(
+            get: {
+                let m = times[idx]
+                return Calendar.current.date(bySettingHour: m / 60, minute: m % 60,
+                                             second: 0, of: Date()) ?? Date()
+            },
+            set: { date in
+                let p = Calendar.current.dateComponents([.hour, .minute], from: date)
+                times[idx] = (p.hour ?? 0) * 60 + (p.minute ?? 0)
+            })
+    }
+
+    private var weekdaysEditor: some View {
+        HStack(spacing: 4) {
+            Text("Dias").font(.caption)
+            ForEach(1...7, id: \.self) { day in
+                Toggle(Self.dayLetters[day - 1], isOn: dayBinding(day))
+                    .toggleStyle(.button)
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    private func dayBinding(_ day: Int) -> Binding<Bool> {
+        Binding(
+            get: { weekdays.contains(day) },
+            set: { on in if on { weekdays.insert(day) } else { weekdays.remove(day) } })
+    }
+
+    private var continuousConflict: Bool {
+        state.hasContinuousConflict(draftTask())
+    }
+
+    private var isValid: Bool {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        switch repetition {
+        case .fixed: return !times.isEmpty && !weekdays.isEmpty
+        case .continuous: return kind != .shell && !continuousConflict
+        }
+    }
+
     private func load() {
-        guard let msg = editing else { return }
+        guard let t = editing else { return }
+        name = t.name ?? ""
+        repetition = t.repetition
+        times = t.times.isEmpty ? [9 * 60] : t.times
+        weekdays = t.weekdays.isEmpty ? Set(1...7) : t.weekdays
+        enabled = t.enabled
+        let msg = t.resolvedCommand
         text = msg.text
         kind = msg.kind
         model = msg.resolvedModel
@@ -89,13 +194,11 @@ struct MessageFormSheet: View {
         workingDir = msg.workingDir ?? ""
     }
 
-    private func commit() {
+    /// Monta o agendamento a partir do estado do formulário (normalizando
+    /// defaults para nil — prompt embutido enxuto, mesma regra do antigo
+    /// MessageFormSheet.commit).
+    private func draftTask() -> ScheduledTask {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return }
-        // Segunda barreira além do onChange(of: kind): se `account` ainda
-        // apontar para uma conta de outro provider (ex.: caminho que não
-        // passou pela troca de Tipo), descarta — nunca salva conta
-        // incompatível com o kind final.
         let effectiveAccount: String?
         switch kind {
         case .claude:
@@ -105,8 +208,7 @@ struct MessageFormSheet: View {
         case .shell:
             effectiveAccount = nil
         }
-        // Normaliza defaults para nil: modelo enxuto, sem selo desnecessário.
-        let msg = Message(
+        let command = Message(
             text: t, kind: kind,
             model: kind == .claude && model != Message.defaultModel ? model : nil,
             effort: kind == .claude && effort != Message.defaultEffort ? effort : nil,
@@ -116,23 +218,30 @@ struct MessageFormSheet: View {
             showResponse: showResponse ? true : nil,
             codexModel: kind == .codex && !codexModel.trimmingCharacters(in: .whitespaces).isEmpty
                 ? codexModel.trimmingCharacters(in: .whitespaces) : nil,
-            codexReasoning: kind == .codex && codexReasoning != .low
-                ? codexReasoning : nil)
-        if let editing {
-            state.updateFavorite(editing, to: msg)
-            onDone(msg)
+            codexReasoning: kind == .codex && codexReasoning != .low ? codexReasoning : nil)
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var task = ScheduledTask(uid: editing?.uid ?? UUID(),
+                                 name: trimmedName.isEmpty ? nil : trimmedName,
+                                 command: command,
+                                 repetition: repetition,
+                                 times: repetition == .fixed ? times.sorted() : [],
+                                 weekdays: repetition == .fixed ? weekdays : [])
+        task.enabled = enabled
+        return task
+    }
+
+    private func commit() {
+        let task = draftTask()
+        if let editing, let idx = state.tasks.firstIndex(where: { $0.uid == editing.uid }) {
+            state.tasks[idx] = task
         } else {
-            let created = state.addFavorite(text: t, kind: kind, model: msg.model, effort: msg.effort,
-                              safeMode: msg.safeMode, configDir: msg.configDir,
-                              workingDir: msg.workingDir, showResponse: msg.showResponse,
-                              codexModel: msg.codexModel, codexReasoning: msg.codexReasoning)
-            onDone(created)
+            state.tasks.append(task)
         }
+        onDone()
     }
 }
 
 /// Bloco de configuração de uma mensagem Claude (modelo/effort/safe/conta/dir).
-/// Exibido no formulário quando o toggle "Claude" está ligado.
 struct ClaudeConfigForm: View {
     @Binding var model: Message.Model
     @Binding var effort: Message.Effort
