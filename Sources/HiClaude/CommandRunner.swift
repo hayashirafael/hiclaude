@@ -146,15 +146,21 @@ struct CommandRunner: CommandRunning {
             }
             process.executableURL = binary
             // Ping mínimo: sandbox read-only e sem exigir repositório git (o
-            // diretório default é o home). Reasoning via -c (TOML) por não haver
-            // flag dedicada no codex exec 0.143.0.
-            process.arguments = ["exec",
-                                 "--model", message.resolvedCodexModel,
-                                 "--sandbox", "read-only",
-                                 "--skip-git-repo-check",
-                                 "--color", "never",
-                                 "-c", "model_reasoning_effort=\"\(message.resolvedCodexReasoning.rawValue)\"",
-                                 message.text]
+            // diretório default é o home). Modelo/reasoning só entram quando o
+            // usuário escolheu — omitir as flags deixa o Codex usar o default da
+            // conta (config.toml), o único valor garantidamente aceito pelo
+            // plano da conta. Reasoning via -c (TOML) por não haver flag
+            // dedicada no codex exec 0.143.0.
+            var args = ["exec"]
+            if let model = message.codexModel, !model.isEmpty {
+                args += ["--model", model]
+            }
+            args += ["--sandbox", "read-only", "--skip-git-repo-check", "--color", "never"]
+            if let reasoning = message.codexReasoning {
+                args += ["-c", "model_reasoning_effort=\"\(reasoning.rawValue)\""]
+            }
+            args.append(message.text)
+            process.arguments = args
         }
         let home = NSHomeDirectory()
         // Diretório de trabalho: override da mensagem (se não vazio) senão o home.

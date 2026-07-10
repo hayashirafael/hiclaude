@@ -27,10 +27,12 @@ final class AppEnvironment: ObservableObject {
         self.taskScheduler = TaskScheduler()
 
         renewalEngine.onRenew = { [weak self] account in
-            guard let self else { return false }
-            var msg = self.state.resolvedRenewalMessage(for: account)
-            msg.configDir = account.path
-            return await self.controller.fire(message: msg, origin: .renewal)
+            guard let self,
+                  let task = self.state.tasks.first(where: {
+                      $0.enabled && $0.repetition == .continuous
+                          && self.state.accountDir(for: $0) == account
+                  }) else { return true }
+            return await self.controller.fire(message: task.resolvedCommand, origin: .renewal)
         }
         renewalEngine.onStatus = { [weak self] next in
             self?.state.nextRenewals = next
@@ -38,8 +40,19 @@ final class AppEnvironment: ObservableObject {
 
         taskScheduler.onFire = { [weak self] task in
             guard let self else { return false }
-            let msg = self.state.resolvedTaskMessage(for: task)
-            return await self.controller.fire(message: msg, origin: .agenda)
+            let cmd = task.resolvedCommand
+            // Conta explícita cuja pasta sumiu: não dispara (cairia na conta
+            // padrão errada); registra a falha para a UI avisar.
+            if cmd.kind != .shell, let path = cmd.configDir, !path.isEmpty,
+               self.state.accountDir(for: task) == nil {
+                self.state.recordEvent(FireEvent(
+                    date: Date(), result: .failure(message: "pasta da conta não encontrada"),
+                    messageText: cmd.text,
+                    account: URL(fileURLWithPath: path).lastPathComponent,
+                    origin: .agenda))
+                return true
+            }
+            return await self.controller.fire(message: cmd, origin: .agenda)
         }
         taskScheduler.onStatus = { [weak self] next in
             self?.state.nextTaskFires = next
@@ -79,49 +92,31 @@ final class AppEnvironment: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
         statusTimer = timer
 
-        // Ligar/desligar renovação por conta reconfigura o engine.
-        state.$renewals
-            .dropFirst()
-            .sink { [weak self] _ in self?.reconfigureRenewals() }
-            .store(in: &cancellables)
-        reconfigureRenewals()
-
-        // Ligar/desligar tarefas ou editar a agenda reconfigura o scheduler.
+        // Editar a lista de agendamentos reconfigura os dois motores.
         state.$tasks
             .dropFirst()
-            .sink { [weak self] _ in self?.reconfigureTasks() }
+            .sink { [weak self] _ in self?.reconfigureSchedules() }
             .store(in: &cancellables)
-        reconfigureTasks()
+        reconfigureSchedules()
     }
 
     func togglePause() {
         state.paused.toggle()
-        reconfigureRenewals()
-        reconfigureTasks()
+        reconfigureSchedules()
     }
 
-    /// Reconfigura o RenewalEngine com as contas em renovação que ainda existem.
-    private func reconfigureRenewals() {
-        var configs: [URL: AccountRenewal] = [:]
-        for (path, config) in state.renewals {
-            let url = URL(fileURLWithPath: path)
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                configs[url.standardizedFileURL] = config
-            }
+    /// Reconfigura os dois motores a partir da lista unificada: contínuos
+    /// alimentam o RenewalEngine (por conta), fixos o TaskScheduler.
+    private func reconfigureSchedules() {
+        var accounts: Set<URL> = []
+        for task in state.tasks where task.enabled && task.repetition == .continuous {
+            if let dir = state.accountDir(for: task) { accounts.insert(dir) }
         }
+        let fixed = state.tasks.filter { $0.repetition == .fixed }
         let paused = state.paused
         Task { @MainActor [weak self] in
-            await self?.renewalEngine.configure(renewals: configs, paused: paused)
-        }
-    }
-
-    /// Reconfigura o TaskScheduler com as tarefas atuais.
-    private func reconfigureTasks() {
-        let tasks = state.tasks
-        let paused = state.paused
-        Task { @MainActor [weak self] in
-            await self?.taskScheduler.configure(tasks: tasks, paused: paused)
+            await self?.renewalEngine.configure(accounts: accounts, paused: paused)
+            await self?.taskScheduler.configure(tasks: fixed, paused: paused)
         }
     }
 

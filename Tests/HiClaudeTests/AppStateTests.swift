@@ -51,41 +51,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(decoded, event)
     }
 
-    func testAddFavoritoIgnoraVazioDuplicataEDefault() {
-        let state = AppState(defaults: freshDefaults())
-        state.addFavorite(text: "  oi  ", kind: .claude)   // trim
-        state.addFavorite(text: "oi", kind: .claude)       // duplicata
-        state.addFavorite(text: "   ", kind: .claude)      // vazio
-        state.addFavorite(text: "1+1", kind: .claude)      // igual ao default
-        XCTAssertEqual(state.favorites, [Message(text: "oi", kind: .claude)])
-        XCTAssertEqual(state.allMessages,
-                       [AppState.defaultMessage, AppState.defaultCodexMessage, Message(text: "oi", kind: .claude)])
-    }
-
-    func testAddFavoritoRetornaMensagemCriadaOuExistente() {
-        let state = AppState(defaults: freshDefaults())
-        let created = state.addFavorite(text: "oi", kind: .claude)
-        XCTAssertEqual(created?.text, "oi")
-        XCTAssertNotNil(created?.uid)
-
-        let duplicate = state.addFavorite(text: "oi", kind: .claude)
-        XCTAssertEqual(duplicate, created)
-
-        let empty = state.addFavorite(text: "   ", kind: .claude)
-        XCTAssertNil(empty)
-
-        let sameAsDefault = state.addFavorite(text: "1+1", kind: .claude)
-        XCTAssertEqual(sameAsDefault, AppState.defaultMessage)
-    }
-
-    func testMesmoTextoComKindsDiferentesSaoFavoritosDistintos() {
-        let state = AppState(defaults: freshDefaults())
-        state.addFavorite(text: "deploy", kind: .claude)
-        state.addFavorite(text: "deploy", kind: .shell)
-        XCTAssertEqual(state.favorites,
-                       [Message(text: "deploy", kind: .claude), Message(text: "deploy", kind: .shell)])
-    }
-
     /// Sem conta selecionada: descoberta sempre inclui a conta padrão embutida.
     func testDiscoverAccountsSempreIncluiDefault() {
         let state = AppState(defaults: freshDefaults())
@@ -114,29 +79,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(msg.resolvedSafeMode)
     }
 
-    func testAddFavoritoComConfigPersiste() {
-        let defaults = freshDefaults()
-        let a = AppState(defaults: defaults)
-        a.addFavorite(text: "tarefa", kind: .claude, model: .sonnet, effort: .high,
-                      safeMode: false, configDir: "/tmp/c", workingDir: "/tmp/p")
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.favorites.first?.model, .sonnet)
-        XCTAssertEqual(b.favorites.first?.effort, .high)
-        XCTAssertEqual(b.favorites.first?.safeMode, false)
-        XCTAssertEqual(b.favorites.first?.configDir, "/tmp/c")
-        XCTAssertEqual(b.favorites.first?.workingDir, "/tmp/p")
-    }
-
-    /// Sem mensagem ativa (removida): `updateFavorite` só substitui na lista.
-    func testUpdateFavoritoSubstituiNaLista() {
-        let state = AppState(defaults: freshDefaults())
-        let old = Message(text: "tarefa", kind: .claude)
-        state.addFavorite(text: "tarefa", kind: .claude)
-        let new = Message(text: "tarefa", kind: .claude, model: .opus)
-        state.updateFavorite(old, to: new)
-        XCTAssertEqual(state.favorites, [new])
-    }
-
     func testEffectiveConfigDirUsaOverrideValidoEFallback() throws {
         let state = AppState(defaults: freshDefaults())
         // Override para diretório válido → usa o override.
@@ -157,49 +99,9 @@ final class AppStateTests: XCTestCase {
             AppState.defaultConfigDir)
     }
 
-    /// Migração: favoritos legados como [String] viram mensagens .claude.
-    func testMigraFavoritosLegadosString() {
-        let defaults = freshDefaults()
-        defaults.set(["oi", "bom dia"], forKey: "favorites")
-        let state = AppState(defaults: defaults)
-        XCTAssertEqual(state.favorites,
-                       [Message(text: "oi", kind: .claude), Message(text: "bom dia", kind: .claude)])
-    }
-
     func testDefaultMessageTemUIDFixo() {
         XCTAssertEqual(AppState.defaultMessage.uid,
                        UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
-    }
-
-    func testFavoritoGanhaUIDEstavelEPersistido() {
-        let defaults = freshDefaults()
-        let a = AppState(defaults: defaults)
-        a.addFavorite(text: "oi", kind: .claude)
-        let uid = a.favorites[0].uid
-        XCTAssertNotNil(uid)
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.favorites[0].uid, uid)
-    }
-
-    /// Migração: favoritos persistidos sem uid ganham um na carga e ele é
-    /// gravado de volta imediatamente (referências horário→mensagem dependem disso).
-    func testFavoritosLegadosSemUIDGanhamUIDNaCarga() {
-        let defaults = freshDefaults()
-        defaults.set(#"[{"text":"oi","kind":"claude"}]"#.data(using: .utf8)!, forKey: "favorites")
-        let a = AppState(defaults: defaults)
-        let uid = a.favorites[0].uid
-        XCTAssertNotNil(uid)
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.favorites[0].uid, uid)
-    }
-
-    func testUpdateFavoritoPreservaUID() {
-        let state = AppState(defaults: freshDefaults())
-        state.addFavorite(text: "tarefa", kind: .claude)
-        let uid = state.favorites[0].uid
-        state.updateFavorite(state.favorites[0], to: Message(text: "tarefa 2", kind: .claude))
-        XCTAssertEqual(state.favorites[0].uid, uid)
-        XCTAssertEqual(state.favorites[0].text, "tarefa 2")
     }
 
     func testIgualdadeIgnoraUID() {
@@ -208,38 +110,11 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(a, b)
     }
 
-    func testMessageWithUIDEncontraFavoritoEDefault() {
-        let state = AppState(defaults: freshDefaults())
-        state.addFavorite(text: "oi", kind: .claude)
-        let uid = state.favorites[0].uid!
-        XCTAssertEqual(state.message(withUID: uid), state.favorites[0])
-        XCTAssertEqual(state.message(withUID: AppState.defaultMessage.uid!), AppState.defaultMessage)
-        XCTAssertNil(state.message(withUID: UUID()))
-    }
-
     func testShowResponseLegadoNilEDefaultFalse() throws {
         let legacyJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
         let msg = try JSONDecoder().decode(Message.self, from: legacyJSON)
         XCTAssertNil(msg.showResponse)
         XCTAssertFalse(msg.resolvedShowResponse)
-    }
-
-    func testAddFavoritoComShowResponsePersiste() {
-        let defaults = freshDefaults()
-        let a = AppState(defaults: defaults)
-        a.addFavorite(text: "resumo", kind: .claude, showResponse: true)
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.favorites.first?.showResponse, true)
-        XCTAssertTrue(b.favorites.first!.resolvedShowResponse)
-    }
-
-    func testAddFavoriteComConfigCodex() {
-        let state = AppState(defaults: freshDefaults())
-        let msg = state.addFavorite(text: "resumo do dia", kind: .codex,
-                                    codexModel: "gpt-5.1-codex", codexReasoning: .high)
-        XCTAssertEqual(msg?.kind, .codex)
-        XCTAssertEqual(msg?.codexModel, "gpt-5.1-codex")
-        XCTAssertEqual(msg?.codexReasoning, .high)
     }
 
     func testHistoricoCapEm20MaisRecentePrimeiro() {
@@ -299,48 +174,22 @@ final class AppStateTests: XCTestCase {
         _ = b
     }
 
-    func testRenewalConfigPersisteEToggleOff() {
-        let defaults = freshDefaults()
-        let dir = URL(fileURLWithPath: "/tmp/.claude2")
-        let a = AppState(defaults: defaults)
-        XCTAssertNil(a.renewal(for: dir))
-        a.setRenewal(dir, AccountRenewal(mode: .scheduled, anchorMinutes: 7 * 60, messageUID: nil))
-        XCTAssertEqual(a.renewal(for: dir)?.mode, .scheduled)
-        XCTAssertEqual(a.renewal(for: dir)?.anchorMinutes, 7 * 60)
-        let b = AppState(defaults: defaults)
-        XCTAssertEqual(b.renewal(for: dir)?.mode, .scheduled)
-        b.setRenewal(dir, nil) // Off
-        XCTAssertNil(b.renewal(for: dir))
-        let c = AppState(defaults: defaults)
-        XCTAssertNil(c.renewal(for: dir))
-    }
-
-    /// Migração: renewAccounts [String] vira renovação Automática.
-    func testMigraRenewAccountsParaAutomatica() {
+    /// Migração legada: `renewAccounts [String]` vira agendamentos contínuos.
+    func testMigraRenewAccountsParaAgendamentosContinuos() {
         let defaults = freshDefaults()
         defaults.set(["/tmp/.claude", "/tmp/.claude2"], forKey: "renewAccounts")
         let state = AppState(defaults: defaults)
-        XCTAssertEqual(state.renewals.count, 2)
-        XCTAssertEqual(state.renewal(for: URL(fileURLWithPath: "/tmp/.claude"))?.mode, .automatic)
-        XCTAssertNil(state.renewal(for: URL(fileURLWithPath: "/tmp/.claude"))?.anchorMinutes)
+        XCTAssertEqual(state.tasks.count, 2)
+        XCTAssertTrue(state.tasks.allSatisfy { $0.repetition == .continuous })
+        XCTAssertNil(defaults.object(forKey: "renewAccounts"), "chave legada removida")
     }
 
-    func testResolvedRenewalMessageCaiNoDefault() {
-        let state = AppState(defaults: freshDefaults())
-        let dir = URL(fileURLWithPath: "/tmp/.claude2")
-        state.setRenewal(dir, AccountRenewal(mode: .automatic))
-        // Sem messageUID → hi mínimo.
-        XCTAssertEqual(state.resolvedRenewalMessage(for: dir), AppState.defaultMessage)
-        state.addFavorite(text: "deploy", kind: .claude)
-        let fav = state.favorites[0]
-        state.setRenewal(dir, AccountRenewal(mode: .automatic, anchorMinutes: nil, messageUID: fav.uid))
-        XCTAssertEqual(state.resolvedRenewalMessage(for: dir), fav)
-    }
-
-    func testMensagemCodexDecodificaEDefaults() throws {
+    func testMensagemCodexSemModeloFicaNilEFazRoundTrip() throws {
+        // Sem escolha explícita, modelo/reasoning ficam nil (o Codex herda o
+        // default da conta em vez de o app forçar um modelo).
         let msg = Message(text: "oi", kind: .codex)
-        XCTAssertEqual(msg.resolvedCodexModel, "gpt-5.1-codex-mini")
-        XCTAssertEqual(msg.resolvedCodexReasoning, .low)
+        XCTAssertNil(msg.codexModel)
+        XCTAssertNil(msg.codexReasoning)
         let data = try JSONEncoder().encode(msg)
         let decoded = try JSONDecoder().decode(Message.self, from: data)
         XCTAssertEqual(decoded, msg)
@@ -362,12 +211,6 @@ final class AppStateTests: XCTestCase {
                        UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
     }
 
-    func testMessageWithUIDResolveDefaultCodex() {
-        let state = AppState(defaults: freshDefaults())
-        XCTAssertEqual(state.message(withUID: AppState.defaultCodexMessage.uid!),
-                       AppState.defaultCodexMessage)
-    }
-
     func testRegisterAccountInfereProviderEPersiste() throws {
         let defaults = freshDefaults()
         let state = AppState(defaults: defaults)
@@ -387,16 +230,26 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(state.registeredAccounts.isEmpty)
     }
 
-    func testUnregisterLimpaRenovacaoEApelido() throws {
+    func testUnregisterLimpaCadastroEApelido() throws {
         let state = AppState(defaults: freshDefaults())
         let dir = try makeAccountDir(subdir: "projects")
         state.registerAccount(dir)
-        state.setRenewal(dir, AccountRenewal(mode: .automatic))
         state.setAlias(dir, "extra")
         state.unregisterAccount(dir)
         XCTAssertTrue(state.registeredAccounts.isEmpty)
-        XCTAssertNil(state.renewal(for: dir))
         XCTAssertNil(state.alias(for: dir))
+    }
+
+    func testUnregisterDesabilitaAgendamentosDaConta() throws {
+        let d = freshDefaults()
+        let state = AppState(defaults: d)
+        let conta = try makeAccountDir(signature: ".claude.json")
+        state.registerAccount(conta)
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = conta.path
+        state.tasks = [ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous)]
+        state.unregisterAccount(conta)
+        XCTAssertFalse(state.tasks[0].enabled)
     }
 
     func testLegacyScanEncontraContasExtrasPorConvencao() throws {
@@ -420,12 +273,6 @@ final class AppStateTests: XCTestCase {
         let state = AppState(defaults: freshDefaults())
         // ~/.claude recém-instalado pode não ter assinatura ainda → .claude.
         XCTAssertEqual(state.provider(for: URL(fileURLWithPath: "/nao/existe")), .claude)
-    }
-
-    func testMensagemDeRenovacaoDefaultPorProvider() throws {
-        let state = AppState(defaults: freshDefaults())
-        let contaCodex = try makeAccountDir(signature: "auth.json")
-        XCTAssertEqual(state.resolvedRenewalMessage(for: contaCodex), AppState.defaultCodexMessage)
     }
 
     func testEffectiveConfigDirFallbackPorProvider() {
@@ -483,18 +330,17 @@ final class AppStateTests: XCTestCase {
     func testTasksPersistemEDecodificam() throws {
         let defaults = freshDefaults()
         let state = AppState(defaults: defaults)
-        let task = ScheduledTask(uid: UUID(), name: "bom dia", commandUID: nil,
+        let task = ScheduledTask(uid: UUID(), name: "bom dia",
+                                 command: Message(text: "bom dia", kind: .claude),
                                  times: [8 * 60], weekdays: [2, 3, 4, 5, 6], enabled: true)
         state.tasks = [task]
         let reloaded = AppState(defaults: defaults)
         XCTAssertEqual(reloaded.tasks, [task])
     }
 
-    func testResolvedTaskMessageComandoApagadoCaiNoDefault() {
-        let state = AppState(defaults: freshDefaults())
-        let task = ScheduledTask(uid: UUID(), name: nil, commandUID: UUID(), // uid inexistente
-                                 times: [600], weekdays: [1], enabled: true)
-        XCTAssertEqual(state.resolvedTaskMessage(for: task), AppState.defaultMessage)
+    func testResolvedCommandSemComandoCaiNoDefault() {
+        let task = ScheduledTask(uid: UUID(), times: [600], weekdays: [1])
+        XCTAssertEqual(task.resolvedCommand, AppState.defaultMessage)
     }
 
     func testNextTaskEntryEscolheAMenorData() {
@@ -507,5 +353,140 @@ final class AppStateTests: XCTestCase {
         state.nextTaskFires = [t1.uid: Date().addingTimeInterval(7200),
                                t2.uid: Date().addingTimeInterval(3600)]
         XCTAssertEqual(state.nextTaskEntry?.task.uid, t2.uid)
+    }
+
+    // MARK: - Migração para agendamentos unificados
+
+    func testMigraTarefaLegadaEmbutindoOFavorito() throws {
+        let d = freshDefaults()
+        let favUID = UUID()
+        let fav = Message(text: "olá mundo", kind: .claude, model: .opus, uid: favUID)
+        d.set(try JSONEncoder().encode([fav]), forKey: "favorites")
+        // Tarefa no formato legado: commandUID, sem command/repetition.
+        let legadoJSON = """
+        [{"uid":"\(UUID().uuidString)","commandUID":"\(favUID.uuidString)",
+          "times":[480],"weekdays":[2],"enabled":true}]
+        """
+        d.set(legadoJSON.data(using: .utf8)!, forKey: "tasks")
+
+        let state = AppState(defaults: d)
+        XCTAssertEqual(state.tasks.count, 1)
+        XCTAssertEqual(state.tasks[0].resolvedCommand.text, "olá mundo")
+        XCTAssertEqual(state.tasks[0].resolvedCommand.model, .opus)
+        XCTAssertNil(state.tasks[0].resolvedCommand.uid, "cópia embutida não pertence à biblioteca")
+        XCTAssertEqual(state.tasks[0].repetition, .fixed)
+        XCTAssertNil(d.object(forKey: "favorites"), "biblioteca removida após embutir")
+    }
+
+    func testMigraTarefaLegadaSemComandoParaHiPadrao() throws {
+        let d = freshDefaults()
+        let legadoJSON = """
+        [{"uid":"\(UUID().uuidString)","times":[600],"weekdays":[1,7],"enabled":false}]
+        """
+        d.set(legadoJSON.data(using: .utf8)!, forKey: "tasks")
+        let state = AppState(defaults: d)
+        XCTAssertEqual(state.tasks[0].resolvedCommand.text, "1+1")
+        XCTAssertEqual(state.tasks[0].resolvedCommand.kind, .claude)
+        XCTAssertFalse(state.tasks[0].enabled)
+    }
+
+    func testMigraRenovacaoAutomaticaParaAgendamentoContinuo() throws {
+        let d = freshDefaults()
+        let conta = try makeAccountDir(signature: ".claude.json")
+        d.set(try JSONEncoder().encode([conta.path: AccountRenewal(mode: .automatic)]),
+              forKey: "renewals")
+        let state = AppState(defaults: d)
+        XCTAssertEqual(state.tasks.count, 1)
+        XCTAssertEqual(state.tasks[0].repetition, .continuous)
+        XCTAssertEqual(state.tasks[0].resolvedCommand.configDir, conta.path)
+        XCTAssertEqual(state.tasks[0].resolvedCommand.kind, .claude)
+        XCTAssertTrue(state.tasks[0].enabled)
+        XCTAssertNil(d.object(forKey: "renewals"), "chave legada removida")
+    }
+
+    func testMigraRenovacaoProgramadaParaQuatroHorariosFixos() throws {
+        let d = freshDefaults()
+        let conta = try makeAccountDir(signature: ".claude.json")
+        var renewal = AccountRenewal(mode: .scheduled)
+        renewal.anchorMinutes = 9 * 60 + 15 // 09:15
+        d.set(try JSONEncoder().encode([conta.path: renewal]), forKey: "renewals")
+        let state = AppState(defaults: d)
+        XCTAssertEqual(state.tasks[0].repetition, .fixed)
+        // 09:15 + 0/5/10/15h, mod 24h, ordenado: 00:15, 09:15, 14:15, 19:15.
+        XCTAssertEqual(state.tasks[0].times, [15, 555, 855, 1155])
+        XCTAssertEqual(state.tasks[0].weekdays, Set(1...7))
+    }
+
+    func testMigracaoRodaUmaVezSo() throws {
+        let d = freshDefaults()
+        let conta = try makeAccountDir(signature: ".claude.json")
+        d.set(try JSONEncoder().encode([conta.path: AccountRenewal(mode: .automatic)]),
+              forKey: "renewals")
+        _ = AppState(defaults: d)
+        let state2 = AppState(defaults: d)
+        XCTAssertEqual(state2.tasks.count, 1, "segunda inicialização não duplica")
+    }
+
+    // MARK: - accountDir / activeScheduleCount
+
+    func testAccountDirDeShellENil() {
+        let state = AppState(defaults: freshDefaults())
+        let task = ScheduledTask(uid: UUID(), command: Message(text: "ls", kind: .shell))
+        XCTAssertNil(state.accountDir(for: task))
+    }
+
+    func testAccountDirComPastaSumidaENil() {
+        let state = AppState(defaults: freshDefaults())
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = "/tmp/nao-existe-\(UUID().uuidString)"
+        let task = ScheduledTask(uid: UUID(), command: cmd)
+        XCTAssertNil(state.accountDir(for: task))
+    }
+
+    func testAccountDirSemConfigDirCaiNoDefaultDoProvider() {
+        let state = AppState(defaults: freshDefaults())
+        let claude = ScheduledTask(uid: UUID(), command: Message(text: "1+1", kind: .claude))
+        XCTAssertEqual(state.accountDir(for: claude),
+                       AppState.defaultConfigDir.standardizedFileURL)
+        let codex = ScheduledTask(uid: UUID(), command: Message(text: "1+1", kind: .codex))
+        XCTAssertEqual(state.accountDir(for: codex),
+                       AppState.defaultCodexConfigDir.standardizedFileURL)
+    }
+
+    func testActiveScheduleCountContaSoHabilitadosDaConta() throws {
+        let state = AppState(defaults: freshDefaults())
+        let conta = try makeAccountDir(signature: ".claude.json")
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = conta.path
+        state.tasks = [
+            ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous),
+            ScheduledTask(uid: UUID(), command: cmd, times: [480], weekdays: Set(1...7)),
+            {
+                var t = ScheduledTask(uid: UUID(), command: cmd, times: [600], weekdays: [2])
+                t.enabled = false
+                return t
+            }(),
+            ScheduledTask(uid: UUID(), command: Message(text: "ls", kind: .shell)),
+        ]
+        XCTAssertEqual(state.activeScheduleCount(for: conta), 2)
+    }
+
+    func testConflitoDeContinuoPorConta() throws {
+        let state = AppState(defaults: freshDefaults())
+        let conta = try makeAccountDir(signature: ".claude.json")
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = conta.path
+        let existente = ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous)
+        state.tasks = [existente]
+
+        var candidato = ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous)
+        XCTAssertTrue(state.hasContinuousConflict(candidato))
+        // Editar o próprio agendamento não conflita consigo mesmo.
+        candidato.uid = existente.uid
+        XCTAssertFalse(state.hasContinuousConflict(candidato))
+        // Repetição fixa nunca conflita.
+        candidato.uid = UUID()
+        candidato.repetition = .fixed
+        XCTAssertFalse(state.hasContinuousConflict(candidato))
     }
 }

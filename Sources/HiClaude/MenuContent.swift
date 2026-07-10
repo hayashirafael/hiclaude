@@ -38,27 +38,29 @@ struct MenuContent: View {
     let env: AppEnvironment
     @Environment(\.openWindow) private var openWindow
 
-    /// Contas em renovação, ordenadas por rótulo.
-    private var renewingAccounts: [URL] {
-        state.renewals.keys
-            .map { URL(fileURLWithPath: $0).standardizedFileURL }
-            .sorted { state.label(for: $0).localizedCaseInsensitiveCompare(state.label(for: $1)) == .orderedAscending }
+    /// Contas com pelo menos um agendamento habilitado (Claude/Codex).
+    private var scheduledAccounts: [URL] {
+        let dirs = Set(state.tasks.filter { $0.enabled }
+            .compactMap { state.accountDir(for: $0) })
+        return dirs.sorted {
+            state.label(for: $0).localizedCaseInsensitiveCompare(state.label(for: $1)) == .orderedAscending
+        }
     }
 
     var body: some View {
         Text(headerLine)
-        if renewingAccounts.isEmpty {
-            Text("Nenhuma conta em renovação")
+        if scheduledAccounts.isEmpty {
+            Text("Nenhum agendamento ativo")
         } else {
             Divider()
-            ForEach(renewingAccounts, id: \.self) { account in
+            ForEach(scheduledAccounts, id: \.self) { account in
                 Text(state.label(for: account))
                 Text(statusLine(for: account))
             }
         }
         if let entry = state.nextTaskEntry {
             Divider()
-            Text("Próxima tarefa: \(entry.task.name ?? state.resolvedTaskMessage(for: entry.task).text) · \(Fmt.weekdayTime(entry.date))")
+            Text("Próxima tarefa: \(entry.task.name ?? entry.task.resolvedCommand.text) · \(Fmt.weekdayTime(entry.date))")
         }
         Divider()
         Button(state.paused ? "Retomar" : "Pausar") { env.togglePause() }
@@ -76,17 +78,31 @@ struct MenuContent: View {
             return "CLI do \(missing.displayName) não encontrado — instale o \(instale)"
         }
         if state.paused { return "Pausado" }
-        let n = renewingAccounts.count
-        return n == 1 ? "1 conta em renovação" : "\(n) contas em renovação"
+        let n = scheduledAccounts.count
+        if n == 0 { return "Nenhum agendamento ativo" }
+        return n == 1 ? "1 conta com agendamentos" : "\(n) contas com agendamentos"
+    }
+
+    /// Próximo disparo entre os agendamentos que miram a conta: contínuos vêm
+    /// do RenewalEngine (nextRenewals), fixos do TaskScheduler (nextTaskFires).
+    private func nextFire(for account: URL) -> Date? {
+        var candidates: [Date] = []
+        if let d = state.nextRenewals[account], d > Date() { candidates.append(d) }
+        for task in state.tasks where task.enabled && task.repetition == .fixed {
+            if state.accountDir(for: task) == account,
+               let d = state.nextTaskFires[task.uid], d > Date() {
+                candidates.append(d)
+            }
+        }
+        return candidates.min()
     }
 
     private func statusLine(for account: URL) -> String {
-        let mode = state.renewal(for: account)?.mode == .scheduled ? "programada" : "automática"
-        var parts = [mode]
-        let temCodex = renewingAccounts.contains { state.provider(for: $0) == .codex }
-        if temCodex { parts.insert(state.provider(for: account).displayName, at: 0) }
-        if let next = state.nextRenewals[account.standardizedFileURL], next > Date() {
-            parts.append("renova \(Fmt.hhmm(next))")
+        var parts: [String] = []
+        let temCodex = scheduledAccounts.contains { state.provider(for: $0) == .codex }
+        if temCodex { parts.append(state.provider(for: account).displayName) }
+        if let next = nextFire(for: account) {
+            parts.append("próximo hi \(Fmt.hhmm(next))")
         } else {
             parts.append("aguardando janela")
         }

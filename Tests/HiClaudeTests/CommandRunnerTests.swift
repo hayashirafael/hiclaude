@@ -314,17 +314,59 @@ final class CommandRunnerTests: XCTestCase {
         let bin = try makeExecutable(script)
         var msg = Message(text: "1+1", kind: .codex)
         msg.configDir = "/tmp/conta-codex"
+        msg.codexModel = "gpt-5.5"
+        msg.codexReasoning = .low
         let runner = CommandRunner(binaryOverride: bin)
         let result = await runner.run(msg)
         let output = try result.get()
         XCTAssertTrue(output.contains("exec"))
-        XCTAssertTrue(output.contains("--model gpt-5.1-codex-mini"))
+        XCTAssertTrue(output.contains("--model gpt-5.5"))
         XCTAssertTrue(output.contains("--sandbox read-only"))
         XCTAssertTrue(output.contains("--skip-git-repo-check"))
         XCTAssertTrue(output.contains("--color never"))
         XCTAssertTrue(output.contains(#"model_reasoning_effort="low""#))
         XCTAssertTrue(output.contains("1+1"))
         XCTAssertTrue(output.contains("HOME_CODEX:/tmp/conta-codex"))
+    }
+
+    /// Sem modelo/reasoning explícitos, o Codex omite `--model` e o `-c
+    /// model_reasoning_effort` — deixando o default da conta (config.toml)
+    /// valer, o único garantidamente aceito pelo plano da conta.
+    func testCodexSemModeloOmiteFlagsEUsaDefaultDaConta() async throws {
+        let argsFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-args-\(UUID().uuidString).txt")
+        let runner = CommandRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
+        )
+        let result = await runner.run(Message(text: "1+1", kind: .codex))
+        if case .failure(let e) = result { XCTFail("falhou: \(e)") }
+        let args = try String(contentsOf: argsFile, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.isEmpty }
+            .map(String.init)
+        XCTAssertEqual(args, ["exec", "--sandbox", "read-only",
+                              "--skip-git-repo-check", "--color", "never", "1+1"])
+    }
+
+    func testCodexComModeloEReasoningExplicitos() async throws {
+        let argsFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-args-\(UUID().uuidString).txt")
+        let runner = CommandRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
+        )
+        var msg = Message(text: "1+1", kind: .codex)
+        msg.codexModel = "gpt-5.5"
+        msg.codexReasoning = .high
+        _ = await runner.run(msg)
+        let args = try String(contentsOf: argsFile, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.isEmpty }
+            .map(String.init)
+        XCTAssertEqual(args, ["exec", "--model", "gpt-5.5", "--sandbox", "read-only",
+                              "--skip-git-repo-check", "--color", "never",
+                              "-c", "model_reasoning_effort=\"high\"", "1+1"])
     }
 
     /// Sem `configDir` na mensagem, o Codex mira `~/.codex` (paridade com o

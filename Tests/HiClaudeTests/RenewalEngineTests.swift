@@ -25,7 +25,7 @@ final class RenewalEngineTests: XCTestCase {
 
     func testArmaNoFimDaJanelaAtiva() async {
         detector.end = now.addingTimeInterval(3600)
-        await engine.configure(renewals: [conta: AccountRenewal(mode: .automatic)], paused: false)
+        await engine.configure(accounts: [conta], paused: false)
         XCTAssertEqual(engine.nextRenewal[conta], now.addingTimeInterval(3600))
         XCTAssertTrue(renewed.isEmpty)
     }
@@ -33,7 +33,7 @@ final class RenewalEngineTests: XCTestCase {
     /// Sem janela ativa: fica armado aguardando o próximo hi, sem renovar.
     func testSemJanelaAguardaSemRenovar() async {
         detector.end = nil
-        await engine.configure(renewals: [conta: AccountRenewal(mode: .automatic)], paused: false)
+        await engine.configure(accounts: [conta], paused: false)
         XCTAssertNil(engine.nextRenewal[conta])
         XCTAssertTrue(renewed.isEmpty)
     }
@@ -41,7 +41,7 @@ final class RenewalEngineTests: XCTestCase {
     /// Catch-up: a janela venceu enquanto o Mac dormia → renova ao acordar.
     func testCatchUpRenovaQuandoJanelaVenceuDormindo() async {
         detector.end = now.addingTimeInterval(3600)
-        await engine.configure(renewals: [conta: AccountRenewal(mode: .automatic)], paused: false)
+        await engine.configure(accounts: [conta], paused: false)
         clock.now = now.addingTimeInterval(2 * 3600)
         detector.end = nil
         await engine.handleWake()
@@ -51,7 +51,7 @@ final class RenewalEngineTests: XCTestCase {
     /// Depois de renovar, re-arma no fim da janela recém-aberta (encadeia).
     func testRenovacaoEncadeiaProximaJanela() async {
         detector.end = now.addingTimeInterval(3600)
-        await engine.configure(renewals: [conta: AccountRenewal(mode: .automatic)], paused: false)
+        await engine.configure(accounts: [conta], paused: false)
         clock.now = now.addingTimeInterval(2 * 3600)
         detector.end = nil
         engine.onRenew = { [weak self] url in
@@ -71,7 +71,7 @@ final class RenewalEngineTests: XCTestCase {
     /// fire) precisa tentar de novo depois.
     func testRenovacaoDescartadaPorIsRunningTentaDeNovo() async {
         detector.end = now.addingTimeInterval(3600)
-        await engine.configure(renewals: [conta: AccountRenewal(mode: .automatic)], paused: false)
+        await engine.configure(accounts: [conta], paused: false)
         clock.now = now.addingTimeInterval(2 * 3600)
         detector.end = nil // sem janela nova ainda: a renovação é quem abriria
         var attempts = 0
@@ -93,7 +93,7 @@ final class RenewalEngineTests: XCTestCase {
 
     func testPausadoNaoArmaNemRenova() async {
         detector.end = now.addingTimeInterval(3600)
-        await engine.configure(renewals: [conta: AccountRenewal(mode: .automatic)], paused: true)
+        await engine.configure(accounts: [conta], paused: true)
         XCTAssertNil(engine.nextRenewal[conta])
         clock.now = now.addingTimeInterval(2 * 3600)
         await engine.handleWake()
@@ -103,7 +103,7 @@ final class RenewalEngineTests: XCTestCase {
     /// Segundo wake logo após a renovação não renova de novo.
     func testWakeConsecutivoNaoRenovaDeNovo() async {
         detector.end = now.addingTimeInterval(60)
-        await engine.configure(renewals: [conta: AccountRenewal(mode: .automatic)], paused: false)
+        await engine.configure(accounts: [conta], paused: false)
         clock.now = now.addingTimeInterval(120)
         detector.end = nil
         await engine.handleWake() // catch-up renova
@@ -111,67 +111,11 @@ final class RenewalEngineTests: XCTestCase {
         XCTAssertEqual(renewed, [conta])
     }
 
-    func testContaDesmarcadaEhDesarmada() async {
+    func testContaRemovidaDoSetDesarma() async {
         detector.end = now.addingTimeInterval(3600)
-        await engine.configure(renewals: [conta: AccountRenewal(mode: .automatic)], paused: false)
+        await engine.configure(accounts: [conta], paused: false)
         XCTAssertNotNil(engine.nextRenewal[conta])
-        await engine.configure(renewals: [:], paused: false)
+        await engine.configure(accounts: [], paused: false)
         XCTAssertNil(engine.nextRenewal[conta])
-    }
-
-    /// Programada: sem janela ativa e dentro de uma janela agendada perdida,
-    /// renova no catch-up (mesma mecânica do wake).
-    func testProgramadaCatchUpDentroDaJanela() async {
-        // Âncora = agora - 1h (em minutos do dia); janela agendada ainda ativa.
-        let cal = Calendar.current
-        let anchorMin = (cal.component(.hour, from: now.addingTimeInterval(-3600)) * 60)
-            + cal.component(.minute, from: now.addingTimeInterval(-3600))
-        detector.end = nil // nenhuma janela ativa detectada
-        await engine.configure(
-            renewals: [conta: AccountRenewal(mode: .scheduled, anchorMinutes: anchorMin)],
-            paused: false)
-        XCTAssertEqual(renewed, [conta])
-    }
-
-    /// Programada: disparo armado já passou, mas há uma janela ativa detectada
-    /// (sessão em andamento) cobrindo a conta agora — a janela ativa prevalece
-    /// e o catch-up não deve renovar (só re-agenda o próximo disparo).
-    func testProgramadaNaoRenovaCatchUpComJanelaAtiva() async {
-        let cal = Calendar.current
-        // Âncora a 1 minuto no futuro: arma um disparo Programado sem catch-up
-        // imediato (a janela ainda não venceu no momento do configure).
-        let futureAnchor = now.addingTimeInterval(60)
-        let anchorMin = cal.component(.hour, from: futureAnchor) * 60
-            + cal.component(.minute, from: futureAnchor)
-        detector.end = nil
-        await engine.configure(
-            renewals: [conta: AccountRenewal(mode: .scheduled, anchorMinutes: anchorMin)],
-            paused: false)
-        XCTAssertNotNil(engine.nextRenewal[conta])
-        XCTAssertTrue(renewed.isEmpty)
-
-        // O disparo armado passa (Mac dormiu), mas ao acordar há uma sessão
-        // real ainda ativa nessa conta.
-        clock.now = futureAnchor.addingTimeInterval(60)
-        detector.end = clock.now.addingTimeInterval(3600)
-        await engine.handleWake()
-
-        XCTAssertTrue(renewed.isEmpty)
-    }
-
-    /// Programada: fora de qualquer janela (gap) não renova.
-    func testProgramadaNaoRenovaNoGap() async {
-        let cal = Calendar.current
-        // O ciclo tem 4 janelas de 5h a partir da âncora (20h cobertas, 4h de
-        // gap antes do próximo ciclo). Âncora = agora - 21h → a última janela
-        // do ciclo (âncora+15h..âncora+20h) terminou há ~1h e a próxima só
-        // liga daqui a ~3h: estamos no meio do gap.
-        let ref = now.addingTimeInterval(-21 * 3600)
-        let anchorMin = cal.component(.hour, from: ref) * 60 + cal.component(.minute, from: ref)
-        detector.end = nil
-        await engine.configure(
-            renewals: [conta: AccountRenewal(mode: .scheduled, anchorMinutes: anchorMin)],
-            paused: false)
-        XCTAssertTrue(renewed.isEmpty)
     }
 }
