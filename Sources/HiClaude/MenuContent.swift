@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Label da barra: ícone preenchido quando qualquer conta está com janela ativa;
-/// exclamação em erro; esmaecido quando pausado. Texto opcional = janela que
-/// vence primeiro entre as contas em renovação.
+/// Label da barra: glifo próprio (balão + arco de renovação) preenchido quando
+/// qualquer conta está com janela ativa; exclamação em erro; esmaecido quando
+/// pausado. Texto opcional = janela que vence primeiro entre as contas em
+/// renovação.
 struct MenuBarLabel: View {
     @ObservedObject var state: AppState
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: symbol)
+            Image(nsImage: MenuBarGlyph.image(for: glyphState))
                 .opacity(state.paused && !hasProblem ? 0.5 : 1)
             if state.showRemainingInBar, let end = soonestEnd {
                 Text(Fmt.remaining(until: end, from: Date()))
@@ -20,9 +21,8 @@ struct MenuBarLabel: View {
         state.nextRenewals.values.filter { $0 > Date() }.min()
     }
 
-    private var symbol: String {
-        if hasProblem { return "exclamationmark.bubble" }
-        return soonestEnd != nil ? "bubble.left.fill" : "bubble.left"
+    private var glyphState: MenuBarGlyph.State {
+        .init(hasProblem: hasProblem, hasActiveWindow: soonestEnd != nil)
     }
 
     private var hasProblem: Bool { !state.missingCLIs.isEmpty || lastEventFailed }

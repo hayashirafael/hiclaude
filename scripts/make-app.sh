@@ -14,6 +14,7 @@ cp scripts/Info.plist "$APP/Contents/Info.plist"
 # Ícone: a partir de um único master 1024x1024 (assets/AppIcon.png), gera todos
 # os tamanhos que o macOS exige e compila o .icns. macOS não arredonda sozinho —
 # o formato squircle e a margem vão desenhados no próprio PNG.
+# O master é gerado por: swift scripts/render-appicon.swift assets/AppIcon.png
 ICON_MASTER="assets/AppIcon.png"
 if [[ -f "$ICON_MASTER" ]]; then
     ICONSET="$(mktemp -d)/AppIcon.iconset"
