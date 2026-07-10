@@ -4,6 +4,10 @@ enum FireResult: Codable, Equatable {
     case success
     case skipped(activeUntil: Date)
     case failure(message: String)
+    /// Ocorrência fixa que passou com o app fechado — nada foi executado;
+    /// `occurrence` é o horário que teria disparado (o `date` do evento é o
+    /// momento da detecção, no launch seguinte).
+    case missed(occurrence: Date)
 }
 
 enum FireOrigin: String, Codable { case scheduled, manual, renewal, agenda }
@@ -65,6 +69,9 @@ struct Message: Codable, Identifiable {
     var uid: UUID? = nil
     /// Mostrar a resposta do disparo (histórico + notificação). nil = desligado.
     var showResponse: Bool? = nil
+    /// Abre Claude/Codex em um Terminal.app interativo. nil = ligado para
+    /// Claude/Codex por compatibilidade com agendamentos já salvos.
+    var runInTerminal: Bool? = nil
     // Config Codex (só relevante quando `kind == .codex`). Opcionais com default
     // nil pelo mesmo motivo dos campos Claude: migração de graça.
     var codexModel: String? = nil
@@ -80,9 +87,11 @@ struct Message: Codable, Identifiable {
         let configVal = configDir ?? ""
         let workingVal = workingDir ?? ""
         let showResponseVal = showResponse.map(String.init) ?? ""
+        let runInTerminalVal = runInTerminal.map(String.init) ?? ""
         let codexModelVal = codexModel ?? ""
         let codexReasoningVal = codexReasoning?.rawValue ?? ""
-        return [kind.rawValue, text, modelVal, effortVal, safeModeVal, configVal, workingVal, showResponseVal, codexModelVal, codexReasoningVal]
+        return [kind.rawValue, text, modelVal, effortVal, safeModeVal, configVal,
+                workingVal, showResponseVal, runInTerminalVal, codexModelVal, codexReasoningVal]
             .joined(separator: "\u{1}")
     }
 }
@@ -95,6 +104,7 @@ extension Message: Equatable {
             && lhs.effort == rhs.effort && lhs.safeMode == rhs.safeMode
             && lhs.configDir == rhs.configDir && lhs.workingDir == rhs.workingDir
             && lhs.showResponse == rhs.showResponse
+            && lhs.runInTerminal == rhs.runInTerminal
             && lhs.codexModel == rhs.codexModel && lhs.codexReasoning == rhs.codexReasoning
     }
 }
@@ -107,6 +117,12 @@ extension Message {
     var resolvedEffort: Effort { effort ?? Self.defaultEffort }
     var resolvedSafeMode: Bool { safeMode ?? Self.defaultSafeMode }
     var resolvedShowResponse: Bool { showResponse ?? false }
+    var resolvedRunInTerminal: Bool {
+        switch kind {
+        case .claude, .codex: return runInTerminal ?? true
+        case .shell: return false
+        }
+    }
 }
 
 /// LEGADO: configuração de renovação por conta, pré-agendamentos unificados.
@@ -183,7 +199,43 @@ final class AppState: ObservableObject {
     /// Último disparo — cabeçalho do menu.
     var lastEvent: FireEvent? { history.first }
 
-    func recordEvent(_ event: FireEvent) { history.insert(event, at: 0) }
+    func recordEvent(_ event: FireEvent) {
+        history.insert(event, at: 0)
+        // Um disparo registrado também é sinal de vida: fecha a janela de até
+        // 60s entre o último tick do heartbeat e um quit logo após o disparo
+        // (evita falso "perdido" de ocorrência que na verdade executou).
+        recordAlive(now: event.date)
+    }
+
+    /// Momento em que o app esteve vivo pela última vez ANTES deste launch;
+    /// nil no primeiro launch de todos. Consumido (uma vez) por
+    /// `recordMissedWhileClosed`.
+    private(set) var previousAliveAt: Date?
+
+    /// Heartbeat de vida do app — o AppEnvironment chama a cada statusTick.
+    /// Não é @Published de propósito: nada na UI observa, e publicar a cada
+    /// 60s re-renderizaria o menu à toa.
+    func recordAlive(now: Date = Date()) {
+        defaults.set(now, forKey: Keys.lastAliveAt)
+    }
+
+    /// Registra no histórico, no máximo uma vez por tarefa por launch, a
+    /// última ocorrência fixa perdida enquanto o app esteve fechado. Não
+    /// dispara nada — decisão de produto: catch-up retroativo entre launches
+    /// seria rajada indesejada; o usuário só precisa saber o que não rodou.
+    func recordMissedWhileClosed(now: Date = Date(), calendar: Calendar = .current) {
+        guard let since = previousAliveAt else { return }
+        previousAliveAt = nil // idempotente: um relatório por launch
+        for task in tasks where task.enabled && task.repetition == .fixed {
+            guard let occurrence = AgendaMath.lastMissedOccurrence(
+                times: task.times, weekdays: task.weekdays,
+                between: since, and: now, calendar: calendar) else { continue }
+            recordEvent(FireEvent(date: now, result: .missed(occurrence: occurrence),
+                                  messageText: task.resolvedCommand.text,
+                                  account: accountDir(for: task)?.lastPathComponent,
+                                  origin: .agenda))
+        }
+    }
 
     /// CLI encontrado por provider. Começa true para o ícone de erro não piscar
     /// enquanto a sonda de launch resolve.
@@ -198,6 +250,16 @@ final class AppState: ObservableObject {
             return tasks.contains { $0.enabled && $0.resolvedCommand.kind == .codex }
         }
     }
+
+    /// Pulso periódico de UI: o menu exibe horários calculados com `Date()` em
+    /// computed properties (`nextTaskEntry`, `nextFire`, `remaining`), que só
+    /// reexecutam quando algum `@Published` muta e dispara `objectWillChange`.
+    /// O `statusTick` do AppEnvironment incrementa este contador a cada ciclo
+    /// para forçar o menu/barra a recomputar contra o tempo atual, mesmo quando
+    /// nenhum disparo real aconteceu.
+    @Published private(set) var uiHeartbeat: Int = 0
+
+    func pulseUI() { uiHeartbeat &+= 1 }
 
     /// Próximos disparos por tarefa (espelho do TaskScheduler, para a UI).
     @Published var nextTaskFires: [UUID: Date] = [:]
@@ -485,11 +547,13 @@ final class AppState: ObservableObject {
         static let registeredAccounts = "registeredAccounts"
         static let tasks = "tasks"
         static let language = "language"
+        static let lastAliveAt = "lastAliveAt"
     }
 
     init(defaults: UserDefaults = .standard,
          home: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.defaults = defaults
+        self.previousAliveAt = defaults.object(forKey: Keys.lastAliveAt) as? Date
         self.paused = defaults.bool(forKey: Keys.paused)
         if let data = defaults.data(forKey: Keys.history),
            let decoded = try? JSONDecoder().decode([FireEvent].self, from: data) {

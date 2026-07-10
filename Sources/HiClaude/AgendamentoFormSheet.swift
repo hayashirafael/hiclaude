@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Formulário único de agendamento: tipo (Claude/Codex/Comando), prompt com
@@ -17,6 +18,7 @@ struct AgendamentoFormSheet: View {
     @State private var codexModel = ""
     @State private var codexReasoning: Message.CodexReasoning = .low
     @State private var showResponse = false
+    @State private var runInTerminal = true
     @State private var account: String? = nil
     @State private var workingDir = ""
     @State private var repetition: ScheduledTask.Repetition = .fixed
@@ -51,8 +53,13 @@ struct AgendamentoFormSheet: View {
                                 accountLabel: { state.label(for: $0) },
                                 strings: strings)
             }
+            if kind != .shell {
+                Toggle(strings.runInTerminal, isOn: $runInTerminal)
+                    .toggleStyle(.checkbox)
+            }
             Toggle(strings.showResponse, isOn: $showResponse)
                 .toggleStyle(.checkbox)
+                .disabled(kind != .shell && runInTerminal)
             Divider()
             repetitionPicker
             if repetition == .fixed {
@@ -86,8 +93,11 @@ struct AgendamentoFormSheet: View {
         .onChange(of: kind) { newKind in
             if newKind == .shell {
                 account = nil
+                runInTerminal = false
                 if repetition == .continuous { repetition = .fixed }
                 return
+            } else if editing == nil || editing?.resolvedCommand.kind == .shell {
+                runInTerminal = true
             }
             guard let current = account else { return }
             let valid: Bool
@@ -192,6 +202,7 @@ struct AgendamentoFormSheet: View {
         codexModel = msg.codexModel ?? ""
         codexReasoning = msg.codexReasoning ?? .low
         showResponse = msg.resolvedShowResponse
+        runInTerminal = msg.resolvedRunInTerminal
         account = msg.configDir
         workingDir = msg.workingDir ?? ""
     }
@@ -217,7 +228,8 @@ struct AgendamentoFormSheet: View {
             safeMode: kind == .claude && safeMode != Message.defaultSafeMode ? safeMode : nil,
             configDir: kind != .shell ? effectiveAccount : nil,
             workingDir: kind != .shell && !workingDir.isEmpty ? workingDir : nil,
-            showResponse: showResponse ? true : nil,
+            showResponse: showResponse && !(kind != .shell && runInTerminal) ? true : nil,
+            runInTerminal: kind != .shell && !runInTerminal ? false : nil,
             codexModel: kind == .codex && !codexModel.trimmingCharacters(in: .whitespaces).isEmpty
                 ? codexModel.trimmingCharacters(in: .whitespaces) : nil,
             codexReasoning: kind == .codex && codexReasoning != .low ? codexReasoning : nil)
@@ -274,7 +286,7 @@ struct ClaudeConfigForm: View {
                     Text(accountLabel(dir)).tag(String?.some(dir.path))
                 }
             }
-            TextField(strings.workingDirectoryDefault, text: $workingDir)
+            WorkingDirectoryPicker(workingDir: $workingDir, strings: strings)
         }
         .font(.caption)
     }
@@ -304,8 +316,79 @@ struct CodexConfigForm: View {
                     Text(accountLabel(dir)).tag(String?.some(dir.path))
                 }
             }
-            TextField(strings.workingDirectoryDefault, text: $workingDir)
+            WorkingDirectoryPicker(workingDir: $workingDir, strings: strings)
         }
         .font(.caption)
+    }
+}
+
+/// Campo de diretório de trabalho: mostra o caminho escolhido e abre o
+/// seletor nativo do macOS para escolher uma pasta.
+struct WorkingDirectoryPicker: View {
+    @Binding var workingDir: String
+    let strings: L10n
+
+    private var isEmpty: Bool {
+        workingDir.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var displayText: String {
+        if isEmpty { return strings.workingDirectoryDefault }
+        return (workingDir as NSString).abbreviatingWithTildeInPath
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                chooseDirectory()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder")
+                    Text(displayText)
+                        .foregroundStyle(isEmpty ? .secondary : .primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered)
+            .help(strings.workingDirectoryDefault)
+
+            if !isEmpty {
+                Button {
+                    workingDir = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .help(strings.clearWorkingDirectory)
+            }
+        }
+    }
+
+    private func chooseDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.prompt = strings.chooseDirectory
+        panel.directoryURL = initialDirectoryURL()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        workingDir = url.standardizedFileURL.path
+    }
+
+    private func initialDirectoryURL() -> URL {
+        guard !isEmpty else {
+            return FileManager.default.homeDirectoryForCurrentUser
+        }
+        let expanded = NSString(string: workingDir).expandingTildeInPath
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            return URL(fileURLWithPath: expanded)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
     }
 }

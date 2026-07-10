@@ -22,6 +22,13 @@ struct GeneralTab: View {
                 Text(strings.remainingInMenuBarFooter)
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section {
+                LabeledContent(strings.version) {
+                    Text(AppVersion.current)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
         }
         .formStyle(.grouped)
     }

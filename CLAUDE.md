@@ -58,8 +58,9 @@ globally-active message.
   timers armed at the detected window end, 120s dedupe, `pendingRetry` for
   dispatches discarded by the controller's `isRunning` guard.
 - `SessionDetector.swift` — active window end from transcripts.
-- `FireController.swift` — orchestrates one dispatch: skip when a window is
-  already active (Claude messages only), record to history, `isRunning` guard.
+- `FireController.swift` — orchestrates one dispatch: only continuous renewal
+  skips when a window is already active; fixed/manual runs always execute.
+  Records to history and applies the global `isRunning` guard.
 - `Provider.swift` — the claude/codex axis: folder-content detection,
   transcripts subpath, env var, CLI binary name, display name.
 - `CommandRunner.swift` — subprocess: `claude -p --model … --effort …
@@ -67,12 +68,28 @@ globally-active message.
   [-c model_reasoning_effort=…] "<text>"` (model/reasoning flags omitted when
   unset → account default), or login-shell command; pins
   `CLAUDE_CONFIG_DIR`/`CODEX_HOME` per dispatch; 60s timeout.
+- `TerminalLauncher.swift` — disparo interativo (`message.resolvedRunInTerminal`):
+  abre uma sessão no Terminal.app via AppleScript rodando um `.sh` temporário
+  (auto-`rm`); fixa `CLAUDE_CONFIG_DIR`/`CODEX_HOME`, faz `cd` para o working dir
+  (default `~/Library/Application Support/HiClaude/workspace` — nunca o home, cujo
+  trust não persiste). `seedTrust` pré-grava `projects[<dir>]` no `.claude.json` da
+  conta para o `claude` não-supervisionado nunca travar em prompt:
+  `hasTrustDialogAccepted` + `hasClaudeMdExternalIncludesApproved`/`…WarningShown`
+  (não há flag/env do CLI que auto-aprove imports externos de CLAUDE.md mantendo o
+  CLAUDE.md ativo). Só Claude; Codex nunca toca no `.claude.json`.
 - `AgendaMath.swift` — pure functions for the fixed cycle (times × weekdays):
   `nextOccurrence`, `lastMissedOccurrence` (single catch-up on wake), and
   `date(bySettingMinutes:ofDay:calendar:)`.
 - `TaskScheduler.swift` — per-agendamento timers (fixed ones) driven by
-  `AgendaMath`, mirrors `RenewalEngine`'s pattern (120s dedupe, `pendingRetry`
-  for dispatches discarded by the controller's `isRunning` guard).
+  `AgendaMath`, mirrors `RenewalEngine`'s pattern (`pendingRetry` for
+  dispatches discarded by the controller's `isRunning` guard). Dedupe is by
+  fired-occurrence identity (never a wall-clock window — adjacent-minute
+  occurrences must both fire); creating/editing a task advances a catch-up
+  floor and never counts as a fire.
+- `SingleInstanceLock.swift` — `flock` on
+  `~/Library/Application Support/HiClaude/instance.lock`; a second launch
+  (dev binary or packaged .app) alerts and exits before `AppEnvironment`
+  exists (two instances double-fire and clobber each other's history).
 - UI: `MenuContent.swift` (per-account status menu + next-task line),
   `SettingsView.swift` (sidebar: Contas · Horários · Histórico · Geral →
   `ContasView` (informative: provider/folder/active-schedule count),
@@ -90,12 +107,27 @@ swift run HiClaude              # run the menu bar app locally
 ./scripts/make-dmg.sh           # build/HiClaude-<version>.dmg
 ```
 
+## Observability
+
+`os_log` no subsystem `dev.hiclaude` (categorias `agenda`/`fire`/`env`) marca só
+decisões e mudanças de estado — em especial o descarte por `isRunning` no
+`FireController` como `.error` (o "silenciador invisível"). Ao vivo:
+
+```bash
+log stream --predicate 'subsystem == "dev.hiclaude"' --level debug
+```
+
 ## Conventions
 
 - UI strings and code comments in Português (Brasil) with correct accents.
 - XCTest; test classes are `@MainActor` when touching `AppState`/engines.
 - TDD: write the failing test first. Tests use fakes (`Clock`,
-  `SessionDetecting`) — never real timers or sleeps.
+  `SessionDetecting`) — never real timers or sleeps. Exceção:
+  `AppEnvironmentTests` exercita o `AppEnvironment` real (com `FireController`/
+  `TerminalLauncher` reais) via um `TaskScheduler` injetado que arma `NSTimer`
+  reais, então suas datas fake DEVEM ser bem no futuro (ano 2099) — uma data de
+  disparo no passado vence na hora no `RunLoop.main` e roda AppleScript de verdade
+  (abre Terminal / crasha o suite).
 - Commit prefixes: `feat:` / `fix:` / `refactor:` / `docs:` / `test:`.
 - READMEs: `README.md` is English, `README.pt-br.md` is Portuguese (there is
   no `README.en.md`); keep them in sync and verify every behavioral claim

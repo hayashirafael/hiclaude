@@ -42,6 +42,7 @@ struct L10n {
     var languageLabel: String { text(en: "Language", pt: "Idioma") }
     var launchAtLogin: String { text(en: "Launch at Login", pt: "Iniciar com o Mac") }
     var remainingInMenuBar: String { text(en: "Remaining time in menu bar", pt: "Tempo restante na barra") }
+    var version: String { text(en: "Version", pt: "Versão") }
     var remainingInMenuBarFooter: String {
         text(en: "The menu bar time shows the first account renewal window to expire.",
              pt: "O tempo na barra mostra a janela que vence primeiro entre as contas em renovação.")
@@ -127,8 +128,8 @@ struct L10n {
     var newSchedule: String { text(en: "New schedule", pt: "Novo agendamento") }
     var editSchedule: String { text(en: "Edit schedule", pt: "Editar agendamento") }
     var scheduleListFooter: String {
-        text(en: "Continuous renews the account's 5h window 24/7; fixed times run on the selected times and days. Claude/Codex skip when the account window is already active.",
-             pt: "Contínuo renova a janela de 5h da conta 24/7; horários fixos disparam nos horários e dias marcados. Claude/Codex pulam quando a janela da conta já está ativa.")
+        text(en: "Continuous renews the account's 5h window 24/7 and skips redundant renewals while it is active; fixed times always run on the selected times and days.",
+             pt: "Contínuo renova a janela de 5h da conta 24/7 e pula renovações redundantes enquanto ela está ativa; horários fixos sempre disparam nos horários e dias marcados.")
     }
     var fixedTimes: String { text(en: "Fixed times", pt: "Horários fixos") }
     var continuousWindow: String { text(en: "Continuous (5h window)", pt: "Contínua (janela de 5h)") }
@@ -155,6 +156,10 @@ struct L10n {
         text(en: "Show response (history + notification)",
              pt: "Mostrar resposta (histórico + notificação)")
     }
+    var runInTerminal: String {
+        text(en: "Open in Terminal (interactive)",
+             pt: "Abrir no Terminal (interativo)")
+    }
     var model: String { text(en: "Model", pt: "Modelo") }
     var account: String { text(en: "Account", pt: "Conta") }
     var globalDefault: String { text(en: "Default (global)", pt: "Padrão (global)") }
@@ -162,6 +167,10 @@ struct L10n {
     var accountDefaultModel: String { text(en: "Model (account default)", pt: "Modelo (padrão da conta)") }
     var workingDirectoryDefault: String {
         text(en: "Directory (~ by default)", pt: "Diretório (~ por padrão)")
+    }
+    var chooseDirectory: String { text(en: "Choose", pt: "Escolher") }
+    var clearWorkingDirectory: String {
+        text(en: "Clear directory", pt: "Limpar diretório")
     }
 
     func taskKind(_ kind: Message.Kind) -> String {
@@ -200,6 +209,17 @@ struct L10n {
     func failed(_ time: String, _ message: String) -> String {
         text(en: "\(time) - failed: \(message)",
              pt: "\(time) — falhou: \(message)")
+    }
+    func missedWhileClosed(_ time: String, _ occurrence: String) -> String {
+        text(en: "\(time) - missed \(occurrence) (app was closed)",
+             pt: "\(time) — perdido \(occurrence) (app estava fechado)")
+    }
+    var alreadyRunningTitle: String {
+        text(en: "HiClaude is already running", pt: "O HiClaude já está aberto")
+    }
+    var alreadyRunningBody: String {
+        text(en: "Another instance owns the schedules. This one will quit to avoid duplicate dispatches.",
+             pt: "Outra instância já cuida dos agendamentos. Esta vai encerrar para evitar disparos duplicados.")
     }
     func succeeded(_ time: String, _ message: String) -> String {
         text(en: "\(time) - \(message)", pt: "\(time) — \(message)")

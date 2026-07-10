@@ -61,6 +61,7 @@ struct HistoryTab: View {
         case .success: return "checkmark.circle"
         case .skipped: return "arrow.uturn.right.circle"
         case .failure: return "xmark.circle"
+        case .missed: return "moon.zzz"
         }
     }
 
@@ -69,6 +70,7 @@ struct HistoryTab: View {
         case .success: return .green
         case .skipped: return .secondary
         case .failure: return .red
+        case .missed: return .orange
         }
     }
 
@@ -81,6 +83,8 @@ struct HistoryTab: View {
             return strings.skippedUntil(time, Fmt.hhmm(until, language: state.language))
         case .failure(let message):
             return strings.failed(time, message)
+        case .missed(let occurrence):
+            return strings.missedWhileClosed(time, Fmt.dayTime(occurrence, language: state.language))
         }
     }
 

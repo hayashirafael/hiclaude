@@ -11,9 +11,9 @@ Claude sempre abertas — por conta, automaticamente. Swift + SwiftUI
 Os planos Claude (Pro/Max) abrem uma janela de uso de 5h a partir do primeiro
 prompt. Quem usa pesado quer a janela já aberta na hora de sentar para
 trabalhar — não gastar a primeira hora dela aquecendo. O HiClaude renova cada
-conta sozinho, e nunca dispara se já existe uma janela ativa: ele detecta a
-janela corrente passivamente pelos transcripts locais do Claude Code, sem
-nenhuma chamada de rede própria.
+conta sozinho, e a renovação contínua nunca dispara de forma redundante se já
+existe uma janela ativa: ele detecta a janela corrente passivamente pelos
+transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
 
 ## Recursos
 
@@ -23,7 +23,9 @@ nenhuma chamada de rede própria.
   fixos** (horários × dias da semana). Tudo na seção **Horários**
 - **Comandos configuráveis** — um prompt do Claude (modelo, esforço,
   safe-mode, pasta de trabalho), um prompt do Codex (modelo, esforço de
-  raciocínio), ou qualquer comando shell — embutido direto no agendamento
+  raciocínio), ou qualquer comando shell — embutido direto no agendamento.
+  Prompts Claude/Codex abrem no Terminal.app por padrão, para você continuar
+  interagindo na mesma sessão; se desligar essa opção, rodam em modo batch
 - **Multi-conta, Claude e Codex** — as pastas padrão (`~/.claude` e
   `~/.codex`) são sempre detectadas; outras pastas `~/.claude*` entram uma
   única vez, no primeiro launch, e daí em diante novas contas são adicionadas
@@ -95,17 +97,18 @@ além de **Pausar/Retomar**, **Configurações…** e **Sair**.
   edita qualquer um deles
 - **Histórico** — disparos recentes; clique numa linha para ler a resposta
   completa ou o detalhe do erro
-- **Geral** — Iniciar com o Mac, tempo restante na menu bar e Idioma (inglês
-  ou português)
+- **Geral** — Iniciar com o Mac, tempo restante na menu bar, Idioma (inglês
+  ou português) e a versão do app
 
 ## Como funciona
 
-Antes de cada disparo Claude/Codex, o HiClaude lê os transcripts locais da
+Para gerenciar as renovações contínuas, o HiClaude lê os transcripts locais da
 conta (`<conta>/projects/**.jsonl` no Claude, `sessions/**.jsonl` no Codex,
-streaming linha a linha, por `mtime`) e reconstrói a janela de 5h corrente.
-Se houver uma ativa, o disparo é pulado. A janela do Claude começa na hora
-cheia da primeira mensagem (espelhando como o plano contabiliza); a do Codex
-começa no horário exato.
+streaming linha a linha, por `mtime`) e reconstrói a janela de 5h corrente. Se
+houver uma ativa, somente uma renovação contínua redundante é pulada; horários
+fixos sempre executam. A janela do Claude começa na hora cheia da primeira
+mensagem (espelhando como o plano contabiliza); a do Codex começa no horário
+exato.
 
 Um disparo Claude executa:
 
@@ -113,10 +116,20 @@ Um disparo Claude executa:
 claude -p --model <modelo> --effort <esforço> [--safe-mode] "<texto>"
 ```
 
-com `CLAUDE_CONFIG_DIR` fixado na conta alvo. Os padrões — Haiku, esforço
-baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e o comando `1+1` — fazem
-dele o ping mais barato possível que abre a janela. Um disparo Codex executa
-`codex exec [--model <modelo>] --sandbox read-only [-c
+com `CLAUDE_CONFIG_DIR` fixado na conta alvo quando o agendamento está em modo
+batch. Por padrão, Claude/Codex abrem no Terminal.app sem `-p` / `exec`, usando
+o mesmo prompt e ambiente para deixar a sessão interativa aberta; um horário
+fixo interativo abre no horário agendado mesmo quando a conta já tem janela
+ativa. Sem diretório de trabalho definido, as sessões interativas abrem em
+`~/Library/Application Support/HiClaude/workspace` (nunca no home, cujo trust o
+Claude Code só mantém por sessão), e o HiClaude pré-confia a pasta no
+`.claude.json` da conta para o prompt "do you trust this folder?" não aparecer.
+Só uma instância do HiClaude roda por vez: uma segunda aberta avisa e encerra
+(duas instâncias disparariam os agendamentos em dobro).
+Os padrões —
+Haiku, esforço baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e o comando
+`1+1` — fazem dele o ping mais barato possível que abre a janela. Um disparo
+Codex em batch executa `codex exec [--model <modelo>] --sandbox read-only [-c
 model_reasoning_effort=<esforço>] "<texto>"` com `CODEX_HOME` fixado no lugar,
 e tem seu próprio padrão mínimo `1+1` embutido. Quando você deixa o modelo (ou
 o raciocínio) do Codex em branco, o HiClaude omite a flag para o default da
@@ -128,9 +141,11 @@ um `.claude.json` ou subpasta `projects/` indica Claude; um `auth.json` ou
 subpasta `sessions/` indica Codex.
 
 Um agendamento **Contínuo** arma no fim da janela detectada e encadeia a
-próxima, 24/7. Um agendamento de **Horários fixos** dispara nos seus horários ×
-dias da semana; no wake (ou no launch) ele dispara no máximo uma vez para
-recuperar a ocorrência mais recente que perdeu — um sleep longo nunca gera uma
-rajada de disparos atrasados. A antiga renovação *Programada* (âncora diária +
+próxima, 24/7; uma tentativa redundante é pulada enquanto a janela da conta
+ainda está ativa. Um agendamento de **Horários fixos** sempre dispara nos seus
+horários × dias da semana, tanto em batch quanto no modo interativo. No wake (ou
+no launch), horários fixos disparam no máximo uma vez para recuperar a
+ocorrência mais recente que perdeu — um sleep longo nunca gera uma rajada de
+disparos atrasados. A antiga renovação *Programada* (âncora diária +
 0/5/10/15h) é apenas um agendamento de horários fixos com quatro horários após
 a migração.

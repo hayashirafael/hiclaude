@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Dispara tarefas da agenda em horários fixos × dias da semana. Espelho do
 /// padrão do RenewalEngine: timers reais só no app; catch-up de sleep testado
@@ -16,14 +17,26 @@ final class TaskScheduler {
         didSet { onStatus?(nextFires) }
     }
 
+    /// Logger de observabilidade: só decisões e mudanças de estado, nunca o
+    /// caminho quente de um tick periódico.
+    private let log = Logger(subsystem: "dev.hiclaude", category: "agenda")
+
     private let clock: Clock
     private let calendar: Calendar
-    private let dedupeInterval: TimeInterval = 120
     private var tasks: [UUID: ScheduledTask] = [:]
     private var paused = false
     private var timers: [UUID: Timer] = [:]
-    private var lastFireAt: [UUID: Date] = [:]
-    private var pendingRetry: Set<UUID> = []
+    /// Última OCORRÊNCIA da agenda que de fato disparou. Dedupe por identidade
+    /// de ocorrência — nunca por janela de tempo: uma janela wall-clock maior
+    /// que a granularidade de minuto engolia a ocorrência do minuto seguinte a
+    /// um disparo real.
+    private var lastFiredOccurrence: [UUID: Date] = [:]
+    /// Piso do catch-up avançado pela EDIÇÃO da tarefa — nunca alimenta o
+    /// dedupe (editar não é disparar).
+    private var catchUpFloor: [UUID: Date] = [:]
+    /// Disparos descartados pelo guard do controller, com a ocorrência a
+    /// re-tentar na próxima chamada (statusTick, wake, outro fire).
+    private var pendingRetry: [UUID: Date] = [:]
     /// Launch não dispara catch-up: só ocorrências perdidas depois disso contam.
     private let startedAt: Date
 
@@ -50,28 +63,35 @@ final class TaskScheduler {
             for uid in Array(nextFires.keys) where normalized[uid] == nil {
                 nextFires[uid] = nil
             }
-            pendingRetry = pendingRetry.filter { normalized[$0] != nil }
-            // Uid presente antes e depois, mas com conteúdo diferente (ex.:
-            // horário editado): o timer armado aponta para o horário ANTIGO.
-            // Sem isso, `rearm` vê `armed > now` com timer vivo e devolve
-            // cedo — a tarefa dispararia no horário que o usuário removeu.
-            // Invalida só os uids realmente editados (não todo mundo a cada
-            // publish de `$tasks`, o que re-armaria timers não relacionados).
+            pendingRetry = pendingRetry.filter { normalized[$0.key] != nil }
+            // Uid novo ou com conteúdo diferente (ex.: horário editado): o
+            // timer armado aponta para o horário ANTIGO. Sem isso, `rearm` vê
+            // `armed > now` com timer vivo e devolve cedo — a tarefa
+            // dispararia no horário que o usuário removeu. Invalida só os
+            // uids realmente novos/editados (não todo mundo a cada publish de
+            // `$tasks`, o que re-armaria timers não relacionados).
             for (uid, newTask) in normalized {
-                guard let old = previousTasks[uid], old != newTask else { continue }
+                if previousTasks[uid] == newTask { continue }
                 timers[uid]?.invalidate()
                 timers[uid] = nil
                 nextFires[uid] = nil
-                // Avança o piso do catch-up para agora: sem isso, o rearm
-                // poderia achar uma ocorrência do NOVO horário perdida entre
-                // o último disparo real e o momento da edição, e disparar na
-                // hora algo que o usuário acabou de configurar (catch-up
-                // retroativo indesejado). Efeito colateral aceito: uma
-                // segunda edição da MESMA tarefa dentro dos 120s seguintes
-                // não é bloqueada pelo dedupe de `fire()` (que só olha
-                // disparos reais) — editar não é disparar, então não há
-                // nada para dedupar.
-                lastFireAt[uid] = clock.now
+                // Avança o piso do catch-up para o INÍCIO do minuto corrente
+                // (−1s): sem isso, o rearm poderia achar uma ocorrência do
+                // horário recém-criado/editado já perdida e disparar na hora
+                // algo que o usuário acabou de configurar (catch-up retroativo
+                // indesejado — criar/editar não é disparar). O piso não é
+                // `clock.now` cheio porque isso esconderia a ocorrência do
+                // MINUTO corrente: criar às 12:44:20 um agendamento de 12:44
+                // deve disparar 12:44:00 (fluxo de quem testa "agendo pra
+                // agora"). Início-do-minuto−1s pega só o minuto atual, nunca o
+                // anterior. Vai em `catchUpFloor`, nunca em
+                // `lastFiredOccurrence`: o dedupe olha só ocorrências que
+                // dispararam de verdade (e o `max` com ele preserva o
+                // não-refire de uma ocorrência já disparada neste minuto).
+                let floor = (calendar.dateInterval(of: .minute, for: clock.now)?.start
+                    ?? clock.now).addingTimeInterval(-1)
+                catchUpFloor[uid] = floor
+                log.info("configure: uid \(uid.uuidString, privacy: .public) novo/editado, catchUpFloor=\(floor, privacy: .public)")
             }
         }
         await rearmAll()
@@ -87,32 +107,38 @@ final class TaskScheduler {
 
     private func rearm(_ uid: UUID) async {
         guard let task = tasks[uid] else { return }
-        if pendingRetry.contains(uid) {
-            pendingRetry.remove(uid)
-            await fire(task)
+        if let retry = pendingRetry[uid] {
+            pendingRetry[uid] = nil
+            await fire(task, occurrence: retry)
             return
         }
         if let armed = nextFires[uid], armed > clock.now, timers[uid] != nil { return }
         // Armado que passou (sleep engoliu o timer) → dispara já; o skip por
         // sessão ativa fica a cargo do FireController.
         if let armed = nextFires[uid], armed <= clock.now {
+            log.info("rearm: armado vencido \(armed, privacy: .public) dispara ja uid \(uid.uuidString, privacy: .public)")
             timers[uid]?.invalidate(); timers[uid] = nil
             nextFires[uid] = nil
-            await fire(task)
+            await fire(task, occurrence: armed)
             return
         }
-        // Sem armado: ocorrência perdida desde o último disparo (nunca antes
+        // Sem armado: ocorrência perdida desde a última disparada (nunca antes
         // do launch) → catch-up único.
-        let since = max(lastFireAt[uid] ?? startedAt, startedAt)
-        if AgendaMath.lastMissedOccurrence(times: task.times, weekdays: task.weekdays,
-                                           between: since, and: clock.now,
-                                           calendar: calendar) != nil {
-            await fire(task)
+        let since = max(lastFiredOccurrence[uid] ?? startedAt, catchUpFloor[uid] ?? startedAt)
+        if let missed = AgendaMath.lastMissedOccurrence(times: task.times, weekdays: task.weekdays,
+                                                        between: since, and: clock.now,
+                                                        calendar: calendar) {
+            log.info("rearm: catch-up ocorrencia perdida \(missed, privacy: .public) uid \(uid.uuidString, privacy: .public)")
+            await fire(task, occurrence: missed)
             return
         }
         guard let next = AgendaMath.nextOccurrence(times: task.times, weekdays: task.weekdays,
                                                    after: clock.now, calendar: calendar)
-        else { return }
+        else {
+            log.info("rearm: sem ocorrencia futura uid \(uid.uuidString, privacy: .public)")
+            return
+        }
+        log.info("rearm: arma proxima \(next, privacy: .public) uid \(uid.uuidString, privacy: .public)")
         armTimer(uid, at: next)
     }
 
@@ -123,7 +149,7 @@ final class TaskScheduler {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.timers[uid] = nil
-                if let task = self.tasks[uid] { await self.fire(task) }
+                if let task = self.tasks[uid] { await self.fire(task, occurrence: date) }
             }
         }
         t.tolerance = 30
@@ -131,21 +157,29 @@ final class TaskScheduler {
         timers[uid] = t
     }
 
-    private func fire(_ task: ScheduledTask) async {
+    private func fire(_ task: ScheduledTask, occurrence: Date) async {
         guard !paused, tasks[task.uid] != nil else {
-            pendingRetry.remove(task.uid)
+            pendingRetry[task.uid] = nil
             return
         }
-        let now = clock.now
-        if let last = lastFireAt[task.uid], now.timeIntervalSince(last) < dedupeInterval { return }
+        // Dedupe por identidade: a mesma ocorrência nunca dispara duas vezes.
+        // O caminho normal já é protegido pelo `since` do catch-up e pelo
+        // encadeamento do rearm; isto guarda só corridas assíncronas (timer +
+        // wake + statusTick intercalados na mesma ocorrência).
+        if let last = lastFiredOccurrence[task.uid], occurrence <= last {
+            log.debug("fire: dedupe ocorrencia \(occurrence, privacy: .public) ja disparada uid \(task.uid.uuidString, privacy: .public)")
+            return
+        }
         nextFires[task.uid] = nil
         let didRun = await onFire?(task) ?? true
         guard didRun else {
-            pendingRetry.insert(task.uid)
+            log.info("fire: descartado pelo guard do controller, em retry, uid \(task.uid.uuidString, privacy: .public)")
+            pendingRetry[task.uid] = occurrence
             return
         }
-        pendingRetry.remove(task.uid)
-        lastFireAt[task.uid] = now
+        pendingRetry[task.uid] = nil
+        lastFiredOccurrence[task.uid] = occurrence
+        log.info("fire: disparou ocorrencia \(occurrence, privacy: .public) uid \(task.uid.uuidString, privacy: .public)")
         await rearm(task.uid) // encadeia a próxima ocorrência
     }
 }

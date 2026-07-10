@@ -40,6 +40,17 @@ final class MockNotifier: Notifying {
     }
 }
 
+final class MockTerminalLauncher: TerminalLaunching {
+    var result: Result<Void, RunnerError> = .success(())
+    var calls = 0
+    var lastMessage: Message?
+    func launch(_ message: Message) async -> Result<Void, RunnerError> {
+        calls += 1
+        lastMessage = message
+        return result
+    }
+}
+
 @MainActor
 final class FireControllerTests: XCTestCase {
     var state: AppState!
@@ -58,14 +69,14 @@ final class FireControllerTests: XCTestCase {
                                     notifier: notifier, clock: FakeClock(now: now))
     }
 
-    func testJanelaAtivaPulaSemExecutar() async {
+    func testRenovacaoComJanelaAtivaPulaSemExecutar() async {
         let end = now.addingTimeInterval(3600)
         detector.end = end
-        await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
+        await controller.fire(message: AppState.defaultMessage, origin: .renewal)
         XCTAssertEqual(runner.calls, 0)
         XCTAssertEqual(state.lastEvent,
                        FireEvent(date: now, result: .skipped(activeUntil: end),
-                                 messageText: "1+1", account: ".claude", origin: .scheduled))
+                                 messageText: "1+1", account: ".claude", origin: .renewal))
     }
 
     func testSucessoRegistraEventoNoHistorico() async {
@@ -115,7 +126,7 @@ final class FireControllerTests: XCTestCase {
         try FileManager.default.createDirectory(at: conta, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: conta) }
         let msg = Message(text: "oi", kind: .claude, configDir: conta.path)
-        await controller.fire(message: msg, origin: .scheduled)
+        await controller.fire(message: msg, origin: .renewal)
         XCTAssertEqual(detector.lastAccount?.standardizedFileURL, conta.standardizedFileURL)
     }
 
@@ -213,5 +224,109 @@ final class FireControllerTests: XCTestCase {
             return XCTFail("esperava falha no histórico")
         }
         XCTAssertEqual(message, "o comando não respondeu em 60s")
+    }
+
+    func testClaudeComTerminalInterativoAbreTerminalENaoChamaRunnerBatch() async {
+        let terminal = MockTerminalLauncher()
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal,
+                                    notifier: notifier, clock: FakeClock(now: now))
+
+        await controller.fire(message: Message(text: "bom dia", kind: .claude), origin: .scheduled)
+
+        XCTAssertEqual(terminal.calls, 1)
+        XCTAssertEqual(terminal.lastMessage, Message(text: "bom dia", kind: .claude))
+        XCTAssertEqual(runner.calls, 0)
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .success,
+                                 messageText: "bom dia", account: ".claude", origin: .scheduled))
+    }
+
+    func testTerminalInterativoAbreMesmoComJanelaAtiva() async {
+        let terminal = MockTerminalLauncher()
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal,
+                                    notifier: notifier, clock: FakeClock(now: now))
+        let end = now.addingTimeInterval(3600)
+        detector.end = end
+
+        await controller.fire(message: Message(text: "bom dia", kind: .claude), origin: .agenda)
+
+        XCTAssertEqual(terminal.calls, 1)
+        XCTAssertEqual(runner.calls, 0)
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .success,
+                                 messageText: "bom dia", account: ".claude", origin: .agenda))
+    }
+
+    func testAgendaBatchComRespostaExecutaMesmoComJanelaAtiva() async {
+        let terminal = MockTerminalLauncher()
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal,
+                                    notifier: notifier, clock: FakeClock(now: now))
+        detector.end = now.addingTimeInterval(3600)
+        runner.result = .success("Porto Alegre")
+
+        await controller.fire(message: Message(text: "capital do RS", kind: .claude,
+                                               showResponse: true, runInTerminal: false),
+                              origin: .agenda)
+
+        XCTAssertEqual(terminal.calls, 0)
+        XCTAssertEqual(runner.calls, 1)
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .success,
+                                 messageText: "capital do RS", account: ".claude",
+                                 origin: .agenda, response: "Porto Alegre"))
+        XCTAssertEqual(notifier.responses.count, 1)
+        XCTAssertEqual(notifier.responses.first?.response, "Porto Alegre")
+    }
+
+    func testRenovacaoInterativaComJanelaAtivaTambemPula() async {
+        let terminal = MockTerminalLauncher()
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal,
+                                    notifier: notifier, clock: FakeClock(now: now))
+        let end = now.addingTimeInterval(3600)
+        detector.end = end
+
+        await controller.fire(message: Message(text: "1+1", kind: .claude), origin: .renewal)
+
+        XCTAssertEqual(terminal.calls, 0)
+        XCTAssertEqual(runner.calls, 0)
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .skipped(activeUntil: end),
+                                 messageText: "1+1", account: ".claude", origin: .renewal))
+    }
+
+    func testTerminalInterativoDesligadoUsaRunnerBatch() async {
+        let terminal = MockTerminalLauncher()
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal,
+                                    notifier: notifier, clock: FakeClock(now: now))
+
+        await controller.fire(message: Message(text: "bom dia", kind: .claude,
+                                               runInTerminal: false),
+                              origin: .scheduled)
+
+        XCTAssertEqual(terminal.calls, 0)
+        XCTAssertEqual(runner.calls, 1)
+        XCTAssertEqual(runner.lastMessage, Message(text: "bom dia", kind: .claude,
+                                                   runInTerminal: false))
+    }
+
+    func testFalhaAoAbrirTerminalRegistraFalhaENotifica() async {
+        let terminal = MockTerminalLauncher()
+        terminal.result = .failure(.failed("Terminal nao abriu"))
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal,
+                                    notifier: notifier, clock: FakeClock(now: now))
+
+        await controller.fire(message: Message(text: "bom dia", kind: .claude), origin: .scheduled)
+
+        XCTAssertEqual(runner.calls, 0)
+        XCTAssertEqual(state.lastEvent,
+                       FireEvent(date: now, result: .failure(message: "Terminal nao abriu"),
+                                 messageText: "bom dia", account: ".claude", origin: .scheduled))
+        XCTAssertEqual(notifier.messages, ["Terminal nao abriu"])
     }
 }

@@ -51,6 +51,119 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(decoded, event)
     }
 
+    func testFireResultMissedRoundtripCodable() throws {
+        let event = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000),
+                              result: .missed(occurrence: Date(timeIntervalSince1970: 1_782_990_000)))
+        let data = try JSONEncoder().encode(event)
+        let decoded = try JSONDecoder().decode(FireEvent.self, from: data)
+        XCTAssertEqual(decoded, event)
+    }
+
+    /// Histórico persistido por versões SEM o caso `missed` continua
+    /// decodificando — o Codable sintetizado decodifica por chave presente.
+    func testHistoricoLegadoDecodificaComCasoMissedNoEnum() throws {
+        let legado = """
+        [{"date":773190000,"result":{"success":{}}},
+         {"date":773190060,"result":{"skipped":{"activeUntil":773200000}}},
+         {"date":773190120,"result":{"failure":{"message":"exit 1"}}}]
+        """.data(using: .utf8)!
+        let eventos = try JSONDecoder().decode([FireEvent].self, from: legado)
+        XCTAssertEqual(eventos.count, 3)
+        XCTAssertEqual(eventos[0].result, .success)
+        XCTAssertEqual(eventos[2].result, .failure(message: "exit 1"))
+    }
+
+    // MARK: - Heartbeat e ocorrências perdidas com o app fechado
+
+    private var calSP: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "America/Sao_Paulo")!
+        return c
+    }
+
+    private func dateSP(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int) -> Date {
+        calSP.date(from: DateComponents(year: y, month: mo, day: d, hour: h, minute: mi))!
+    }
+
+    private func fixedTask(times: [Int], weekdays: Set<Int> = Set(1...7),
+                           enabled: Bool = true,
+                           repetition: ScheduledTask.Repetition = .fixed) -> ScheduledTask {
+        var t = ScheduledTask(uid: UUID(), repetition: repetition,
+                              times: times, weekdays: weekdays)
+        t.enabled = enabled
+        return t
+    }
+
+    func testRecordAlivePersisteHeartbeatParaOProximoLaunch() {
+        let d = freshDefaults()
+        let s1 = AppState(defaults: d)
+        XCTAssertNil(s1.previousAliveAt) // primeiro launch de todos
+        let t = dateSP(2026, 7, 9, 10, 0)
+        s1.recordAlive(now: t)
+        let s2 = AppState(defaults: d)
+        XCTAssertEqual(s2.previousAliveAt, t)
+    }
+
+    func testRecordEventAvancaHeartbeat() {
+        let d = freshDefaults()
+        let s1 = AppState(defaults: d)
+        let when = dateSP(2026, 7, 9, 11, 0)
+        s1.recordEvent(FireEvent(date: when, result: .success))
+        let s2 = AppState(defaults: d)
+        XCTAssertEqual(s2.previousAliveAt, when)
+    }
+
+    func testMissedWhileClosedRegistraEventoPerdido() {
+        let d = freshDefaults()
+        d.set(dateSP(2026, 7, 8, 23, 0), forKey: "lastAliveAt") // app fechado às 23:00 de ontem
+        let s = AppState(defaults: d)
+        s.tasks = [fixedTask(times: [480])] // 08:00 diário
+        s.recordMissedWhileClosed(now: dateSP(2026, 7, 9, 9, 0), calendar: calSP)
+        guard case .missed(let occurrence) = s.history.first?.result else {
+            return XCTFail("esperava evento .missed, veio \(String(describing: s.history.first))")
+        }
+        XCTAssertEqual(occurrence, dateSP(2026, 7, 9, 8, 0))
+        XCTAssertEqual(s.history.first?.origin, .agenda)
+        XCTAssertEqual(s.history.first?.account, ".claude") // conta padrão do provider
+    }
+
+    func testMissedWhileClosedPrimeiroLaunchNaoRegistra() {
+        let s = AppState(defaults: freshDefaults()) // sem heartbeat semeado
+        s.tasks = [fixedTask(times: [480])]
+        s.recordMissedWhileClosed(now: dateSP(2026, 7, 9, 9, 0), calendar: calSP)
+        XCTAssertTrue(s.history.isEmpty)
+    }
+
+    func testMissedWhileClosedSemOcorrenciaNoIntervaloNaoRegistra() {
+        let d = freshDefaults()
+        d.set(dateSP(2026, 7, 9, 8, 55), forKey: "lastAliveAt") // fechado por 5 min
+        let s = AppState(defaults: d)
+        s.tasks = [fixedTask(times: [480])] // 08:00 — fora do intervalo
+        s.recordMissedWhileClosed(now: dateSP(2026, 7, 9, 9, 0), calendar: calSP)
+        XCTAssertTrue(s.history.isEmpty)
+    }
+
+    func testMissedWhileClosedNoMaximoUmEventoPorTarefaPorLaunch() {
+        let d = freshDefaults()
+        d.set(dateSP(2026, 7, 8, 23, 0), forKey: "lastAliveAt")
+        let s = AppState(defaults: d)
+        s.tasks = [fixedTask(times: [480, 500])] // 08:00 e 08:20 perdidas
+        s.recordMissedWhileClosed(now: dateSP(2026, 7, 9, 9, 0), calendar: calSP)
+        XCTAssertEqual(s.history.count, 1) // só a mais recente (catch-up único)
+        s.recordMissedWhileClosed(now: dateSP(2026, 7, 9, 9, 5), calendar: calSP)
+        XCTAssertEqual(s.history.count, 1) // segunda chamada não duplica
+    }
+
+    func testMissedWhileClosedIgnoraDesabilitadaEContinua() {
+        let d = freshDefaults()
+        d.set(dateSP(2026, 7, 8, 23, 0), forKey: "lastAliveAt")
+        let s = AppState(defaults: d)
+        s.tasks = [fixedTask(times: [480], enabled: false),
+                   fixedTask(times: [480], repetition: .continuous)]
+        s.recordMissedWhileClosed(now: dateSP(2026, 7, 9, 9, 0), calendar: calSP)
+        XCTAssertTrue(s.history.isEmpty)
+    }
+
     /// Sem conta selecionada: descoberta sempre inclui a conta padrão embutida.
     func testDiscoverAccountsSempreIncluiDefault() {
         let state = AppState(defaults: freshDefaults())
@@ -115,6 +228,26 @@ final class AppStateTests: XCTestCase {
         let msg = try JSONDecoder().decode(Message.self, from: legacyJSON)
         XCTAssertNil(msg.showResponse)
         XCTAssertFalse(msg.resolvedShowResponse)
+    }
+
+    func testRunInTerminalLegadoNilEDefaultTrueParaClaudeECodex() throws {
+        let claudeJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
+        let codexJSON = #"{"text":"1+1","kind":"codex"}"#.data(using: .utf8)!
+        let claude = try JSONDecoder().decode(Message.self, from: claudeJSON)
+        let codex = try JSONDecoder().decode(Message.self, from: codexJSON)
+        XCTAssertNil(claude.runInTerminal)
+        XCTAssertNil(codex.runInTerminal)
+        XCTAssertTrue(claude.resolvedRunInTerminal)
+        XCTAssertTrue(codex.resolvedRunInTerminal)
+    }
+
+    func testRunInTerminalIgnoradoParaShell() throws {
+        let msg = Message(text: "echo oi", kind: .shell, runInTerminal: true)
+        XCTAssertFalse(msg.resolvedRunInTerminal)
+        let data = try JSONEncoder().encode(msg)
+        let decoded = try JSONDecoder().decode(Message.self, from: data)
+        XCTAssertEqual(decoded, msg)
+        XCTAssertFalse(decoded.resolvedRunInTerminal)
     }
 
     func testIdiomaPadraoEhIngles() {

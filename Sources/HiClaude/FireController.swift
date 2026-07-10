@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 protocol Notifying {
     func notifyFailure(title: String, message: String)
@@ -10,23 +11,28 @@ struct NullNotifier: Notifying {
     func notifyResponse(title: String, response: String) {}
 }
 
-/// Orquestra um disparo: detector → (pula | executa) → registra em AppState.
+/// Orquestra um disparo: renovação redundante pode pular; demais origens
+/// executam e registram o resultado em AppState.
 @MainActor
 final class FireController {
     private let state: AppState
     private let detector: SessionDetecting
     private let runner: CommandRunning
+    private let terminalLauncher: TerminalLaunching?
     private let notifier: Notifying
     private let clock: Clock
     private var isRunning = false
+    private let log = Logger(subsystem: "dev.hiclaude", category: "fire")
 
     static let responseLimit = 4000
 
     init(state: AppState, detector: SessionDetecting, runner: CommandRunning,
+         terminalLauncher: TerminalLaunching? = nil,
          notifier: Notifying, clock: Clock = SystemClock()) {
         self.state = state
         self.detector = detector
         self.runner = runner
+        self.terminalLauncher = terminalLauncher
         self.notifier = notifier
         self.clock = clock
     }
@@ -38,24 +44,57 @@ final class FireController {
     /// nunca aconteceu de verdade (ver RenewalEngine.renew).
     @discardableResult
     func fire(message: Message, origin: FireOrigin) async -> Bool {
-        guard !isRunning else { return false } // disparo em andamento → ignora o novo
+        guard !isRunning else {
+            // Descarte silencioso: outro disparo está em andamento e o novo é
+            // engolido. Logamos como erro para tornar visível esse "silenciador".
+            log.error("fire: DESCARTADO por isRunning (outro disparo em andamento) origin=\(String(describing: origin), privacy: .public) msg=\(message.text, privacy: .private)")
+            return false // disparo em andamento → ignora o novo
+        }
         isRunning = true
         defer { isRunning = false }
 
         let accountDir = state.effectiveConfigDir(for: message)
         let account = accountDir.lastPathComponent
+        // Passou o guard: este disparo assume a execução (isRunning=true).
+        log.info("fire: inicio origin=\(String(describing: origin), privacy: .public) conta=\(account, privacy: .public) msg=\(message.text, privacy: .private)")
 
-        // O skip por janela ativa vale para os kinds que abrem janela (Claude e
-        // Codex). Comando cru sempre roda no horário.
-        if message.kind != .shell,
+        // Só a renovação contínua evita um disparo redundante. Horários fixos
+        // são compromissos de execução (inclusive no batch com resposta) e
+        // devem rodar mesmo quando a conta já tem uma janela ativa.
+        if origin == .renewal, message.kind != .shell,
            let end = await detector.activeWindowEnd(account: accountDir) {
+            log.info("fire: renovacao pulada (janela ativa ate \(String(describing: end), privacy: .public)) conta=\(account, privacy: .public)")
             state.recordEvent(FireEvent(date: clock.now, result: .skipped(activeUntil: end),
                                         messageText: message.text, account: account, origin: origin))
             return true
         }
 
+        if message.resolvedRunInTerminal, let terminalLauncher {
+            switch await terminalLauncher.launch(message) {
+            case .success:
+                log.info("fire: launch terminal ok conta=\(account, privacy: .public)")
+                state.cliFound[message.kind == .codex ? .codex : .claude] = true
+                state.recordEvent(FireEvent(date: clock.now, result: .success,
+                                            messageText: message.text, account: account,
+                                            origin: origin))
+            case .failure(let error):
+                if case .cliNotFound(let provider) = error { state.cliFound[provider] = false }
+                let summary = error.userMessage(language: state.language)
+                log.error("fire: launch terminal falhou: \(summary, privacy: .public)")
+                state.recordEvent(FireEvent(date: clock.now, result: .failure(message: summary),
+                                            messageText: message.text, account: account,
+                                            origin: origin))
+                if origin != .manual {
+                    notifier.notifyFailure(title: state.strings.notificationFailureTitle,
+                                           message: summary)
+                }
+            }
+            return true
+        }
+
         switch await runner.run(message) {
         case .success(let output):
+            log.info("fire: runner ok conta=\(account, privacy: .public)")
             state.cliFound[message.kind == .codex ? .codex : .claude] = true
             let response = message.resolvedShowResponse && !output.isEmpty
                 ? String(output.prefix(Self.responseLimit)) : nil
@@ -76,6 +115,7 @@ final class FireController {
             } else {
                 summary = error.userMessage(language: state.language)
             }
+            log.error("fire: runner falhou: \(summary, privacy: .public)")
             state.recordEvent(FireEvent(date: clock.now, result: .failure(message: summary),
                                         messageText: message.text, account: account,
                                         origin: origin, response: detail))

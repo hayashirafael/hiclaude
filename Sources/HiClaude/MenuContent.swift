@@ -72,6 +72,10 @@ struct MenuContent: View {
         }
         Divider()
         Button(strings.quit) { NSApplication.shared.terminate(nil) }
+        Divider()
+        Text("\(strings.version) \(AppVersion.current)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
     private var headerLine: String {
@@ -122,6 +126,7 @@ struct MenuContent: View {
         case .success: return "✓"
         case .skipped: return "↩"
         case .failure: return "✗"
+        case .missed: return "◌"
         }
     }
 }
