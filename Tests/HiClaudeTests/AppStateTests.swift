@@ -479,4 +479,21 @@ final class AppStateTests: XCTestCase {
         state.registerAccount(AppState.defaultCodexConfigDir)
         XCTAssertTrue(state.registeredAccounts.isEmpty)
     }
+
+    func testTasksPersistemEDecodificam() throws {
+        let defaults = freshDefaults()
+        let state = AppState(defaults: defaults)
+        let task = ScheduledTask(uid: UUID(), name: "bom dia", commandUID: nil,
+                                 times: [8 * 60], weekdays: [2, 3, 4, 5, 6], enabled: true)
+        state.tasks = [task]
+        let reloaded = AppState(defaults: defaults)
+        XCTAssertEqual(reloaded.tasks, [task])
+    }
+
+    func testResolvedTaskMessageComandoApagadoCaiNoDefault() {
+        let state = AppState(defaults: freshDefaults())
+        let task = ScheduledTask(uid: UUID(), name: nil, commandUID: UUID(), // uid inexistente
+                                 times: [600], weekdays: [1], enabled: true)
+        XCTAssertEqual(state.resolvedTaskMessage(for: task), AppState.defaultMessage)
+    }
 }

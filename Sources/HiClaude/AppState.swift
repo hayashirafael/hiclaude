@@ -125,6 +125,23 @@ struct AccountRenewal: Codable, Equatable {
     var messageUID: UUID? = nil
 }
 
+/// Uma tarefa da agenda: comando disparado em horários fixos × dias da
+/// semana, independente da renovação das contas.
+struct ScheduledTask: Codable, Identifiable, Equatable {
+    var uid: UUID
+    /// Rótulo opcional; sem nome, a UI exibe o texto do comando.
+    var name: String? = nil
+    /// Comando da biblioteca; nil = hi padrão (1+1 Claude).
+    var commandUID: UUID? = nil
+    /// Minutos desde a meia-noite, 1 ou mais (08:00 → 480).
+    var times: [Int]
+    /// Dias da semana no padrão do Calendar (1 = domingo … 7 = sábado).
+    var weekdays: Set<Int>
+    var enabled: Bool = true
+
+    var id: UUID { uid }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var paused: Bool { didSet { defaults.set(paused, forKey: Keys.paused) } }
@@ -183,6 +200,11 @@ final class AppState: ObservableObject {
 
     @Published var favorites: [Message] {
         didSet { defaults.set(try? JSONEncoder().encode(favorites), forKey: Keys.favorites) }
+    }
+
+    /// Tarefas da agenda (seção Horários).
+    @Published var tasks: [ScheduledTask] {
+        didSet { defaults.set(try? JSONEncoder().encode(tasks), forKey: Keys.tasks) }
     }
 
     /// Diretório de config padrão do Claude Code (`~/.claude`).
@@ -312,6 +334,12 @@ final class AppState: ObservableObject {
         return Self.defaultHi(for: provider(for: dir))
     }
 
+    /// Comando de uma tarefa: o referenciado, ou o hi padrão se foi apagado.
+    func resolvedTaskMessage(for task: ScheduledTask) -> Message {
+        if let uid = task.commandUID, let msg = message(withUID: uid) { return msg }
+        return Self.defaultMessage
+    }
+
     /// Cache de sessão do e-mail por conta (evita reler o .claude.json a cada render).
     private var emailCache: [String: String?] = [:]
 
@@ -407,6 +435,7 @@ final class AppState: ObservableObject {
         static let aliases = "aliases"
         static let renewals = "renewals"
         static let registeredAccounts = "registeredAccounts"
+        static let tasks = "tasks"
     }
 
     init(defaults: UserDefaults = .standard,
@@ -426,6 +455,12 @@ final class AppState: ObservableObject {
         self.favorites = Self.loadFavorites(defaults)
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         self.renewals = Self.loadRenewals(defaults)
+        if let data = defaults.data(forKey: Keys.tasks),
+           let decoded = try? JSONDecoder().decode([ScheduledTask].self, from: data) {
+            self.tasks = decoded
+        } else {
+            self.tasks = []
+        }
         if let stored = defaults.array(forKey: Keys.registeredAccounts) as? [String] {
             self.registeredAccounts = stored
         } else {
