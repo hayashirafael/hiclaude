@@ -117,6 +117,28 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(msg.resolvedShowResponse)
     }
 
+    func testIdiomaPadraoEhIngles() {
+        let state = AppState(defaults: freshDefaults())
+        XCTAssertEqual(state.language, .english)
+        XCTAssertEqual(state.strings.settingsTitle, "Settings")
+    }
+
+    func testIdiomaPersiste() {
+        let defaults = freshDefaults()
+        let state = AppState(defaults: defaults)
+        state.language = .portuguese
+        let restored = AppState(defaults: defaults)
+        XCTAssertEqual(restored.language, .portuguese)
+        XCTAssertEqual(restored.strings.settingsTitle, "Configurações")
+    }
+
+    func testIdiomaInvalidoVoltaParaIngles() {
+        let defaults = freshDefaults()
+        defaults.set("fr", forKey: "language")
+        let state = AppState(defaults: defaults)
+        XCTAssertEqual(state.language, .english)
+    }
+
     func testHistoricoCapEm20MaisRecentePrimeiro() {
         let state = AppState(defaults: freshDefaults())
         for i in 0..<25 {
@@ -488,5 +510,61 @@ final class AppStateTests: XCTestCase {
         candidato.uid = UUID()
         candidato.repetition = .fixed
         XCTAssertFalse(state.hasContinuousConflict(candidato))
+    }
+
+    func testSetTaskEnabledRecusaSegundoContinuoNaMesmaConta() throws {
+        let state = AppState(defaults: freshDefaults())
+        let conta = try makeAccountDir(signature: ".claude.json")
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = conta.path
+        let habilitado = ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous)
+        var desabilitado = ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous)
+        desabilitado.enabled = false
+        let fixo = ScheduledTask(uid: UUID(), command: cmd, times: [480], weekdays: Set(1...7))
+        state.tasks = [habilitado, desabilitado, fixo]
+
+        // Habilitar um 2º contínuo na mesma conta é recusado; o task fica off.
+        XCTAssertFalse(state.setTaskEnabled(desabilitado, true))
+        XCTAssertFalse(state.tasks.first { $0.uid == desabilitado.uid }!.enabled)
+        // Habilitar um fixo na mesma conta é permitido.
+        XCTAssertTrue(state.setTaskEnabled(fixo, true))
+        // Desabilitar qualquer um é sempre permitido.
+        XCTAssertTrue(state.setTaskEnabled(habilitado, false))
+        XCTAssertFalse(state.tasks.first { $0.uid == habilitado.uid }!.enabled)
+        // Com o 1º já off, o 2º contínuo pode ligar.
+        XCTAssertTrue(state.setTaskEnabled(desabilitado, true))
+    }
+
+    func testRecordMissingFolderContinuousGravaUmaVezPorAgendamento() throws {
+        let state = AppState(defaults: freshDefaults())
+        var cmd = Message(text: "1+1", kind: .claude)
+        cmd.configDir = "/tmp/nao-existe-\(UUID().uuidString)"
+        state.tasks = [ScheduledTask(uid: UUID(), command: cmd, repetition: .continuous)]
+
+        state.recordMissingFolderContinuous()
+        XCTAssertEqual(state.history.count, 1)
+        guard case .failure(let msg) = state.history.first?.result else {
+            return XCTFail("esperava falha no histórico")
+        }
+        XCTAssertEqual(msg, state.strings.accountFolderMissingEvent)
+        XCTAssertEqual(state.history.first?.origin, .renewal)
+        // Idempotente: reconfigure repetido não duplica.
+        state.recordMissingFolderContinuous()
+        XCTAssertEqual(state.history.count, 1)
+    }
+
+    func testRecordMissingFolderContinuousIgnoraPastaExistenteEFixoEShell() throws {
+        let state = AppState(defaults: freshDefaults())
+        let conta = try makeAccountDir(signature: ".claude.json")
+        var claudeOk = Message(text: "1+1", kind: .claude); claudeOk.configDir = conta.path
+        var claudeFixo = Message(text: "1+1", kind: .claude)
+        claudeFixo.configDir = "/tmp/nao-existe-\(UUID().uuidString)"
+        state.tasks = [
+            ScheduledTask(uid: UUID(), command: claudeOk, repetition: .continuous),
+            ScheduledTask(uid: UUID(), command: claudeFixo, times: [480], weekdays: Set(1...7)),
+            ScheduledTask(uid: UUID(), command: Message(text: "ls", kind: .shell), repetition: .continuous),
+        ]
+        state.recordMissingFolderContinuous()
+        XCTAssertTrue(state.history.isEmpty)
     }
 }

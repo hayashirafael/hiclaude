@@ -17,19 +17,20 @@ network calls of its own.
 
 ## Features
 
-- **Unified agendamentos** — one concept for everything scheduled. Each
-  agendamento carries an embedded command and a repetition: **Continuous**
+- **Unified schedules** — one concept for everything scheduled. Each
+  schedule carries an embedded command and a repetition: **Continuous**
   (chains 5-hour windows 24/7 — the old automatic renewal) or **Fixed times**
-  (times × weekdays). Managed in the **Horários** section
+  (times × weekdays). Managed in the **Schedules** section
 - **Configurable commands** — a Claude prompt (model, effort, safe-mode,
   working directory), a Codex prompt (model, reasoning effort), or any shell
-  command — embedded directly in the agendamento
+  command — embedded directly in the schedule
 - **Multi-account, Claude and Codex** — the default dirs (`~/.claude` and
   `~/.codex`) are always detected; other `~/.claude*` dirs are picked up once,
   on first launch, and from then on you add accounts anytime via
   "Add account…" — shows the logged-in email, supports custom aliases
 - **History** — recent dispatches with status and expandable response (full
   error detail on failures)
+- **Language** — English by default, with a Portuguese option in Settings
 - Global **Pause/Resume** and optional **Launch at Login**
 
 ## Requirements
@@ -78,22 +79,23 @@ HiClaude lives in the menu bar (no Dock icon). The icon is filled while a
 window is active, shows `!` on error, and fades when paused; optionally it
 also shows the time until the next window expires.
 
-The menu lists each account with an active agendamento — its next dispatch
+The menu lists each account with an active schedule — its next dispatch
 time and last result; a line for the next task (if any); plus
 **Pause/Resume**, **Settings…** and **Quit**.
 
 **Settings** is a sidebar window with four sections:
 
 - **Accounts** — informative: for each account, the logged-in identity /
-  alias, provider, local folder, and how many active agendamentos target it.
+  alias, provider, local folder, and how many active schedules target it.
   Add or remove accounts here
-- **Horários** — the single list of agendamentos. Each has a name, a type
+- **Schedules** — the single list of schedules. Each has a name, a type
   (Claude / Codex / shell command) with its own config, an account, and a
   repetition — **Continuous** (a 5-hour-window renewal, max one per account)
   or **Fixed times** (times × weekdays). One form creates or edits any of them
 - **History** — recent dispatches; click a row to read the full response or
   error detail
-- **General** — Launch at Login, time remaining in the menu bar
+- **General** — Launch at Login, time remaining in the menu bar, and Language
+  (English or Portuguese)
 
 ## How it works
 
@@ -124,9 +126,9 @@ Which account is Claude vs. Codex is inferred from folder content, not name:
 a `.claude.json` or `projects/` subfolder means Claude; an `auth.json` or
 `sessions/` subfolder means Codex.
 
-A **Continuous** agendamento arms at the end of the detected window and chains
-the next one, 24/7. A **Fixed times** agendamento fires at its times ×
+A **Continuous** schedule arms at the end of the detected window and chains
+the next one, 24/7. A **Fixed times** schedule fires at its times ×
 weekdays; on wake (or launch) it fires at most once to catch up the most
 recent occurrence it missed — a long sleep never triggers a burst of
 backlogged fires. The old *Scheduled* renewal (daily anchor + 0/5/10/15h) is
-simply a fixed-times agendamento with four times after migration.
+simply a fixed-times schedule with four times after migration.

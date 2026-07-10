@@ -214,6 +214,13 @@ final class AppState: ObservableObject {
     @Published var showRemainingInBar: Bool {
         didSet { defaults.set(showRemainingInBar, forKey: Keys.showRemainingInBar) }
     }
+
+    @Published var language: AppLanguage {
+        didSet { defaults.set(language.rawValue, forKey: Keys.language) }
+    }
+
+    var strings: L10n { L10n(language: language) }
+
     /// Seção selecionada na janela de Configurações (deep-link a partir do menu).
     @Published var settingsSection: SettingsSection = .contas
 
@@ -385,6 +392,45 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Habilita/desabilita um agendamento. Recusa (retorna false) apenas quando
+    /// habilitar criaria um segundo contínuo habilitado na mesma conta — o
+    /// mesmo guard do formulário, agora também no toggle da lista.
+    @discardableResult
+    func setTaskEnabled(_ task: ScheduledTask, _ on: Bool) -> Bool {
+        guard let idx = tasks.firstIndex(where: { $0.uid == task.uid }) else { return false }
+        if on, tasks[idx].repetition == .continuous, hasContinuousConflict(tasks[idx]) {
+            return false
+        }
+        tasks[idx].enabled = on
+        return true
+    }
+
+    /// uids de contínuos com pasta ausente já reportados — evita duplicar o
+    /// evento a cada reconfigure.
+    private var reportedMissingContinuous: Set<UUID> = []
+
+    /// Grava no histórico, uma vez por agendamento, a falha "pasta não
+    /// encontrada" de cada contínuo habilitado cujo configDir aponta para uma
+    /// pasta que sumiu. Paridade com o caminho de horários fixos
+    /// (`taskScheduler.onFire`), que já registra essa falha ao disparar.
+    func recordMissingFolderContinuous() {
+        var stillMissing: Set<UUID> = []
+        for task in tasks where task.enabled && task.repetition == .continuous {
+            let cmd = task.resolvedCommand
+            guard cmd.kind != .shell, let path = cmd.configDir, !path.isEmpty,
+                  accountDir(for: task) == nil else { continue }
+            stillMissing.insert(task.uid)
+            if !reportedMissingContinuous.contains(task.uid) {
+                recordEvent(FireEvent(
+                    date: Date(), result: .failure(message: strings.accountFolderMissingEvent),
+                    messageText: cmd.text,
+                    account: URL(fileURLWithPath: path).lastPathComponent,
+                    origin: .renewal))
+            }
+        }
+        reportedMissingContinuous = stillMissing
+    }
+
     /// Cache de sessão do e-mail por conta (evita reler o .claude.json a cada render).
     private var emailCache: [String: String?] = [:]
 
@@ -438,6 +484,7 @@ final class AppState: ObservableObject {
         static let renewals = "renewals"
         static let registeredAccounts = "registeredAccounts"
         static let tasks = "tasks"
+        static let language = "language"
     }
 
     init(defaults: UserDefaults = .standard,
@@ -454,6 +501,12 @@ final class AppState: ObservableObject {
             self.history = []
         }
         self.showRemainingInBar = defaults.bool(forKey: Keys.showRemainingInBar)
+        if let rawLanguage = defaults.string(forKey: Keys.language),
+           let language = AppLanguage(rawValue: rawLanguage) {
+            self.language = language
+        } else {
+            self.language = .english
+        }
         let legacyFavorites = Self.loadLegacyFavorites(defaults)
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         var loadedTasks: [ScheduledTask] = []

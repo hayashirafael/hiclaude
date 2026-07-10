@@ -4,12 +4,10 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case contas, horarios, historico, geral
     var id: String { rawValue }
     var title: String {
-        switch self {
-        case .contas: return "Contas"
-        case .horarios: return "Horários"
-        case .historico: return "Histórico"
-        case .geral: return "Geral"
-        }
+        title(language: .english)
+    }
+    func title(language: AppLanguage) -> String {
+        L10n(language: language).settingsSectionTitle(self)
     }
     var icon: String {
         switch self {
@@ -28,7 +26,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(SettingsSection.allCases, selection: $state.settingsSection) { section in
-                Label(section.title, systemImage: section.icon).tag(section)
+                Label(section.title(language: state.language), systemImage: section.icon).tag(section)
             }
             .navigationSplitViewColumnWidth(180)
         } detail: {

@@ -29,10 +29,14 @@ final class MockRunner: CommandRunning {
 
 final class MockNotifier: Notifying {
     var messages: [String] = []
+    var titles: [String] = []
     var responses: [(messageText: String, response: String)] = []
-    func notifyFailure(message: String) { messages.append(message) }
-    func notifyResponse(messageText: String, response: String) {
-        responses.append((messageText, response))
+    func notifyFailure(title: String, message: String) {
+        titles.append(title)
+        messages.append(message)
+    }
+    func notifyResponse(title: String, response: String) {
+        responses.append((title, response))
     }
 }
 
@@ -80,6 +84,7 @@ final class FireControllerTests: XCTestCase {
         XCTAssertEqual(state.lastEvent,
                        FireEvent(date: now, result: .failure(message: "sem rede"),
                                  messageText: "1+1", account: ".claude", origin: .scheduled))
+        XCTAssertEqual(notifier.titles, ["HiClaude: run failed"])
         XCTAssertEqual(notifier.messages, ["sem rede"])
     }
 
@@ -132,7 +137,7 @@ final class FireControllerTests: XCTestCase {
         await controller.fire(message: msg, origin: .scheduled)
         XCTAssertEqual(state.lastEvent?.response, "resposta do claude")
         XCTAssertEqual(notifier.responses.count, 1)
-        XCTAssertEqual(notifier.responses.first?.messageText, "resumo")
+        XCTAssertEqual(notifier.responses.first?.messageText, "HiClaude: resumo")
     }
 
     func testRespostaIgnoradaQuandoDesligado() async {
@@ -195,7 +200,18 @@ final class FireControllerTests: XCTestCase {
         guard case .failure(let message) = state.history.first?.result else {
             return XCTFail("esperava falha no histórico")
         }
-        XCTAssertEqual(message, "o comando não respondeu em 60s")
+        XCTAssertEqual(message, "the command did not respond within 60s")
         XCTAssertNil(state.history.first?.response)
+    }
+
+    func testErroEstruturadoUsaIdiomaPortuguesQuandoSelecionado() async {
+        state.language = .portuguese
+        runner.result = .failure(.timeout)
+        await controller.fire(message: Message(text: "1+1", kind: .claude), origin: .manual)
+
+        guard case .failure(let message) = state.history.first?.result else {
+            return XCTFail("esperava falha no histórico")
+        }
+        XCTAssertEqual(message, "o comando não respondeu em 60s")
     }
 }

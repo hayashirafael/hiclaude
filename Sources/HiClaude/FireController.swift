@@ -1,13 +1,13 @@
 import Foundation
 
 protocol Notifying {
-    func notifyFailure(message: String)
-    func notifyResponse(messageText: String, response: String)
+    func notifyFailure(title: String, message: String)
+    func notifyResponse(title: String, response: String)
 }
 
 struct NullNotifier: Notifying {
-    func notifyFailure(message: String) {}
-    func notifyResponse(messageText: String, response: String) {}
+    func notifyFailure(title: String, message: String) {}
+    func notifyResponse(title: String, response: String) {}
 }
 
 /// Orquestra um disparo: detector → (pula | executa) → registra em AppState.
@@ -63,7 +63,8 @@ final class FireController {
                                         messageText: message.text, account: account,
                                         origin: origin, response: response))
             if let response {
-                notifier.notifyResponse(messageText: message.text, response: response)
+                notifier.notifyResponse(title: state.strings.notificationResponseTitle(message.text),
+                                        response: response)
             }
         case .failure(let error):
             if case .cliNotFound(let provider) = error { state.cliFound[provider] = false }
@@ -73,12 +74,14 @@ final class FireController {
                 summary = Self.failureSummary(full)
                 if full != summary { detail = String(full.prefix(Self.responseLimit)) }
             } else {
-                summary = error.userMessage
+                summary = error.userMessage(language: state.language)
             }
             state.recordEvent(FireEvent(date: clock.now, result: .failure(message: summary),
                                         messageText: message.text, account: account,
                                         origin: origin, response: detail))
-            if origin != .manual { notifier.notifyFailure(message: summary) }
+            if origin != .manual {
+                notifier.notifyFailure(title: state.strings.notificationFailureTitle, message: summary)
+            }
         }
         return true
     }

@@ -24,32 +24,34 @@ struct AgendamentoFormSheet: View {
     @State private var weekdays: Set<Int> = Set(1...7)
     @State private var enabled = true
 
-    private static let dayLetters = ["D", "S", "T", "Q", "Q", "S", "S"]
+    private var strings: L10n { state.strings }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(editing == nil ? "Novo agendamento" : "Editar agendamento").font(.headline)
-            TextField("Nome (opcional)", text: $name)
-            TextField("Mensagem ou comando", text: $text)
-            Picker("Tipo", selection: $kind) {
+            Text(editing == nil ? strings.newSchedule : strings.editSchedule).font(.headline)
+            TextField(strings.nameOptional, text: $name)
+            TextField(strings.messageOrCommand, text: $text)
+            Picker(strings.type, selection: $kind) {
                 Text("Claude").tag(Message.Kind.claude)
                 Text("Codex").tag(Message.Kind.codex)
-                Text("Comando").tag(Message.Kind.shell)
+                Text(strings.command).tag(Message.Kind.shell)
             }
             .pickerStyle(.segmented)
             if kind == .claude {
                 ClaudeConfigForm(model: $model, effort: $effort, safeMode: $safeMode,
                                  configDir: $account, workingDir: $workingDir,
                                  accounts: state.accounts(for: .claude),
-                                 accountLabel: { state.label(for: $0) })
+                                 accountLabel: { state.label(for: $0) },
+                                 strings: strings)
             }
             if kind == .codex {
                 CodexConfigForm(model: $codexModel, reasoning: $codexReasoning,
                                 configDir: $account, workingDir: $workingDir,
                                 accounts: state.accounts(for: .codex),
-                                accountLabel: { state.label(for: $0) })
+                                accountLabel: { state.label(for: $0) },
+                                strings: strings)
             }
-            Toggle("Mostrar resposta (histórico + notificação)", isOn: $showResponse)
+            Toggle(strings.showResponse, isOn: $showResponse)
                 .toggleStyle(.checkbox)
             Divider()
             repetitionPicker
@@ -57,20 +59,20 @@ struct AgendamentoFormSheet: View {
                 timesEditor
                 weekdaysEditor
             } else {
-                Text("Renova ao fim de cada janela de 5h da conta, 24/7.")
+                Text(strings.fixedContinuousDescription)
                     .font(.caption).foregroundStyle(.secondary)
                 if continuousConflict {
-                    Label("Esta conta já tem um agendamento contínuo.",
+                    Label(strings.continuousConflict,
                           systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(.orange)
                 }
             }
-            Toggle("Habilitado", isOn: $enabled).toggleStyle(.checkbox)
+            Toggle(strings.enabled, isOn: $enabled).toggleStyle(.checkbox)
             HStack {
                 Spacer()
-                Button("Cancelar") { onDone() }
+                Button(strings.cancel) { onDone() }
                     .keyboardShortcut(.cancelAction)
-                Button(editing == nil ? "Adicionar" : "Salvar") { commit() }
+                Button(editing == nil ? strings.add : strings.save) { commit() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isValid)
             }
@@ -99,10 +101,10 @@ struct AgendamentoFormSheet: View {
     }
 
     private var repetitionPicker: some View {
-        Picker("Repetição", selection: $repetition) {
-            Text("Horários fixos").tag(ScheduledTask.Repetition.fixed)
+        Picker(strings.repetition, selection: $repetition) {
+            Text(strings.fixedTimes).tag(ScheduledTask.Repetition.fixed)
             if kind != .shell {
-                Text("Contínua (janela de 5h)").tag(ScheduledTask.Repetition.continuous)
+                Text(strings.continuousWindow).tag(ScheduledTask.Repetition.continuous)
             }
         }
         .pickerStyle(.segmented)
@@ -112,7 +114,7 @@ struct AgendamentoFormSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(times.indices, id: \.self) { idx in
                 HStack {
-                    DatePicker("Horário", selection: timeBinding(idx),
+                    DatePicker(strings.time, selection: timeBinding(idx),
                                displayedComponents: .hourAndMinute)
                     if times.count > 1 {
                         Button { times.remove(at: idx) } label: {
@@ -125,7 +127,7 @@ struct AgendamentoFormSheet: View {
             Button {
                 times.append((times.max() ?? 9 * 60) + 60)
             } label: {
-                Label("Adicionar horário", systemImage: "plus.circle")
+                Label(strings.addTime, systemImage: "plus.circle")
             }
             .buttonStyle(.plain)
             .font(.caption)
@@ -147,9 +149,9 @@ struct AgendamentoFormSheet: View {
 
     private var weekdaysEditor: some View {
         HStack(spacing: 4) {
-            Text("Dias").font(.caption)
+            Text(strings.days).font(.caption)
             ForEach(1...7, id: \.self) { day in
-                Toggle(Self.dayLetters[day - 1], isOn: dayBinding(day))
+                Toggle(strings.dayLetters[day - 1], isOn: dayBinding(day))
                     .toggleStyle(.button)
                     .controlSize(.small)
             }
@@ -250,10 +252,11 @@ struct ClaudeConfigForm: View {
     @Binding var workingDir: String
     let accounts: [URL]
     let accountLabel: (URL) -> String
+    let strings: L10n
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker("Modelo", selection: $model) {
+            Picker(strings.model, selection: $model) {
                 ForEach(Message.Model.allCases, id: \.self) { m in
                     Text(m.label).tag(m)
                 }
@@ -265,13 +268,13 @@ struct ClaudeConfigForm: View {
             }
             Toggle("Safe mode", isOn: $safeMode)
                 .toggleStyle(.checkbox)
-            Picker("Conta", selection: $configDir) {
-                Text("Padrão (global)").tag(String?.none)
+            Picker(strings.account, selection: $configDir) {
+                Text(strings.globalDefault).tag(String?.none)
                 ForEach(accounts, id: \.self) { dir in
                     Text(accountLabel(dir)).tag(String?.some(dir.path))
                 }
             }
-            TextField("Diretório (~ por padrão)", text: $workingDir)
+            TextField(strings.workingDirectoryDefault, text: $workingDir)
         }
         .font(.caption)
     }
@@ -285,22 +288,23 @@ struct CodexConfigForm: View {
     @Binding var workingDir: String
     let accounts: [URL]
     let accountLabel: (URL) -> String
+    let strings: L10n
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TextField("Modelo (padrão da conta)", text: $model)
+            TextField(strings.accountDefaultModel, text: $model)
             Picker("Reasoning", selection: $reasoning) {
                 ForEach(Message.CodexReasoning.allCases, id: \.self) { r in
                     Text(r.rawValue).tag(r)
                 }
             }
-            Picker("Conta", selection: $configDir) {
-                Text("Padrão (~/.codex)").tag(String?.none)
+            Picker(strings.account, selection: $configDir) {
+                Text(strings.codexDefault).tag(String?.none)
                 ForEach(accounts, id: \.self) { dir in
                     Text(accountLabel(dir)).tag(String?.some(dir.path))
                 }
             }
-            TextField("Diretório (~ por padrão)", text: $workingDir)
+            TextField(strings.workingDirectoryDefault, text: $workingDir)
         }
         .font(.caption)
     }

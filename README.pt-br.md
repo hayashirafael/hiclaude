@@ -31,6 +31,7 @@ nenhuma chamada de rede própria.
   apelidos
 - **Histórico** — disparos recentes com status e resposta expansível (detalhe
   completo do erro nas falhas)
+- **Idioma** — inglês por padrão, com opção para português nas Configurações
 - **Pausar/Retomar** global e **Iniciar com o Mac** opcional
 
 ## Requisitos
@@ -94,7 +95,8 @@ além de **Pausar/Retomar**, **Configurações…** e **Sair**.
   edita qualquer um deles
 - **Histórico** — disparos recentes; clique numa linha para ler a resposta
   completa ou o detalhe do erro
-- **Geral** — Iniciar com o Mac, tempo restante na menu bar
+- **Geral** — Iniciar com o Mac, tempo restante na menu bar e Idioma (inglês
+  ou português)
 
 ## Como funciona
 
