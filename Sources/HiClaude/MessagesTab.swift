@@ -13,11 +13,11 @@ struct MessagesTab: View {
                     editing = nil
                     showingForm = true
                 } label: {
-                    Label("Nova mensagem", systemImage: "plus.circle")
+                    Label("Novo comando", systemImage: "plus.circle")
                 }
                 .buttonStyle(.plain)
             } footer: {
-                Text("Biblioteca de mensagens. Atribua uma a cada conta na aba Contas. Com Claude: abre a janela de 5h. Sem Claude: roda o texto como comando.")
+                Text("Biblioteca de comandos. Atribua um a cada conta na aba Contas ou a uma tarefa em Horários. Claude/Codex: abre a janela de 5h da conta. Comando: roda o texto no shell.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -37,7 +37,7 @@ struct MessagesTab: View {
                 }
             }
             Spacer()
-            if msg != AppState.defaultMessage {
+            if msg != AppState.defaultMessage && msg != AppState.defaultCodexMessage {
                 Button { editing = msg; showingForm = true } label: {
                     Image(systemName: "pencil")
                 }
@@ -53,10 +53,20 @@ struct MessagesTab: View {
     /// Resumo compacto da config não-default (ex: "Opus 4.8 · high · resposta").
     private func configBadge(_ msg: Message) -> String? {
         var parts: [String] = []
-        if msg.kind == .shell { parts.append("comando") }
-        if msg.model != nil { parts.append(msg.resolvedModel.label) }
-        if msg.effort != nil { parts.append(msg.resolvedEffort.rawValue) }
-        if msg.safeMode == false { parts.append("sem safe") }
+        switch msg.kind {
+        case .claude: break // tipo dominante do app; sem selo para não poluir
+        case .codex: parts.append("Codex")
+        case .shell: parts.append("comando")
+        }
+        if msg.kind == .claude {
+            if msg.model != nil { parts.append(msg.resolvedModel.label) }
+            if msg.effort != nil { parts.append(msg.resolvedEffort.rawValue) }
+            if msg.safeMode == false { parts.append("sem safe") }
+        }
+        if msg.kind == .codex {
+            if msg.codexModel != nil { parts.append(msg.resolvedCodexModel) }
+            if msg.codexReasoning != nil { parts.append(msg.resolvedCodexReasoning.rawValue) }
+        }
         if let c = msg.configDir, !c.isEmpty { parts.append(state.label(for: URL(fileURLWithPath: c))) }
         if let w = msg.workingDir, !w.isEmpty { parts.append(URL(fileURLWithPath: w).lastPathComponent) }
         if msg.resolvedShowResponse { parts.append("resposta") }

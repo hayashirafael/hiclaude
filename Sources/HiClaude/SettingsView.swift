@@ -1,12 +1,12 @@
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case contas, mensagens, historico, geral
+    case contas, comandos, historico, geral
     var id: String { rawValue }
     var title: String {
         switch self {
         case .contas: return "Contas"
-        case .mensagens: return "Mensagens"
+        case .comandos: return "Comandos"
         case .historico: return "Histórico"
         case .geral: return "Geral"
         }
@@ -14,7 +14,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     var icon: String {
         switch self {
         case .contas: return "person.crop.circle"
-        case .mensagens: return "bubble.left"
+        case .comandos: return "terminal"
         case .historico: return "clock.arrow.circlepath"
         case .geral: return "gearshape"
         }
@@ -42,7 +42,7 @@ struct SettingsView: View {
     private var detail: some View {
         switch state.settingsSection {
         case .contas: ContasView(state: state)
-        case .mensagens: MessagesTab(state: state)
+        case .comandos: MessagesTab(state: state)
         case .historico: HistoryTab(state: state)
         case .geral: GeneralTab(state: state)
         }
