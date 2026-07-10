@@ -55,6 +55,10 @@ struct MessageFormSheet: View {
         .padding(20)
         .frame(width: 340)
         .onAppear(perform: load)
+        // Conta é por provider (~/.claude* vs ~/.codex*); trocar o Tipo sem
+        // limpar a conta persistiria um configDir do provider errado (hi na
+        // conta errada — ex.: `codex exec` com CODEX_HOME de pasta Claude).
+        .onChange(of: kind) { _ in account = nil }
     }
 
     private func load() {
@@ -74,13 +78,26 @@ struct MessageFormSheet: View {
     private func commit() {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
+        // Segunda barreira além do onChange(of: kind): se `account` ainda
+        // apontar para uma conta de outro provider (ex.: caminho que não
+        // passou pela troca de Tipo), descarta — nunca salva conta
+        // incompatível com o kind final.
+        let effectiveAccount: String?
+        switch kind {
+        case .claude:
+            effectiveAccount = state.accounts(for: .claude).contains(where: { $0.path == account }) ? account : nil
+        case .codex:
+            effectiveAccount = state.accounts(for: .codex).contains(where: { $0.path == account }) ? account : nil
+        case .shell:
+            effectiveAccount = nil
+        }
         // Normaliza defaults para nil: modelo enxuto, sem selo desnecessário.
         let msg = Message(
             text: t, kind: kind,
             model: kind == .claude && model != Message.defaultModel ? model : nil,
             effort: kind == .claude && effort != Message.defaultEffort ? effort : nil,
             safeMode: kind == .claude && safeMode != Message.defaultSafeMode ? safeMode : nil,
-            configDir: kind != .shell ? account : nil,
+            configDir: kind != .shell ? effectiveAccount : nil,
             workingDir: kind != .shell && !workingDir.isEmpty ? workingDir : nil,
             showResponse: showResponse ? true : nil,
             codexModel: kind == .codex && !codexModel.trimmingCharacters(in: .whitespaces).isEmpty

@@ -34,6 +34,7 @@ final class TaskScheduler {
     }
 
     func configure(tasks list: [ScheduledTask], paused: Bool) async {
+        let previousTasks = tasks
         var normalized: [UUID: ScheduledTask] = [:]
         for task in list where task.enabled { normalized[task.uid] = task }
         self.tasks = normalized
@@ -50,6 +51,28 @@ final class TaskScheduler {
                 nextFires[uid] = nil
             }
             pendingRetry = pendingRetry.filter { normalized[$0] != nil }
+            // Uid presente antes e depois, mas com conteúdo diferente (ex.:
+            // horário editado): o timer armado aponta para o horário ANTIGO.
+            // Sem isso, `rearm` vê `armed > now` com timer vivo e devolve
+            // cedo — a tarefa dispararia no horário que o usuário removeu.
+            // Invalida só os uids realmente editados (não todo mundo a cada
+            // publish de `$tasks`, o que re-armaria timers não relacionados).
+            for (uid, newTask) in normalized {
+                guard let old = previousTasks[uid], old != newTask else { continue }
+                timers[uid]?.invalidate()
+                timers[uid] = nil
+                nextFires[uid] = nil
+                // Avança o piso do catch-up para agora: sem isso, o rearm
+                // poderia achar uma ocorrência do NOVO horário perdida entre
+                // o último disparo real e o momento da edição, e disparar na
+                // hora algo que o usuário acabou de configurar (catch-up
+                // retroativo indesejado). Efeito colateral aceito: uma
+                // segunda edição da MESMA tarefa dentro dos 120s seguintes
+                // não é bloqueada pelo dedupe de `fire()` (que só olha
+                // disparos reais) — editar não é disparar, então não há
+                // nada para dedupar.
+                lastFireAt[uid] = clock.now
+            }
         }
         await rearmAll()
     }

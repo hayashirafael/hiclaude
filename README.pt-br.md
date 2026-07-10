@@ -21,7 +21,9 @@ nenhuma chamada de rede própria.
   continuamente) / **Programada** (ancorada a uma hora de início diária, com
   uma pausa noturna natural de ~4h)
 - **Multi-conta, Claude e Codex** — detecta cada pasta de config `~/.claude*`
-  e uma conta Codex em `~/.codex`, mostra o e-mail logado, aceita apelidos
+  e uma conta Codex em `~/.codex` no primeiro launch (migração única); depois
+  disso, novas contas são adicionadas a qualquer momento via "Adicionar
+  conta…" — mostra o e-mail logado, aceita apelidos
 - **Comandos configuráveis** — um prompt do Claude (modelo, esforço,
   safe-mode, pasta de trabalho), um prompt do Codex (modelo, esforço de
   raciocínio), ou qualquer comando shell
@@ -34,6 +36,8 @@ nenhuma chamada de rede própria.
 
 - macOS 13+
 - [Claude Code](https://claude.com/claude-code) instalado e logado
+- [Codex CLI](https://github.com/openai/codex) instalado e logado (opcional,
+  só para contas/comandos Codex)
 - Para build a partir do código: Swift 5.9+ (Xcode ou Command Line Tools)
 
 ## Instalação

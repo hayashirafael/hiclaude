@@ -21,8 +21,9 @@ network calls of its own.
   continuously) / **Scheduled** (anchored to a daily start time, with a
   natural ~4h overnight break)
 - **Multi-account, Claude and Codex** — detects every `~/.claude*` config dir
-  plus a Codex account at `~/.codex`, shows the logged-in email, supports
-  custom aliases
+  plus a Codex account at `~/.codex` on first launch (a one-time migration);
+  afterwards, add more accounts anytime via "Add account…" — shows the
+  logged-in email, supports custom aliases
 - **Configurable commands** — a Claude prompt (model, effort, safe-mode,
   working directory), a Codex prompt (model, reasoning effort), or any shell
   command
@@ -35,6 +36,8 @@ network calls of its own.
 
 - macOS 13+
 - [Claude Code](https://claude.com/claude-code) installed and logged in
+- [Codex CLI](https://github.com/openai/codex) installed and logged in
+  (optional, only for Codex accounts/commands)
 - To build from source: Swift 5.9+ (Xcode or Command Line Tools)
 
 ## Install
