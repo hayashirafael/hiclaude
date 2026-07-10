@@ -46,7 +46,7 @@ final class AppEnvironment: ObservableObject {
             if cmd.kind != .shell, let path = cmd.configDir, !path.isEmpty,
                self.state.accountDir(for: task) == nil {
                 self.state.recordEvent(FireEvent(
-                    date: Date(), result: .failure(message: "pasta da conta não encontrada"),
+                    date: Date(), result: .failure(message: self.state.strings.accountFolderMissingEvent),
                     messageText: cmd.text,
                     account: URL(fileURLWithPath: path).lastPathComponent,
                     origin: .agenda))

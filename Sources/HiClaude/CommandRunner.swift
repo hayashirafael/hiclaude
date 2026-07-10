@@ -5,11 +5,12 @@ enum RunnerError: Error, Equatable {
     case timeout
     case failed(String)
 
-    var userMessage: String {
+    func userMessage(language: AppLanguage) -> String {
+        let strings = L10n(language: language)
         switch self {
         case .cliNotFound(let provider):
-            return "CLI do \(provider.displayName) não encontrado"
-        case .timeout: return "o comando não respondeu em 60s"
+            return strings.cliNotFound(provider)
+        case .timeout: return strings.commandTimeout
         case .failed(let message): return message
         }
     }

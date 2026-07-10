@@ -214,6 +214,13 @@ final class AppState: ObservableObject {
     @Published var showRemainingInBar: Bool {
         didSet { defaults.set(showRemainingInBar, forKey: Keys.showRemainingInBar) }
     }
+
+    @Published var language: AppLanguage {
+        didSet { defaults.set(language.rawValue, forKey: Keys.language) }
+    }
+
+    var strings: L10n { L10n(language: language) }
+
     /// Seção selecionada na janela de Configurações (deep-link a partir do menu).
     @Published var settingsSection: SettingsSection = .contas
 
@@ -438,6 +445,7 @@ final class AppState: ObservableObject {
         static let renewals = "renewals"
         static let registeredAccounts = "registeredAccounts"
         static let tasks = "tasks"
+        static let language = "language"
     }
 
     init(defaults: UserDefaults = .standard,
@@ -454,6 +462,12 @@ final class AppState: ObservableObject {
             self.history = []
         }
         self.showRemainingInBar = defaults.bool(forKey: Keys.showRemainingInBar)
+        if let rawLanguage = defaults.string(forKey: Keys.language),
+           let language = AppLanguage(rawValue: rawLanguage) {
+            self.language = language
+        } else {
+            self.language = .english
+        }
         let legacyFavorites = Self.loadLegacyFavorites(defaults)
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         var loadedTasks: [ScheduledTask] = []

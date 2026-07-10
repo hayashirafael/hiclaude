@@ -3,12 +3,12 @@ import UserNotifications
 
 /// Notificações do sistema: falha de disparo agendado e resposta capturada.
 final class SystemNotifier: Notifying {
-    func notifyFailure(message: String) {
-        deliver(title: "HiClaude: disparo falhou", body: message)
+    func notifyFailure(title: String, message: String) {
+        deliver(title: title, body: message)
     }
 
-    func notifyResponse(messageText: String, response: String) {
-        deliver(title: "HiClaude: \(messageText)", body: String(response.prefix(300)))
+    func notifyResponse(title: String, response: String) {
+        deliver(title: title, body: String(response.prefix(300)))
     }
 
     private func deliver(title: String, body: String) {

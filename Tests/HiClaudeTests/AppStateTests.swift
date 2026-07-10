@@ -117,6 +117,28 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(msg.resolvedShowResponse)
     }
 
+    func testIdiomaPadraoEhIngles() {
+        let state = AppState(defaults: freshDefaults())
+        XCTAssertEqual(state.language, .english)
+        XCTAssertEqual(state.strings.settingsTitle, "Settings")
+    }
+
+    func testIdiomaPersiste() {
+        let defaults = freshDefaults()
+        let state = AppState(defaults: defaults)
+        state.language = .portuguese
+        let restored = AppState(defaults: defaults)
+        XCTAssertEqual(restored.language, .portuguese)
+        XCTAssertEqual(restored.strings.settingsTitle, "Configurações")
+    }
+
+    func testIdiomaInvalidoVoltaParaIngles() {
+        let defaults = freshDefaults()
+        defaults.set("fr", forKey: "language")
+        let state = AppState(defaults: defaults)
+        XCTAssertEqual(state.language, .english)
+    }
+
     func testHistoricoCapEm20MaisRecentePrimeiro() {
         let state = AppState(defaults: freshDefaults())
         for i in 0..<25 {

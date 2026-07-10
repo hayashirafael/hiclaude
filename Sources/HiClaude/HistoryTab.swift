@@ -2,10 +2,11 @@ import SwiftUI
 
 struct HistoryTab: View {
     @ObservedObject var state: AppState
+    private var strings: L10n { state.strings }
 
     var body: some View {
         if state.history.isEmpty {
-            Text("Sem disparos registrados ainda.")
+            Text(strings.noHistory)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: 200)
                 .padding(40)
@@ -16,7 +17,7 @@ struct HistoryTab: View {
                         row(event)
                     }
                 } footer: {
-                    Text("Últimos \(AppState.historyLimit) disparos, mais recentes primeiro.")
+                    Text(strings.historyFooter(limit: AppState.historyLimit))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -72,22 +73,22 @@ struct HistoryTab: View {
     }
 
     private func title(_ event: FireEvent) -> String {
-        let time = Fmt.dayTime(event.date)
+        let time = Fmt.dayTime(event.date, language: state.language)
         switch event.result {
-        case .success: return "\(time) — \(event.messageText ?? "hi")"
-        case .skipped(let until): return "\(time) — pulado (janela até \(Fmt.hhmm(until)))"
-        case .failure(let message): return "\(time) — falhou: \(message)"
+        case .success:
+            return strings.succeeded(time, event.messageText ?? "hi")
+        case .skipped(let until):
+            return strings.skippedUntil(time, Fmt.hhmm(until, language: state.language))
+        case .failure(let message):
+            return strings.failed(time, message)
         }
     }
 
     private func subtitle(_ event: FireEvent) -> String {
         var parts: [String] = []
         if let account = event.account { parts.append(account) }
-        switch event.origin {
-        case .manual: parts.append("manual")
-        case .renewal: parts.append("renovação")
-        case .agenda: parts.append("agenda")
-        case .scheduled, .none: break
+        if let origin = event.origin, let label = strings.origin(origin) {
+            parts.append(label)
         }
         return parts.joined(separator: " · ")
     }

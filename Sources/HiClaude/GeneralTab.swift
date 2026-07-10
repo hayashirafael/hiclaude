@@ -2,18 +2,24 @@ import SwiftUI
 
 struct GeneralTab: View {
     @ObservedObject var state: AppState
+    private var strings: L10n { state.strings }
 
     var body: some View {
         Form {
             Section {
                 if LoginItem.isSupported {
-                    Toggle("Iniciar com o Mac", isOn: Binding(
+                    Toggle(strings.launchAtLogin, isOn: Binding(
                         get: { LoginItem.isEnabled },
                         set: { LoginItem.setEnabled($0) }))
                 }
-                Toggle("Tempo restante na barra", isOn: $state.showRemainingInBar)
+                Toggle(strings.remainingInMenuBar, isOn: $state.showRemainingInBar)
+                Picker(strings.languageLabel, selection: $state.language) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.pickerTitle).tag(language)
+                    }
+                }
             } footer: {
-                Text("O tempo na barra mostra a janela que vence primeiro entre as contas em renovação.")
+                Text(strings.remainingInMenuBarFooter)
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

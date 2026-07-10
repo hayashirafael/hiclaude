@@ -6,6 +6,7 @@ struct HorariosView: View {
     @ObservedObject var state: AppState
     @State private var showingForm = false
     @State private var editing: ScheduledTask? = nil
+    private var strings: L10n { state.strings }
 
     var body: some View {
         Group {
@@ -22,11 +23,11 @@ struct HorariosView: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Text("Nenhum agendamento ainda")
-            Text("Agendamentos disparam comandos de forma contínua (a cada janela de 5h da conta) ou em horários fixos.")
+            Text(strings.noSchedulesYet)
+            Text(strings.noSchedulesDescription)
                 .font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Novo agendamento") { editing = nil; showingForm = true }
+            Button(strings.newSchedule) { editing = nil; showingForm = true }
         }
         .frame(maxWidth: .infinity, minHeight: 200)
         .padding(40)
@@ -40,11 +41,11 @@ struct HorariosView: View {
                     editing = nil
                     showingForm = true
                 } label: {
-                    Label("Novo agendamento", systemImage: "plus.circle")
+                    Label(strings.newSchedule, systemImage: "plus.circle")
                 }
                 .buttonStyle(.plain)
             } footer: {
-                Text("Contínuo renova a janela de 5h da conta 24/7; horários fixos disparam nos horários e dias marcados. Claude/Codex pulam quando a janela da conta já está ativa.")
+                Text(strings.scheduleListFooter)
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -64,7 +65,7 @@ struct HorariosView: View {
                 if task.resolvedCommand.kind != .shell,
                    let cfg = task.resolvedCommand.configDir, !cfg.isEmpty,
                    state.accountDir(for: task) == nil {
-                    Text("pasta da conta não encontrada — o agendamento não dispara")
+                    Text(strings.accountFolderMissing)
                         .font(.caption2).foregroundStyle(.orange)
                 }
             }
@@ -89,37 +90,31 @@ struct HorariosView: View {
     private func subtitle(_ task: ScheduledTask) -> String {
         var parts: [String] = []
         switch task.resolvedCommand.kind {
-        case .claude: parts.append("Claude")
-        case .codex: parts.append("Codex")
-        case .shell: parts.append("comando")
+        case .claude, .codex, .shell: parts.append(strings.taskKind(task.resolvedCommand.kind))
         }
         if let dir = state.accountDir(for: task) { parts.append(state.label(for: dir)) }
         switch task.repetition {
         case .continuous:
-            parts.append("contínua")
+            parts.append(strings.continuous)
             if task.enabled, let dir = state.accountDir(for: task),
                let next = state.nextRenewals[dir], next > Date() {
-                parts.append("renova \(Fmt.hhmm(next))")
+                parts.append(strings.renewsAt(Fmt.hhmm(next, language: state.language)))
             } else if task.enabled {
-                parts.append("aguardando janela")
+                parts.append(strings.waitingForWindow)
             }
         case .fixed:
             let horarios = task.times.sorted().map(Fmt.minutes).joined(separator: " · ")
-            parts.append("\(horarios) — \(Self.daysSummary(task.weekdays))")
+            parts.append("\(horarios) - \(Self.daysSummary(task.weekdays, language: state.language))")
             if task.enabled, let next = state.nextTaskFires[task.uid], next > Date() {
-                parts.append("próxima \(Fmt.weekdayTime(next))")
+                parts.append(strings.nextAt(Fmt.weekdayTime(next, language: state.language)))
             }
         }
         return parts.joined(separator: " · ")
     }
 
     /// Resumo dos dias: "todos os dias", "seg a sex", "fim de semana" ou lista.
-    static func daysSummary(_ weekdays: Set<Int>) -> String {
-        if weekdays == Set(1...7) { return "todos os dias" }
-        if weekdays == [2, 3, 4, 5, 6] { return "seg a sex" }
-        if weekdays == [1, 7] { return "fim de semana" }
-        let names = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"]
-        return weekdays.sorted().map { names[$0 - 1] }.joined(separator: " · ")
+    static func daysSummary(_ weekdays: Set<Int>, language: AppLanguage = .english) -> String {
+        L10n(language: language).daysSummary(weekdays)
     }
 
     private func enabledBinding(_ task: ScheduledTask) -> Binding<Bool> {

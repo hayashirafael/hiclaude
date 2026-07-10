@@ -37,6 +37,7 @@ struct MenuContent: View {
     @ObservedObject var state: AppState
     let env: AppEnvironment
     @Environment(\.openWindow) private var openWindow
+    private var strings: L10n { state.strings }
 
     /// Contas com pelo menos um agendamento habilitado (Claude/Codex).
     private var scheduledAccounts: [URL] {
@@ -50,7 +51,7 @@ struct MenuContent: View {
     var body: some View {
         Text(headerLine)
         if scheduledAccounts.isEmpty {
-            Text("Nenhum agendamento ativo")
+            Text(strings.noActiveSchedules)
         } else {
             Divider()
             ForEach(scheduledAccounts, id: \.self) { account in
@@ -60,27 +61,26 @@ struct MenuContent: View {
         }
         if let entry = state.nextTaskEntry {
             Divider()
-            Text("Próxima tarefa: \(entry.task.name ?? entry.task.resolvedCommand.text) · \(Fmt.weekdayTime(entry.date))")
+            Text(strings.nextTask(entry.task.name ?? entry.task.resolvedCommand.text,
+                                  Fmt.weekdayTime(entry.date, language: state.language)))
         }
         Divider()
-        Button(state.paused ? "Retomar" : "Pausar") { env.togglePause() }
-        Button("Configurações…") {
+        Button(state.paused ? strings.resume : strings.pause) { env.togglePause() }
+        Button(strings.settingsTitle + "...") {
             openWindow(id: "schedule")
             NSApp.activate(ignoringOtherApps: true)
         }
         Divider()
-        Button("Sair") { NSApplication.shared.terminate(nil) }
+        Button(strings.quit) { NSApplication.shared.terminate(nil) }
     }
 
     private var headerLine: String {
         if let missing = state.missingCLIs.first {
-            let instale = missing == .claude ? "Claude Code" : "Codex CLI"
-            return "CLI do \(missing.displayName) não encontrado — instale o \(instale)"
+            return strings.installCLIWarning(missing)
         }
-        if state.paused { return "Pausado" }
+        if state.paused { return strings.paused }
         let n = scheduledAccounts.count
-        if n == 0 { return "Nenhum agendamento ativo" }
-        return n == 1 ? "1 conta com agendamentos" : "\(n) contas com agendamentos"
+        return strings.scheduledAccountsHeader(n)
     }
 
     /// Próximo disparo entre os agendamentos que miram a conta: contínuos vêm
@@ -102,12 +102,12 @@ struct MenuContent: View {
         let temCodex = scheduledAccounts.contains { state.provider(for: $0) == .codex }
         if temCodex { parts.append(state.provider(for: account).displayName) }
         if let next = nextFire(for: account) {
-            parts.append("próximo hi \(Fmt.hhmm(next))")
+            parts.append(strings.nextHi(Fmt.hhmm(next, language: state.language)))
         } else {
-            parts.append("aguardando janela")
+            parts.append(strings.waitingForWindow)
         }
         if let last = lastEvent(for: account) {
-            parts.append("último \(Fmt.hhmm(last.date)) \(mark(last))")
+            parts.append(strings.lastAt(Fmt.hhmm(last.date, language: state.language), mark(last)))
         }
         return "  " + parts.joined(separator: " · ")
     }

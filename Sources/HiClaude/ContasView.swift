@@ -8,6 +8,7 @@ struct ContasView: View {
     @State private var editingAlias: URL? = nil
     @State private var aliasDraft = ""
     @State private var invalidFolderAlert = false
+    private var strings: L10n { state.strings }
 
     var body: some View {
         Form {
@@ -16,18 +17,18 @@ struct ContasView: View {
                 ForEach(accounts, id: \.self) { dir in
                     Section {
                         if state.cliFound[provider] == false {
-                            Label("CLI do \(provider.displayName) não encontrado — instale para disparar nesta conta",
+                            Label(strings.installCLIForAccount(provider),
                                   systemImage: "exclamationmark.triangle")
                                 .font(.caption).foregroundStyle(.orange)
                         }
                         if !FileManager.default.fileExists(atPath: dir.path) {
-                            Label("pasta não encontrada — remova da lista ou restaure a pasta",
+                            Label(strings.accountFolderMissingAccountTab,
                                   systemImage: "questionmark.folder")
                                 .font(.caption).foregroundStyle(.orange)
                         }
                         header(dir)
-                        LabeledContent("Provedor", value: state.provider(for: dir).displayName)
-                        LabeledContent("Pasta") {
+                        LabeledContent(strings.providerLabel, value: state.provider(for: dir).displayName)
+                        LabeledContent(strings.folderLabel) {
                             Text((dir.path as NSString).abbreviatingWithTildeInPath)
                                 .textSelection(.enabled)
                                 .foregroundStyle(.secondary)
@@ -42,19 +43,19 @@ struct ContasView: View {
                 Button {
                     addAccount()
                 } label: {
-                    Label("Adicionar conta…", systemImage: "plus.circle")
+                    Label(strings.addAccount, systemImage: "plus.circle")
                 }
                 .buttonStyle(.plain)
             } footer: {
-                Text("Aponte a pasta de config de uma conta (Claude Code ou Codex) — o nome é livre; o tipo é inferido pelo conteúdo. Agendamentos são criados na aba Horários.")
+                Text(strings.accountsFooter)
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .alert("Pasta inválida", isPresented: $invalidFolderAlert) {
-            Button("OK", role: .cancel) {}
+        .alert(strings.invalidFolderTitle, isPresented: $invalidFolderAlert) {
+            Button(strings.ok, role: .cancel) {}
         } message: {
-            Text("A pasta escolhida não parece uma pasta de config do Claude Code nem do Codex.")
+            Text(strings.invalidFolderMessage)
         }
     }
 
@@ -66,7 +67,7 @@ struct ContasView: View {
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true // ~/.claude2 e afins são pastas ocultas
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
-        panel.prompt = "Adicionar"
+        panel.prompt = strings.add
         guard panel.runModal() == .OK, let url = panel.url else { return }
         if state.registerAccount(url) == nil { invalidFolderAlert = true }
     }
@@ -76,7 +77,7 @@ struct ContasView: View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
                 if editingAlias == dir {
-                    TextField("Apelido", text: $aliasDraft, onCommit: { commitAlias(dir) })
+                    TextField(strings.accountAlias, text: $aliasDraft, onCommit: { commitAlias(dir) })
                         .textFieldStyle(.roundedBorder)
                 } else {
                     Text(state.label(for: dir))
@@ -98,17 +99,13 @@ struct ContasView: View {
                     Image(systemName: "minus.circle")
                 }
                 .buttonStyle(.plain)
-                .help("Remover da lista (não apaga nada do disco; desabilita os agendamentos da conta)")
+                .help(strings.removeAccountHelp)
             }
         }
     }
 
     private func scheduleCountText(_ dir: URL) -> String {
-        switch state.activeScheduleCount(for: dir) {
-        case 0: return "nenhum agendamento ativo"
-        case 1: return "1 agendamento ativo"
-        case let n: return "\(n) agendamentos ativos"
-        }
+        strings.activeScheduleCount(state.activeScheduleCount(for: dir))
     }
 
     private func commitAlias(_ dir: URL) {
