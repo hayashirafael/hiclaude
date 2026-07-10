@@ -3,9 +3,6 @@ import SwiftUI
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case contas, horarios, historico, geral
     var id: String { rawValue }
-    var title: String {
-        title(language: .english)
-    }
     func title(language: AppLanguage) -> String {
         L10n(language: language).settingsSectionTitle(self)
     }

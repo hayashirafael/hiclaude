@@ -1,185 +1,5 @@
 import Foundation
 
-enum FireResult: Codable, Equatable {
-    case success
-    case skipped(activeUntil: Date)
-    case failure(message: String)
-    /// Ocorrência fixa que passou com o app fechado — nada foi executado;
-    /// `occurrence` é o horário que teria disparado (o `date` do evento é o
-    /// momento da detecção, no launch seguinte).
-    case missed(occurrence: Date)
-}
-
-enum FireOrigin: String, Codable { case scheduled, manual, renewal, agenda }
-
-struct FireEvent: Codable, Equatable {
-    let date: Date
-    let result: FireResult
-    // Campos novos, opcionais para decodificar eventos persistidos antigos.
-    var messageText: String? = nil
-    var account: String? = nil      // lastPathComponent da conta efetiva
-    var origin: FireOrigin? = nil   // nil = evento legado
-    var response: String? = nil     // resposta capturada (quando showResponse)
-}
-
-/// Uma mensagem agendável. `claude` vira o corpo de `claude -p`; `shell` roda
-/// como comando cru no shell de login (utilidade fora do Claude).
-struct Message: Codable, Identifiable {
-    enum Kind: String, Codable { case claude, shell, codex }
-
-    /// Reasoning do Codex (`-c model_reasoning_effort`). Só relevante em `.codex`.
-    enum CodexReasoning: String, Codable, CaseIterable { case minimal, low, medium, high }
-
-    /// Modelo do `claude --model`. Só relevante quando `kind == .claude`.
-    enum Model: String, Codable, CaseIterable {
-        case haiku, sonnet, opus
-        var cliValue: String {
-            switch self {
-            case .haiku: return "claude-haiku-4-5"
-            case .sonnet: return "claude-sonnet-5"
-            case .opus: return "claude-opus-4-8"
-            }
-        }
-        var label: String {
-            switch self {
-            case .haiku: return "Haiku 4.5"
-            case .sonnet: return "Sonnet 5"
-            case .opus: return "Opus 4.8"
-            }
-        }
-    }
-
-    /// Esforço do `claude --effort`. Só relevante quando `kind == .claude`.
-    enum Effort: String, Codable, CaseIterable { case low, medium, high, xhigh, max }
-
-    var text: String
-    var kind: Kind
-    // Config Claude (só relevante quando `kind == .claude`). Opcionais com
-    // default `nil` para migrar de graça: o JSONDecoder tolera chaves ausentes
-    // nos favoritos já persistidos, e o init memberwise
-    // `Message(text:kind:)` (usado no caminho legado) continua compilando.
-    var model: Model? = nil
-    var effort: Effort? = nil
-    var safeMode: Bool? = nil
-    var configDir: String? = nil   // conta; nil = herda a global
-    var workingDir: String? = nil  // nil = home
-    /// Identidade estável — referências horário→mensagem sobrevivem a edições.
-    /// Opcional para decodificar JSON legado; AppState garante uid em tudo que
-    /// persiste. Fica fora do `==` de propósito (igualdade é por conteúdo).
-    var uid: UUID? = nil
-    /// Mostrar a resposta do disparo (histórico + notificação). nil = desligado.
-    var showResponse: Bool? = nil
-    /// Abre Claude/Codex em um Terminal.app interativo. nil = ligado para
-    /// Claude/Codex por compatibilidade com agendamentos já salvos.
-    var runInTerminal: Bool? = nil
-    // Config Codex (só relevante quando `kind == .codex`). Opcionais com default
-    // nil pelo mesmo motivo dos campos Claude: migração de graça.
-    var codexModel: String? = nil
-    var codexReasoning: CodexReasoning? = nil
-
-    /// Id para ForEach: uid quando presente, senão a chave de conteúdo (legado).
-    var id: String { uid?.uuidString ?? contentKey }
-
-    private var contentKey: String {
-        let modelVal = model?.rawValue ?? ""
-        let effortVal = effort?.rawValue ?? ""
-        let safeModeVal = safeMode.map(String.init) ?? ""
-        let configVal = configDir ?? ""
-        let workingVal = workingDir ?? ""
-        let showResponseVal = showResponse.map(String.init) ?? ""
-        let runInTerminalVal = runInTerminal.map(String.init) ?? ""
-        let codexModelVal = codexModel ?? ""
-        let codexReasoningVal = codexReasoning?.rawValue ?? ""
-        return [kind.rawValue, text, modelVal, effortVal, safeModeVal, configVal,
-                workingVal, showResponseVal, runInTerminalVal, codexModelVal, codexReasoningVal]
-            .joined(separator: "\u{1}")
-    }
-}
-
-extension Message: Equatable {
-    /// Igualdade por conteúdo/config — ignora `uid`: dedupe e resolução de
-    /// mensagem ativa comparam o que a mensagem FAZ, não quem ela é.
-    static func == (lhs: Message, rhs: Message) -> Bool {
-        lhs.text == rhs.text && lhs.kind == rhs.kind && lhs.model == rhs.model
-            && lhs.effort == rhs.effort && lhs.safeMode == rhs.safeMode
-            && lhs.configDir == rhs.configDir && lhs.workingDir == rhs.workingDir
-            && lhs.showResponse == rhs.showResponse
-            && lhs.runInTerminal == rhs.runInTerminal
-            && lhs.codexModel == rhs.codexModel && lhs.codexReasoning == rhs.codexReasoning
-    }
-}
-
-extension Message {
-    static let defaultModel: Model = .haiku
-    static let defaultEffort: Effort = .low
-    static let defaultSafeMode = true
-    var resolvedModel: Model { model ?? Self.defaultModel }
-    var resolvedEffort: Effort { effort ?? Self.defaultEffort }
-    var resolvedSafeMode: Bool { safeMode ?? Self.defaultSafeMode }
-    var resolvedShowResponse: Bool { showResponse ?? false }
-    var resolvedRunInTerminal: Bool {
-        switch kind {
-        case .claude, .codex: return runInTerminal ?? true
-        case .shell: return false
-        }
-    }
-}
-
-/// LEGADO: configuração de renovação por conta, pré-agendamentos unificados.
-/// Só a migração do init decodifica; nada mais grava esse tipo.
-struct AccountRenewal: Codable, Equatable {
-    enum Mode: String, Codable { case automatic, scheduled }
-    var mode: Mode = .automatic
-    /// Minutos desde a meia-noite; só relevante em `.scheduled`. nil = usar padrão.
-    var anchorMinutes: Int? = nil
-    /// Mensagem a disparar; nil = hi mínimo (`AppState.defaultMessage`).
-    var messageUID: UUID? = nil
-}
-
-/// Um agendamento: prompt embutido disparado de forma contínua (a cada janela
-/// de 5h da conta) ou em horários fixos × dias da semana.
-struct ScheduledTask: Identifiable, Equatable {
-    enum Repetition: String, Codable { case continuous, fixed }
-
-    var uid: UUID
-    /// Rótulo opcional; sem nome, a UI exibe o texto do comando.
-    var name: String? = nil
-    /// Referência legada à biblioteca de comandos. Só a migração lê;
-    /// nil em tudo que o app grava desde os agendamentos unificados.
-    var commandUID: UUID? = nil
-    /// Prompt embutido. A migração garante non-nil; leia via `resolvedCommand`.
-    var command: Message? = nil
-    var repetition: Repetition = .fixed
-    /// Minutos desde a meia-noite; só relevante em `.fixed`.
-    var times: [Int] = []
-    /// Dias da semana no padrão do Calendar (1 = domingo … 7 = sábado); só `.fixed`.
-    var weekdays: Set<Int> = []
-    var enabled: Bool = true
-
-    var id: UUID { uid }
-    var resolvedCommand: Message { command ?? AppState.defaultMessage }
-}
-
-extension ScheduledTask: Codable {
-    private enum CodingKeys: String, CodingKey {
-        case uid, name, commandUID, command, repetition, times, weekdays, enabled
-    }
-
-    /// Decode tolerante: JSON legado (sem command/repetition) entra com os
-    /// defaults e é completado pela migração no init do AppState.
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        uid = try c.decode(UUID.self, forKey: .uid)
-        name = try c.decodeIfPresent(String.self, forKey: .name)
-        commandUID = try c.decodeIfPresent(UUID.self, forKey: .commandUID)
-        command = try c.decodeIfPresent(Message.self, forKey: .command)
-        repetition = try c.decodeIfPresent(Repetition.self, forKey: .repetition) ?? .fixed
-        times = try c.decodeIfPresent([Int].self, forKey: .times) ?? []
-        weekdays = try c.decodeIfPresent(Set<Int>.self, forKey: .weekdays) ?? []
-        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
-    }
-}
-
 @MainActor
 final class AppState: ObservableObject {
     @Published var paused: Bool { didSet { defaults.set(paused, forKey: Keys.paused) } }
@@ -207,6 +27,68 @@ final class AppState: ObservableObject {
         recordAlive(now: event.date)
     }
 
+    /// Cria um evento com um snapshot mínimo da identidade. A UI prefere os
+    /// dados atuais da conta e usa o snapshot quando ela não existe mais.
+    func makeEvent(date: Date, result: FireResult, message: Message,
+                   origin: FireOrigin, response: String? = nil) -> FireEvent {
+        let provider: Provider?
+        let accountDir: URL?
+        let modelName: String?
+        switch message.kind {
+        case .claude:
+            provider = .claude
+            accountDir = explicitOrDefaultAccount(for: message, provider: .claude)
+            modelName = message.resolvedModel.label
+        case .codex:
+            provider = .codex
+            accountDir = explicitOrDefaultAccount(for: message, provider: .codex)
+            let model = message.codexModel?.trimmingCharacters(in: .whitespacesAndNewlines)
+            modelName = model?.isEmpty == false ? model : nil
+        case .shell:
+            provider = nil
+            accountDir = nil
+            modelName = nil
+        }
+        return FireEvent(
+            date: date, result: result, messageText: message.text,
+            account: accountDir?.lastPathComponent, origin: origin, response: response,
+            accountPath: accountDir?.standardizedFileURL.path, provider: provider,
+            modelName: modelName,
+            aliasSnapshot: accountDir.flatMap { alias(for: $0) },
+            emailSnapshot: accountDir.flatMap { email(for: $0) }
+        )
+    }
+
+    /// Identidade atual do evento, com fallback para o snapshot persistido.
+    func identity(for event: FireEvent) -> EventIdentity {
+        let dir = accountDir(for: event)
+        let currentAlias = dir.flatMap { alias(for: $0) }
+        let currentEmail = dir.flatMap { email(for: $0) }
+        return EventIdentity(
+            accountName: dir?.lastPathComponent ?? event.account,
+            alias: currentAlias ?? event.aliasSnapshot,
+            email: currentEmail ?? event.emailSnapshot,
+            provider: event.provider ?? dir.map { provider(for: $0) },
+            modelName: event.modelName
+        )
+    }
+
+    private func explicitOrDefaultAccount(for message: Message, provider: Provider) -> URL {
+        if let path = message.configDir, !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        return provider == .codex ? Self.defaultCodexConfigDir : Self.defaultConfigDir
+    }
+
+    private func accountDir(for event: FireEvent) -> URL? {
+        if let path = event.accountPath, !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        guard let legacyName = event.account else { return nil }
+        let matches = discoverAccounts().filter { $0.lastPathComponent == legacyName }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
     /// Momento em que o app esteve vivo pela última vez ANTES deste launch;
     /// nil no primeiro launch de todos. Consumido (uma vez) por
     /// `recordMissedWhileClosed`.
@@ -230,10 +112,8 @@ final class AppState: ObservableObject {
             guard let occurrence = AgendaMath.lastMissedOccurrence(
                 times: task.times, weekdays: task.weekdays,
                 between: since, and: now, calendar: calendar) else { continue }
-            recordEvent(FireEvent(date: now, result: .missed(occurrence: occurrence),
-                                  messageText: task.resolvedCommand.text,
-                                  account: accountDir(for: task)?.lastPathComponent,
-                                  origin: .agenda))
+            recordEvent(makeEvent(date: now, result: .missed(occurrence: occurrence),
+                                  message: task.resolvedCommand, origin: .agenda))
         }
     }
 
@@ -483,25 +363,35 @@ final class AppState: ObservableObject {
                   accountDir(for: task) == nil else { continue }
             stillMissing.insert(task.uid)
             if !reportedMissingContinuous.contains(task.uid) {
-                recordEvent(FireEvent(
+                recordEvent(makeEvent(
                     date: Date(), result: .failure(message: strings.accountFolderMissingEvent),
-                    messageText: cmd.text,
-                    account: URL(fileURLWithPath: path).lastPathComponent,
-                    origin: .renewal))
+                    message: cmd, origin: .renewal))
             }
         }
         reportedMissingContinuous = stillMissing
     }
 
-    /// Cache de sessão do e-mail por conta (evita reler o .claude.json a cada render).
-    private var emailCache: [String: String?] = [:]
+    private struct EmailCacheEntry {
+        let modificationDate: Date?
+        let value: String?
+    }
+
+    /// Cache do e-mail por conta, invalidado quando o arquivo de autenticação
+    /// muda (inclusive após relogin numa conta padrão).
+    private var emailCache: [String: EmailCacheEntry] = [:]
 
     /// E-mail logado na conta (oauthAccount.emailAddress), com cache.
     func email(for dir: URL) -> String? {
         let key = dir.standardizedFileURL.path
-        if let cached = emailCache[key] { return cached }
+        let identityFile = dir.appendingPathComponent(
+            provider(for: dir) == .codex ? "auth.json" : ".claude.json")
+        let modificationDate = try? identityFile.resourceValues(
+            forKeys: [.contentModificationDateKey]).contentModificationDate
+        if let cached = emailCache[key], cached.modificationDate == modificationDate {
+            return cached.value
+        }
         let value = AccountIdentity.email(forConfigDir: dir)
-        emailCache[key] = value
+        emailCache[key] = EmailCacheEntry(modificationDate: modificationDate, value: value)
         return value
     }
 

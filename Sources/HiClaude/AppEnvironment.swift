@@ -24,6 +24,7 @@ final class AppEnvironment: ObservableObject {
     /// `probeCLIs: false` pula a sonda de launch (spawna login shell).
     init(state: AppState? = nil,
          taskScheduler: TaskScheduler? = nil,
+         terminalLauncher: TerminalLaunching = TerminalLauncher(),
          probeCLIs: Bool = true) {
         let state = state ?? AppState()
         let taskScheduler = taskScheduler ?? TaskScheduler()
@@ -32,7 +33,7 @@ final class AppEnvironment: ObservableObject {
         self.detector = detector
         self.controller = FireController(state: state, detector: detector,
                                          runner: CommandRunner(configDir: AppState.defaultConfigDir),
-                                         terminalLauncher: TerminalLauncher(),
+                                         terminalLauncher: terminalLauncher,
                                          notifier: SystemNotifier())
         self.renewalEngine = RenewalEngine(detector: detector)
         self.taskScheduler = taskScheduler
@@ -56,11 +57,9 @@ final class AppEnvironment: ObservableObject {
             // padrão errada); registra a falha para a UI avisar.
             if cmd.kind != .shell, let path = cmd.configDir, !path.isEmpty,
                self.state.accountDir(for: task) == nil {
-                self.state.recordEvent(FireEvent(
+                self.state.recordEvent(self.state.makeEvent(
                     date: Date(), result: .failure(message: self.state.strings.accountFolderMissingEvent),
-                    messageText: cmd.text,
-                    account: URL(fileURLWithPath: path).lastPathComponent,
-                    origin: .agenda))
+                    message: cmd, origin: .agenda))
                 return true
             }
             return await self.controller.fire(message: cmd, origin: .agenda)

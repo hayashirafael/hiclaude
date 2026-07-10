@@ -6,6 +6,10 @@ import XCTest
 /// lista antiga e reconfiguraria os motores sem a mudança recém-feita.
 @MainActor
 final class AppEnvironmentTests: XCTestCase {
+    private struct NoopTerminalLauncher: TerminalLaunching {
+        func launch(_ message: Message) async -> Result<Void, RunnerError> { .success(()) }
+    }
+
     private final class MutableClock: Clock {
         var now: Date
         init(_ now: Date) { self.now = now }
@@ -27,16 +31,8 @@ final class AppEnvironmentTests: XCTestCase {
         return d
     }
 
-    // NOTA de isolamento: este teste usa o `AppEnvironment` de produção, cujo
-    // `TaskScheduler` está ligado ao `FireController`/`TerminalLauncher` REAIS.
-    // O `armTimer` agenda um `NSTimer` REAL no RunLoop.main. Se a data alvo já
-    // passou (clock fake no passado), o timer nasce vencido e dispara em algum
-    // `await` — chamando `TerminalLauncher.launch` → `NSAppleScript` real, que
-    // ABRE UM TERMINAL de verdade (e crasha/falha a run, de forma flaky e
-    // dependente da data de hoje). Por isso os testes usam datas bem no FUTURO
-    // (ano 2099): o timer arma mas nunca vence durante a suíte, então nenhum
-    // efeito colateral real acontece. O `tearDown` abaixo é defesa em
-    // profundidade: pausa o scheduler para invalidar qualquer timer remanescente.
+    // O scheduler usa NSTimer real, mas o launcher é fake: mesmo uma data fake
+    // vencida nunca abre Terminal.app durante a suíte.
     private var activeScheduler: TaskScheduler?
 
     override func tearDown() async throws {
@@ -48,7 +44,8 @@ final class AppEnvironmentTests: XCTestCase {
     private func makeEnv(clock: MutableClock) -> (AppEnvironment, AppState, TaskScheduler) {
         let state = AppState(defaults: freshDefaults())
         let scheduler = TaskScheduler(clock: clock, calendar: cal)
-        let env = AppEnvironment(state: state, taskScheduler: scheduler, probeCLIs: false)
+        let env = AppEnvironment(state: state, taskScheduler: scheduler,
+                                 terminalLauncher: NoopTerminalLauncher(), probeCLIs: false)
         activeScheduler = scheduler
         return (env, state, scheduler)
     }

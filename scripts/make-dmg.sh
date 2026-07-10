@@ -6,9 +6,9 @@ cd "$(dirname "$0")/.."
 # Applications — o formato padrão de instalador de apps macOS fora da App Store.
 ./scripts/make-app.sh
 
-APP="build/HiClaude.app"
+APP="build/HiYashi.app"
 VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" scripts/Info.plist)"
-DMG="build/HiClaude-${VERSION}.dmg"
+DMG="build/HiYashi-${VERSION}.dmg"
 rm -f "$DMG"
 
 # Staging limpo: só o app (o symlink para /Applications é adicionado abaixo),
@@ -20,18 +20,18 @@ if command -v create-dmg >/dev/null 2>&1; then
     # create-dmg (Homebrew): janela estilizada com o app e o atalho Applications
     # posicionados. --hdiutil-quiet evita ruído; retorno 2 = "sem code-sign", ok.
     create-dmg \
-        --volname "HiClaude" \
+        --volname "HiYashi" \
         --window-pos 200 120 \
         --window-size 600 380 \
         --icon-size 100 \
-        --icon "HiClaude.app" 150 190 \
+        --icon "HiYashi.app" 150 190 \
         --app-drop-link 450 190 \
-        --hide-extension "HiClaude.app" \
+        --hide-extension "HiYashi.app" \
         "$DMG" "$STAGING" || true
 else
     echo "aviso: create-dmg não encontrado (brew install create-dmg) — DMG simples via hdiutil"
     ln -s /Applications "$STAGING/Applications"
-    hdiutil create -volname "HiClaude" -srcfolder "$STAGING" \
+    hdiutil create -volname "HiYashi" -srcfolder "$STAGING" \
         -ov -format UDZO "$DMG" >/dev/null
 fi
 

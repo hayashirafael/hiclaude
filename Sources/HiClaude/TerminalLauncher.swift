@@ -54,7 +54,8 @@ struct TerminalLauncher: TerminalLaunching {
 
     static func spec(for message: Message,
                      claudeBinary: URL? = nil,
-                     codexBinary: URL? = nil) -> TerminalLaunchSpec? {
+                     codexBinary: URL? = nil,
+                     defaultWorkspace: URL? = nil) -> TerminalLaunchSpec? {
         let provider: Provider
         let binary: URL?
         var args: [String] = []
@@ -89,12 +90,12 @@ struct TerminalLauncher: TerminalLaunching {
         } else {
             // Nunca o home: o Claude Code não persiste o trust do home (vale
             // só pela sessão), então abrir lá pediria confirmação toda vez.
-            workingDir = defaultWorkspaceDir.path
+            workingDir = (defaultWorkspace ?? defaultWorkspaceDir).path
         }
 
         let messageConfigDir = (message.configDir?.isEmpty == false)
             ? URL(fileURLWithPath: message.configDir!) : nil
-        let envKey = provider == .codex ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"
+        let envKey = provider.envKey
         let envValue: String
         if provider == .codex {
             envValue = (messageConfigDir
@@ -119,8 +120,7 @@ struct TerminalLauncher: TerminalLaunching {
 
     /// Pasta neutra do app onde as sessões interativas abrem por padrão.
     static var defaultWorkspaceDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/HiClaude/workspace")
+        AppPaths.workspaceDirectory()
     }
 
     /// Pré-aprova, no `.claude.json` da conta, os dois consentimentos que o

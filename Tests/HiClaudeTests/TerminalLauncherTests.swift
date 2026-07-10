@@ -59,10 +59,11 @@ final class TerminalLauncherTests: XCTestCase {
         // O default NÃO pode ser o home: o Claude Code nunca persiste o trust
         // do home (só por sessão), então abrir lá pede confirmação toda vez.
         let msg = Message(text: "oi", kind: .claude) // sem workingDir
+        let workspace = URL(fileURLWithPath: "/tmp/HiYashi/workspace")
         let spec = try XCTUnwrap(TerminalLauncher.spec(
-            for: msg, claudeBinary: URL(fileURLWithPath: "/tmp/claude")))
-        let workspace = NSHomeDirectory() + "/Library/Application Support/HiClaude/workspace"
-        XCTAssertTrue(spec.terminalScript.contains("cd '\(workspace)'"))
+            for: msg, claudeBinary: URL(fileURLWithPath: "/tmp/claude"),
+            defaultWorkspace: workspace))
+        XCTAssertTrue(spec.terminalScript.contains("cd '\(workspace.path)'"))
     }
 
     func testLaunchPreConfiaPastaDeTrabalhoNoClaudeJsonDaConta() async throws {

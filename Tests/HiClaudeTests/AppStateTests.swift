@@ -291,6 +291,14 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(b.history, a.history)
     }
 
+    func testHistoricoManualLegadoContinuaDecodificando() {
+        let defaults = freshDefaults()
+        let event = FireEvent(date: Date(timeIntervalSince1970: 2), result: .success,
+                              messageText: "legado", origin: .manual)
+        defaults.set(try? JSONEncoder().encode([event]), forKey: "history")
+        XCTAssertEqual(AppState(defaults: defaults).history, [event])
+    }
+
     /// Migração: o lastEvent persistido pela versão antiga vira o primeiro histórico.
     func testMigraLastEventLegadoParaHistorico() {
         let defaults = freshDefaults()
@@ -699,5 +707,83 @@ final class AppStateTests: XCTestCase {
         ]
         state.recordMissingFolderContinuous()
         XCTAssertTrue(state.history.isEmpty)
+    }
+
+    func testEmailCacheAtualizaQuandoCredencialMuda() throws {
+        let conta = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hiyashi-email-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: conta, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: conta) }
+        let config = conta.appendingPathComponent(".claude.json")
+        func writeEmail(_ email: String, modificationDate: Date) throws {
+            let json = ["oauthAccount": ["emailAddress": email]]
+            try JSONSerialization.data(withJSONObject: json).write(to: config, options: .atomic)
+            try FileManager.default.setAttributes(
+                [.modificationDate: modificationDate], ofItemAtPath: config.path)
+        }
+
+        let state = AppState(defaults: freshDefaults())
+        try writeEmail("antes@example.com", modificationDate: Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(state.email(for: conta), "antes@example.com")
+        try writeEmail("depois@example.com", modificationDate: Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(state.email(for: conta), "depois@example.com")
+    }
+
+    func testEventoClaudeCapturaContaProviderModeloEIdentidade() throws {
+        let conta = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hiyashi-event-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: conta, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: conta) }
+        let json = ["oauthAccount": ["emailAddress": "antes@example.com"]]
+        try JSONSerialization.data(withJSONObject: json)
+            .write(to: conta.appendingPathComponent(".claude.json"))
+        let state = AppState(defaults: freshDefaults())
+        state.setAlias(conta, "Trabalho")
+        let message = Message(text: "revise", kind: .claude, model: .opus,
+                              configDir: conta.path)
+
+        let event = state.makeEvent(date: Date(timeIntervalSince1970: 1),
+                                    result: .success, message: message, origin: .agenda)
+
+        XCTAssertEqual(event.accountPath, conta.standardizedFileURL.path)
+        XCTAssertEqual(event.provider, .claude)
+        XCTAssertEqual(event.modelName, "Opus 4.8")
+        XCTAssertEqual(event.aliasSnapshot, "Trabalho")
+        XCTAssertEqual(event.emailSnapshot, "antes@example.com")
+    }
+
+    func testIdentidadeDoEventoPrefereDadosAtuaisESnapshotEhFallback() {
+        let state = AppState(defaults: freshDefaults())
+        let conta = URL(fileURLWithPath: "/tmp/hiyashi-removida-\(UUID().uuidString)")
+        let event = FireEvent(date: Date(), result: .success, account: conta.lastPathComponent,
+                              accountPath: conta.path, provider: .codex,
+                              modelName: "gpt-5.3-codex", aliasSnapshot: "Pessoal",
+                              emailSnapshot: "snapshot@example.com")
+
+        XCTAssertEqual(state.identity(for: event), EventIdentity(
+            accountName: conta.lastPathComponent, alias: "Pessoal",
+            email: "snapshot@example.com", provider: .codex,
+            modelName: "gpt-5.3-codex"))
+
+        state.setAlias(conta, "Atual")
+        XCTAssertEqual(state.identity(for: event).displayName, "Atual")
+    }
+
+    func testEventoCodexEShellGuardamSomenteMetadadosAplicaveis() {
+        let state = AppState(defaults: freshDefaults())
+        let codex = state.makeEvent(date: Date(), result: .success,
+                                    message: Message(text: "oi", kind: .codex,
+                                                     codexModel: "gpt-5.3-codex"),
+                                    origin: .agenda)
+        XCTAssertEqual(codex.provider, .codex)
+        XCTAssertEqual(codex.modelName, "gpt-5.3-codex")
+
+        let shell = state.makeEvent(date: Date(), result: .success,
+                                    message: Message(text: "echo oi", kind: .shell),
+                                    origin: .agenda)
+        XCTAssertNil(shell.account)
+        XCTAssertNil(shell.accountPath)
+        XCTAssertNil(shell.provider)
+        XCTAssertNil(shell.modelName)
     }
 }

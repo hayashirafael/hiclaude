@@ -1,4 +1,4 @@
-# HiClaude Agent Notes
+# HiYashi Agent Notes
 
 ## Overview
 
@@ -71,7 +71,7 @@ globally-active message.
 - `TerminalLauncher.swift` — disparo interativo (`message.resolvedRunInTerminal`):
   abre uma sessão no Terminal.app via AppleScript rodando um `.sh` temporário
   (auto-`rm`); fixa `CLAUDE_CONFIG_DIR`/`CODEX_HOME`, faz `cd` para o working dir
-  (default `~/Library/Application Support/HiClaude/workspace` — nunca o home, cujo
+  (default `~/Library/Application Support/HiYashi/workspace` — nunca o home, cujo
   trust não persiste). `seedTrust` pré-grava `projects[<dir>]` no `.claude.json` da
   conta para o `claude` não-supervisionado nunca travar em prompt:
   `hasTrustDialogAccepted` + `hasClaudeMdExternalIncludesApproved`/`…WarningShown`
@@ -86,8 +86,10 @@ globally-active message.
   fired-occurrence identity (never a wall-clock window — adjacent-minute
   occurrences must both fire); creating/editing a task advances a catch-up
   floor and never counts as a fire.
-- `SingleInstanceLock.swift` — `flock` on
-  `~/Library/Application Support/HiClaude/instance.lock`; a second launch
+- `SingleInstanceLock.swift` — `flock` on the compatibility path
+  `~/Library/Application Support/HiClaude/instance.lock`; keeping the legacy
+  path prevents old HiClaude and current HiYashi builds from running together.
+  A second launch
   (dev binary or packaged .app) alerts and exits before `AppEnvironment`
   exists (two instances double-fire and clobber each other's history).
 - UI: `MenuContent.swift` (per-account status menu + next-task line),
@@ -103,8 +105,8 @@ swift build                     # must always compile between changes
 swift test                      # full suite
 swift test --filter <Class>     # focused
 swift run HiClaude              # run the menu bar app locally
-./scripts/make-app.sh           # build/HiClaude.app (ad-hoc signed)
-./scripts/make-dmg.sh           # build/HiClaude-<version>.dmg
+./scripts/make-app.sh           # build/HiYashi.app (ad-hoc signed)
+./scripts/make-dmg.sh           # build/HiYashi-<version>.dmg
 ```
 
 ## Observability

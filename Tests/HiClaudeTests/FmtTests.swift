@@ -1,6 +1,7 @@
 import XCTest
 @testable import HiClaude
 
+@MainActor
 final class FmtTests: XCTestCase {
     func testRemainingFormataHorasEMinutos() {
         let now = Date(timeIntervalSince1970: 1_783_000_000)

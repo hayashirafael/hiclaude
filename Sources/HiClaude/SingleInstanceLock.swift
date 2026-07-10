@@ -8,8 +8,7 @@ final class SingleInstanceLock {
     private var fd: Int32 = -1
 
     static var defaultPath: String {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/HiClaude/instance.lock").path
+        AppPaths.instanceLockPath()
     }
 
     /// `true` quando este processo obteve o lock; `false` quando outra

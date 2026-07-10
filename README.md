@@ -1,4 +1,4 @@
-# HiClaude
+# HiYashi
 
 **English** | [Português](README.pt-br.md)
 
@@ -10,7 +10,7 @@ external dependencies.
 
 Claude plans (Pro/Max) open a 5-hour usage window from your first prompt. If
 you're a heavy user, you want that window already open when you sit down to
-work — not to burn its first hour warming up. HiClaude renews each account on
+work — not to burn its first hour warming up. HiYashi renews each account on
 its own, and continuous renewal never fires redundantly while a window is
 already active: it detects the current window passively from the local Claude
 Code transcripts, making no network calls of its own.
@@ -55,14 +55,14 @@ brew install --cask hiclaude   # later: brew upgrade --cask hiclaude
 
 ### DMG
 
-Download `HiClaude-<version>.dmg` from the
-[latest release](../../releases/latest) and drag **HiClaude** onto
+Download `HiYashi-<version>.dmg` from the
+[latest release](../../releases/latest) and drag **HiYashi** onto
 **Applications**.
 
-> HiClaude is ad-hoc signed, not notarized. On first launch, Gatekeeper may
+> HiYashi is ad-hoc signed, not notarized. On first launch, Gatekeeper may
 > block it: use **System Settings → Privacy & Security → Open Anyway**, or
 > clear the quarantine flag with
-> `xattr -dr com.apple.quarantine /Applications/HiClaude.app`.
+> `xattr -dr com.apple.quarantine /Applications/HiYashi.app`.
 
 ### From source
 
@@ -70,14 +70,14 @@ Download `HiClaude-<version>.dmg` from the
 git clone https://github.com/hayashirafael/hiclaude.git
 cd hiclaude
 swift test            # test suite
-./scripts/make-app.sh # build/HiClaude.app (ad-hoc signed)
-./scripts/make-dmg.sh # build/HiClaude-<version>.dmg (needs `brew install create-dmg`)
-open build/HiClaude.app
+./scripts/make-app.sh # build/HiYashi.app (ad-hoc signed)
+./scripts/make-dmg.sh # build/HiYashi-<version>.dmg (needs `brew install create-dmg`)
+open build/HiYashi.app
 ```
 
 ## Usage
 
-HiClaude lives in the menu bar (no Dock icon). The icon is filled while a
+HiYashi lives in the menu bar (no Dock icon). The icon is filled while a
 window is active, shows `!` on error, and fades when paused; optionally it
 also shows the time until the next window expires.
 
@@ -88,20 +88,21 @@ time and last result; a line for the next task (if any); plus
 **Settings** is a sidebar window with four sections:
 
 - **Accounts** — informative: for each account, the logged-in identity /
-  alias, provider, local folder, and how many active schedules target it.
+  alias, provider with its icon, local folder, and how many active schedules target it.
   Add or remove accounts here
 - **Schedules** — the single list of schedules. Each has a name, a type
   (Claude / Codex / shell command) with its own config, an account, and a
   repetition — **Continuous** (a 5-hour-window renewal, max one per account)
-  or **Fixed times** (times × weekdays). One form creates or edits any of them
-- **History** — recent dispatches; click a row to read the full response or
-  error detail
+  or **Fixed times** (times × weekdays). One form creates or edits any of them;
+  new schedules start with an empty command field
+- **History** — recent dispatches as cards with status, provider icon, model,
+  account alias/email, command, response and error details
 - **General** — Launch at Login, time remaining in the menu bar, Language
   (English or Portuguese), and the app version
 
 ## How it works
 
-To manage continuous renewals, HiClaude streams the account's local transcripts
+To manage continuous renewals, HiYashi streams the account's local transcripts
 (`<account>/projects/**.jsonl` for Claude, `sessions/**.jsonl` for Codex, line
 by line, ordered by `mtime`) and reconstructs the current 5-hour window. If one
 is active, only a redundant continuous renewal is skipped; fixed-time schedules
@@ -120,17 +121,17 @@ using the same prompt and environment so the interactive session stays open;
 a fixed-time interactive schedule opens at its scheduled time even if the
 account already has an active window. When no working directory is set,
 interactive sessions open in
-`~/Library/Application Support/HiClaude/workspace` (never the home folder,
-whose trust Claude Code only keeps per session), and HiClaude
+`~/Library/Application Support/HiYashi/workspace` (never the home folder,
+whose trust Claude Code only keeps per session), and HiYashi
 pre-trusts the folder in the account's `.claude.json` so no "do you trust this
-folder?" prompt appears. Only one HiClaude instance runs at a time: a second
+folder?" prompt appears. Only one HiYashi instance runs at a time: a second
 launch shows a notice and quits (two instances would double-fire schedules).
 The defaults — Haiku, low effort, `--safe-mode` (skips CLAUDE.md/skills/MCP) and
 the command `1+1` — make it the cheapest possible ping that opens the window. A
 batch Codex dispatch runs `codex exec [--model <model>] --sandbox read-only [-c
 model_reasoning_effort=<effort>] "<text>"` with `CODEX_HOME` pinned instead,
 and has its own minimal built-in `1+1` default. When you leave the Codex model
-(or reasoning) unset, HiClaude omits the flag so the account's own
+(or reasoning) unset, HiYashi omits the flag so the account's own
 `config.toml` default is used — the only value guaranteed to be accepted by the
 account's plan. Shell commands run through your login shell.
 

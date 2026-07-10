@@ -134,6 +134,7 @@ struct L10n {
     var fixedTimes: String { text(en: "Fixed times", pt: "Horários fixos") }
     var continuousWindow: String { text(en: "Continuous (5h window)", pt: "Contínua (janela de 5h)") }
     var continuous: String { text(en: "continuous", pt: "contínua") }
+    var continuousBadge: String { text(en: "Continuous", pt: "Contínua") }
     var fixedContinuousDescription: String {
         text(en: "Renews at the end of each account 5h window, 24/7.",
              pt: "Renova ao fim de cada janela de 5h da conta, 24/7.")
@@ -150,6 +151,8 @@ struct L10n {
     var addTime: String { text(en: "Add time", pt: "Adicionar horário") }
     var days: String { text(en: "Days", pt: "Dias") }
     var type: String { text(en: "Type", pt: "Tipo") }
+    var messageSection: String { text(en: "Message", pt: "Mensagem") }
+    var scheduleSection: String { text(en: "Schedule", pt: "Agendamento") }
     var nameOptional: String { text(en: "Name (optional)", pt: "Nome (opcional)") }
     var messageOrCommand: String { text(en: "Message or command", pt: "Mensagem ou comando") }
     var showResponse: String {
@@ -198,6 +201,30 @@ struct L10n {
     }
 
     var noHistory: String { text(en: "No runs recorded yet.", pt: "Sem disparos registrados ainda.") }
+    var noHistoryDescription: String {
+        text(en: "Runs from your schedules will appear here with account and model details.",
+             pt: "Os disparos dos seus agendamentos aparecerão aqui com detalhes da conta e do modelo.")
+    }
+    var historySuccess: String { text(en: "Success", pt: "Sucesso") }
+    var historyFailure: String { text(en: "Failed", pt: "Falhou") }
+    var historySkipped: String { text(en: "Skipped", pt: "Pulado") }
+    var historyMissed: String { text(en: "Missed", pt: "Perdido") }
+    var historyUnknownAccount: String { text(en: "Unknown account", pt: "Conta desconhecida") }
+    var historyUnknownProvider: String { text(en: "Unknown provider", pt: "Provedor desconhecido") }
+    var historyUnknownCommand: String { text(en: "Command not recorded", pt: "Comando não registrado") }
+    var historyAccountDefaultModel: String { text(en: "Account default", pt: "Padrão da conta") }
+    var historyResponse: String { text(en: "Response", pt: "Resposta") }
+    var historyDetails: String { text(en: "Details", pt: "Detalhes") }
+    var historyExecutedSuccessfully: String {
+        text(en: "Executed successfully", pt: "Executado com sucesso")
+    }
+    func historyWindowActive(until: String) -> String {
+        text(en: "Active window until \(until)", pt: "Janela ativa até \(until)")
+    }
+    func historyMissedOccurrence(_ occurrence: String) -> String {
+        text(en: "Missed at \(occurrence) while the app was closed",
+             pt: "Perdido em \(occurrence) enquanto o app estava fechado")
+    }
     func historyFooter(limit: Int) -> String {
         text(en: "Last \(limit) runs, newest first.",
              pt: "Últimos \(limit) disparos, mais recentes primeiro.")
@@ -215,7 +242,7 @@ struct L10n {
              pt: "\(time) — perdido \(occurrence) (app estava fechado)")
     }
     var alreadyRunningTitle: String {
-        text(en: "HiClaude is already running", pt: "O HiClaude já está aberto")
+        text(en: "HiYashi is already running", pt: "O HiYashi já está aberto")
     }
     var alreadyRunningBody: String {
         text(en: "Another instance owns the schedules. This one will quit to avoid duplicate dispatches.",
@@ -233,8 +260,8 @@ struct L10n {
         }
     }
 
-    var notificationFailureTitle: String { text(en: "HiClaude: run failed", pt: "HiClaude: disparo falhou") }
-    func notificationResponseTitle(_ messageText: String) -> String { "HiClaude: \(messageText)" }
+    var notificationFailureTitle: String { text(en: "HiYashi: run failed", pt: "HiYashi: disparo falhou") }
+    func notificationResponseTitle(_ messageText: String) -> String { "HiYashi: \(messageText)" }
 
     func daysSummary(_ weekdays: Set<Int>) -> String {
         if weekdays == Set(1...7) { return text(en: "every day", pt: "todos os dias") }

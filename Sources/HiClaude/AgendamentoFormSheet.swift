@@ -1,16 +1,17 @@
-import AppKit
 import SwiftUI
 
 /// Formulário único de agendamento: tipo (Claude/Codex/Comando), prompt com
 /// personalização por tipo, e repetição (contínua ou horários fixos).
 struct AgendamentoFormSheet: View {
+    static let initialCommandText = ""
+
     @ObservedObject var state: AppState
     /// Agendamento em edição; nil = modo "adicionar".
     let editing: ScheduledTask?
     let onDone: () -> Void
 
     @State private var name = ""
-    @State private var text = "1+1"
+    @State private var text = Self.initialCommandText
     @State private var kind: Message.Kind = .claude
     @State private var model: Message.Model = Message.defaultModel
     @State private var effort: Message.Effort = Message.defaultEffort
@@ -31,14 +32,11 @@ struct AgendamentoFormSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(editing == nil ? strings.newSchedule : strings.editSchedule).font(.headline)
+
+            sectionHeader(strings.messageSection)
+            KindSelector(kind: $kind, strings: strings)
             TextField(strings.nameOptional, text: $name)
             TextField(strings.messageOrCommand, text: $text)
-            Picker(strings.type, selection: $kind) {
-                Text("Claude").tag(Message.Kind.claude)
-                Text("Codex").tag(Message.Kind.codex)
-                Text(strings.command).tag(Message.Kind.shell)
-            }
-            .pickerStyle(.segmented)
             if kind == .claude {
                 ClaudeConfigForm(model: $model, effort: $effort, safeMode: $safeMode,
                                  configDir: $account, workingDir: $workingDir,
@@ -53,14 +51,20 @@ struct AgendamentoFormSheet: View {
                                 accountLabel: { state.label(for: $0) },
                                 strings: strings)
             }
-            if kind != .shell {
-                Toggle(strings.runInTerminal, isOn: $runInTerminal)
+            VStack(alignment: .leading, spacing: 6) {
+                if kind != .shell {
+                    Toggle(strings.runInTerminal, isOn: $runInTerminal)
+                        .toggleStyle(.checkbox)
+                }
+                Toggle(strings.showResponse, isOn: $showResponse)
                     .toggleStyle(.checkbox)
+                    .disabled(kind != .shell && runInTerminal)
             }
-            Toggle(strings.showResponse, isOn: $showResponse)
-                .toggleStyle(.checkbox)
-                .disabled(kind != .shell && runInTerminal)
-            Divider()
+            .font(.caption)
+
+            Divider().padding(.vertical, 2)
+
+            sectionHeader(strings.scheduleSection)
             repetitionPicker
             if repetition == .fixed {
                 timesEditor
@@ -74,7 +78,10 @@ struct AgendamentoFormSheet: View {
                         .font(.caption).foregroundStyle(.orange)
                 }
             }
-            Toggle(strings.enabled, isOn: $enabled).toggleStyle(.checkbox)
+            Toggle(strings.enabled, isOn: $enabled)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+
             HStack {
                 Spacer()
                 Button(strings.cancel) { onDone() }
@@ -83,13 +90,14 @@ struct AgendamentoFormSheet: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isValid)
             }
+            .padding(.top, 4)
         }
         .padding(20)
-        .frame(width: 380)
+        .frame(width: 420)
         .onAppear(perform: load)
         // Conta é por provider; trocar o Tipo sem limpar conta incompatível
-        // persistiria um configDir do provider errado (mesma lógica do antigo
-        // MessageFormSheet). Shell não mira conta e não pode ser contínuo.
+        // persistiria um configDir do provider errado. Shell não mira conta e
+        // não pode ser contínuo.
         .onChange(of: kind) { newKind in
             if newKind == .shell {
                 account = nil
@@ -108,6 +116,12 @@ struct AgendamentoFormSheet: View {
             }
             if !valid { account = nil }
         }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
     }
 
     private var repetitionPicker: some View {
@@ -207,9 +221,7 @@ struct AgendamentoFormSheet: View {
         workingDir = msg.workingDir ?? ""
     }
 
-    /// Monta o agendamento a partir do estado do formulário (normalizando
-    /// defaults para nil — prompt embutido enxuto, mesma regra do antigo
-    /// MessageFormSheet.commit).
+    /// Monta o agendamento normalizando defaults para nil.
     private func draftTask() -> ScheduledTask {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let effectiveAccount: String?
@@ -255,140 +267,44 @@ struct AgendamentoFormSheet: View {
     }
 }
 
-/// Bloco de configuração de uma mensagem Claude (modelo/effort/safe/conta/dir).
-struct ClaudeConfigForm: View {
-    @Binding var model: Message.Model
-    @Binding var effort: Message.Effort
-    @Binding var safeMode: Bool
-    @Binding var configDir: String?   // nil = conta global
-    @Binding var workingDir: String
-    let accounts: [URL]
-    let accountLabel: (URL) -> String
+/// Seletor segmentado desenhado à mão: o `Picker(.segmented)` do macOS descarta
+/// a imagem custom do `Label` (só o texto sobrevive), então os segmentos são
+/// botões próprios para exibir o `ProviderIcon` de cada tipo.
+struct KindSelector: View {
+    @Binding var kind: Message.Kind
     let strings: L10n
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Picker(strings.model, selection: $model) {
-                ForEach(Message.Model.allCases, id: \.self) { m in
-                    Text(m.label).tag(m)
-                }
-            }
-            Picker("Effort", selection: $effort) {
-                ForEach(Message.Effort.allCases, id: \.self) { e in
-                    Text(e.rawValue).tag(e)
-                }
-            }
-            Toggle("Safe mode", isOn: $safeMode)
-                .toggleStyle(.checkbox)
-            Picker(strings.account, selection: $configDir) {
-                Text(strings.globalDefault).tag(String?.none)
-                ForEach(accounts, id: \.self) { dir in
-                    Text(accountLabel(dir)).tag(String?.some(dir.path))
-                }
-            }
-            WorkingDirectoryPicker(workingDir: $workingDir, strings: strings)
+        HStack(spacing: 2) {
+            segment(.claude, title: "Claude", provider: .claude)
+            segment(.codex, title: "Codex", provider: .codex)
+            segment(.shell, title: strings.command, provider: nil)
         }
-        .font(.caption)
+        .padding(2)
+        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 7))
     }
-}
 
-/// Bloco de configuração de uma mensagem Codex (modelo/reasoning/conta/dir).
-struct CodexConfigForm: View {
-    @Binding var model: String        // vazio = default da conta (config.toml)
-    @Binding var reasoning: Message.CodexReasoning
-    @Binding var configDir: String?   // nil = ~/.codex
-    @Binding var workingDir: String
-    let accounts: [URL]
-    let accountLabel: (URL) -> String
-    let strings: L10n
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            TextField(strings.accountDefaultModel, text: $model)
-            Picker("Reasoning", selection: $reasoning) {
-                ForEach(Message.CodexReasoning.allCases, id: \.self) { r in
-                    Text(r.rawValue).tag(r)
-                }
+    private func segment(_ value: Message.Kind, title: String, provider: Provider?) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { kind = value }
+        } label: {
+            HStack(spacing: 5) {
+                ProviderIcon(provider: provider, size: 12)
+                Text(title)
             }
-            Picker(strings.account, selection: $configDir) {
-                Text(strings.codexDefault).tag(String?.none)
-                ForEach(accounts, id: \.self) { dir in
-                    Text(accountLabel(dir)).tag(String?.some(dir.path))
-                }
-            }
-            WorkingDirectoryPicker(workingDir: $workingDir, strings: strings)
+            .font(.callout)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
-        .font(.caption)
-    }
-}
-
-/// Campo de diretório de trabalho: mostra o caminho escolhido e abre o
-/// seletor nativo do macOS para escolher uma pasta.
-struct WorkingDirectoryPicker: View {
-    @Binding var workingDir: String
-    let strings: L10n
-
-    private var isEmpty: Bool {
-        workingDir.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var displayText: String {
-        if isEmpty { return strings.workingDirectoryDefault }
-        return (workingDir as NSString).abbreviatingWithTildeInPath
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Button {
-                chooseDirectory()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "folder")
-                    Text(displayText)
-                        .foregroundStyle(isEmpty ? .secondary : .primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.bordered)
-            .help(strings.workingDirectoryDefault)
-
-            if !isEmpty {
-                Button {
-                    workingDir = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                }
-                .buttonStyle(.plain)
-                .help(strings.clearWorkingDirectory)
+        .buttonStyle(.plain)
+        .foregroundStyle(kind == value ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+        .background {
+            if kind == value {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.18), radius: 1, y: 0.5)
             }
         }
-    }
-
-    private func chooseDirectory() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.showsHiddenFiles = true
-        panel.prompt = strings.chooseDirectory
-        panel.directoryURL = initialDirectoryURL()
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        workingDir = url.standardizedFileURL.path
-    }
-
-    private func initialDirectoryURL() -> URL {
-        guard !isEmpty else {
-            return FileManager.default.homeDirectoryForCurrentUser
-        }
-        let expanded = NSString(string: workingDir).expandingTildeInPath
-        var isDirectory: ObjCBool = false
-        if FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory),
-           isDirectory.boolValue {
-            return URL(fileURLWithPath: expanded)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser
     }
 }

@@ -179,14 +179,10 @@ struct CommandRunner: CommandRunning {
         // Definir explicitamente sobrescreve qualquer valor herdado do ambiente.
         let messageConfigDir = (message.configDir?.isEmpty == false)
             ? URL(fileURLWithPath: message.configDir!) : nil
-        switch message.kind {
-        case .claude, .shell:
-            env["CLAUDE_CONFIG_DIR"] = (messageConfigDir ?? configDir
-                ?? URL(fileURLWithPath: home).appendingPathComponent(".claude")).path
-        case .codex:
-            env["CODEX_HOME"] = (messageConfigDir
-                ?? URL(fileURLWithPath: home).appendingPathComponent(".codex")).path
-        }
+        let provider: Provider = message.kind == .codex ? .codex : .claude
+        let fallbackName = provider == .codex ? ".codex" : ".claude"
+        env[provider.envKey] = (messageConfigDir ?? configDir
+            ?? URL(fileURLWithPath: home).appendingPathComponent(fallbackName)).path
         process.environment = env
 
         let outPipe = Pipe()

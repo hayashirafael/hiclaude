@@ -35,7 +35,12 @@ struct ContasView: View {
                         }
                         Text(scheduleCountText(dir)).font(.caption).foregroundStyle(.secondary)
                     } header: {
-                        if dir == accounts.first { Text(provider.displayName) }
+                        if dir == accounts.first {
+                            HStack(spacing: 6) {
+                                ProviderIcon(provider: provider, size: 14)
+                                Text(provider.displayName)
+                            }
+                        }
                     }
                 }
             }
@@ -74,7 +79,9 @@ struct ContasView: View {
 
     @ViewBuilder
     private func header(_ dir: URL) -> some View {
-        HStack {
+        HStack(spacing: 9) {
+            ProviderIcon(provider: state.provider(for: dir), size: 20)
+                .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 if editingAlias == dir {
                     TextField(strings.accountAlias, text: $aliasDraft, onCommit: { commitAlias(dir) })

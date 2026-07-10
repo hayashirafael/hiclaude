@@ -1,4 +1,4 @@
-# HiClaude
+# HiYashi
 
 [English](README.md) | **Português**
 
@@ -10,7 +10,7 @@ Claude sempre abertas — por conta, automaticamente. Swift + SwiftUI
 
 Os planos Claude (Pro/Max) abrem uma janela de uso de 5h a partir do primeiro
 prompt. Quem usa pesado quer a janela já aberta na hora de sentar para
-trabalhar — não gastar a primeira hora dela aquecendo. O HiClaude renova cada
+trabalhar — não gastar a primeira hora dela aquecendo. O HiYashi renova cada
 conta sozinho, e a renovação contínua nunca dispara de forma redundante se já
 existe uma janela ativa: ele detecta a janela corrente passivamente pelos
 transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
@@ -56,13 +56,13 @@ brew install --cask hiclaude   # depois: brew upgrade --cask hiclaude
 
 ### DMG
 
-Baixe o `HiClaude-<versão>.dmg` da [última release](../../releases/latest) e
-arraste o **HiClaude** para **Applications**.
+Baixe o `HiYashi-<versão>.dmg` da [última release](../../releases/latest) e
+arraste o **HiYashi** para **Applications**.
 
-> O HiClaude é assinado ad-hoc, não notarizado. Na primeira abertura o
+> O HiYashi é assinado ad-hoc, não notarizado. Na primeira abertura o
 > Gatekeeper pode bloquear: use **Ajustes do Sistema → Privacidade e
 > Segurança → Abrir Assim Mesmo**, ou remova o quarantine com
-> `xattr -dr com.apple.quarantine /Applications/HiClaude.app`.
+> `xattr -dr com.apple.quarantine /Applications/HiYashi.app`.
 
 ### A partir do código
 
@@ -70,14 +70,14 @@ arraste o **HiClaude** para **Applications**.
 git clone https://github.com/hayashirafael/hiclaude.git
 cd hiclaude
 swift test            # suíte de testes
-./scripts/make-app.sh # build/HiClaude.app (assinado ad-hoc)
-./scripts/make-dmg.sh # build/HiClaude-<versão>.dmg (requer `brew install create-dmg`)
-open build/HiClaude.app
+./scripts/make-app.sh # build/HiYashi.app (assinado ad-hoc)
+./scripts/make-dmg.sh # build/HiYashi-<versão>.dmg (requer `brew install create-dmg`)
+open build/HiYashi.app
 ```
 
 ## Uso
 
-O HiClaude vive na menu bar (sem ícone no Dock). O ícone fica preenchido
+O HiYashi vive na menu bar (sem ícone no Dock). O ícone fica preenchido
 enquanto há uma janela ativa, mostra `!` em erro e esmaece quando pausado;
 opcionalmente mostra também o tempo até a próxima janela vencer.
 
@@ -88,21 +88,21 @@ além de **Pausar/Retomar**, **Configurações…** e **Sair**.
 **Configurações** é uma janela em sidebar com quatro seções:
 
 - **Contas** — informativa: por conta, a identidade logada / apelido, o
-  provedor, a pasta local e quantos agendamentos ativos miram a conta.
+  provedor com seu ícone, a pasta local e quantos agendamentos ativos miram a conta.
   Adicione ou remova contas aqui
 - **Horários** — a lista única de agendamentos. Cada um tem nome, um tipo
   (Claude / Codex / comando shell) com sua config, uma conta e uma repetição —
   **Contínua** (uma renovação da janela de 5h, no máximo uma por conta) ou
   **Horários fixos** (horários × dias da semana). Um único formulário cria ou
-  edita qualquer um deles
-- **Histórico** — disparos recentes; clique numa linha para ler a resposta
-  completa ou o detalhe do erro
+  edita qualquer um deles; novos agendamentos começam com o campo de comando vazio
+- **Histórico** — disparos recentes em cards com status, ícone do provedor,
+  modelo, apelido/e-mail da conta, comando, resposta e detalhes de erro
 - **Geral** — Iniciar com o Mac, tempo restante na menu bar, Idioma (inglês
   ou português) e a versão do app
 
 ## Como funciona
 
-Para gerenciar as renovações contínuas, o HiClaude lê os transcripts locais da
+Para gerenciar as renovações contínuas, o HiYashi lê os transcripts locais da
 conta (`<conta>/projects/**.jsonl` no Claude, `sessions/**.jsonl` no Codex,
 streaming linha a linha, por `mtime`) e reconstrói a janela de 5h corrente. Se
 houver uma ativa, somente uma renovação contínua redundante é pulada; horários
@@ -121,10 +121,10 @@ batch. Por padrão, Claude/Codex abrem no Terminal.app sem `-p` / `exec`, usando
 o mesmo prompt e ambiente para deixar a sessão interativa aberta; um horário
 fixo interativo abre no horário agendado mesmo quando a conta já tem janela
 ativa. Sem diretório de trabalho definido, as sessões interativas abrem em
-`~/Library/Application Support/HiClaude/workspace` (nunca no home, cujo trust o
-Claude Code só mantém por sessão), e o HiClaude pré-confia a pasta no
+`~/Library/Application Support/HiYashi/workspace` (nunca no home, cujo trust o
+Claude Code só mantém por sessão), e o HiYashi pré-confia a pasta no
 `.claude.json` da conta para o prompt "do you trust this folder?" não aparecer.
-Só uma instância do HiClaude roda por vez: uma segunda aberta avisa e encerra
+Só uma instância do HiYashi roda por vez: uma segunda aberta avisa e encerra
 (duas instâncias disparariam os agendamentos em dobro).
 Os padrões —
 Haiku, esforço baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e o comando
@@ -132,7 +132,7 @@ Haiku, esforço baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e o comando
 Codex em batch executa `codex exec [--model <modelo>] --sandbox read-only [-c
 model_reasoning_effort=<esforço>] "<texto>"` com `CODEX_HOME` fixado no lugar,
 e tem seu próprio padrão mínimo `1+1` embutido. Quando você deixa o modelo (ou
-o raciocínio) do Codex em branco, o HiClaude omite a flag para o default da
+o raciocínio) do Codex em branco, o HiYashi omite a flag para o default da
 própria conta (`config.toml`) valer — o único valor garantidamente aceito pelo
 plano da conta. Comandos shell rodam pelo seu shell de login.
 

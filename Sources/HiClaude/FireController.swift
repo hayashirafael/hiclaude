@@ -6,11 +6,6 @@ protocol Notifying {
     func notifyResponse(title: String, response: String)
 }
 
-struct NullNotifier: Notifying {
-    func notifyFailure(title: String, message: String) {}
-    func notifyResponse(title: String, response: String) {}
-}
-
 /// Orquestra um disparo: renovação redundante pode pular; demais origens
 /// executam e registram o resultado em AppState.
 @MainActor
@@ -64,8 +59,9 @@ final class FireController {
         if origin == .renewal, message.kind != .shell,
            let end = await detector.activeWindowEnd(account: accountDir) {
             log.info("fire: renovacao pulada (janela ativa ate \(String(describing: end), privacy: .public)) conta=\(account, privacy: .public)")
-            state.recordEvent(FireEvent(date: clock.now, result: .skipped(activeUntil: end),
-                                        messageText: message.text, account: account, origin: origin))
+            state.recordEvent(state.makeEvent(date: clock.now,
+                                              result: .skipped(activeUntil: end),
+                                              message: message, origin: origin))
             return true
         }
 
@@ -74,16 +70,15 @@ final class FireController {
             case .success:
                 log.info("fire: launch terminal ok conta=\(account, privacy: .public)")
                 state.cliFound[message.kind == .codex ? .codex : .claude] = true
-                state.recordEvent(FireEvent(date: clock.now, result: .success,
-                                            messageText: message.text, account: account,
-                                            origin: origin))
+                state.recordEvent(state.makeEvent(date: clock.now, result: .success,
+                                                  message: message, origin: origin))
             case .failure(let error):
                 if case .cliNotFound(let provider) = error { state.cliFound[provider] = false }
                 let summary = error.userMessage(language: state.language)
                 log.error("fire: launch terminal falhou: \(summary, privacy: .public)")
-                state.recordEvent(FireEvent(date: clock.now, result: .failure(message: summary),
-                                            messageText: message.text, account: account,
-                                            origin: origin))
+                state.recordEvent(state.makeEvent(date: clock.now,
+                                                  result: .failure(message: summary),
+                                                  message: message, origin: origin))
                 if origin != .manual {
                     notifier.notifyFailure(title: state.strings.notificationFailureTitle,
                                            message: summary)
@@ -98,9 +93,9 @@ final class FireController {
             state.cliFound[message.kind == .codex ? .codex : .claude] = true
             let response = message.resolvedShowResponse && !output.isEmpty
                 ? String(output.prefix(Self.responseLimit)) : nil
-            state.recordEvent(FireEvent(date: clock.now, result: .success,
-                                        messageText: message.text, account: account,
-                                        origin: origin, response: response))
+            state.recordEvent(state.makeEvent(date: clock.now, result: .success,
+                                              message: message, origin: origin,
+                                              response: response))
             if let response {
                 notifier.notifyResponse(title: state.strings.notificationResponseTitle(message.text),
                                         response: response)
@@ -116,9 +111,10 @@ final class FireController {
                 summary = error.userMessage(language: state.language)
             }
             log.error("fire: runner falhou: \(summary, privacy: .public)")
-            state.recordEvent(FireEvent(date: clock.now, result: .failure(message: summary),
-                                        messageText: message.text, account: account,
-                                        origin: origin, response: detail))
+            state.recordEvent(state.makeEvent(date: clock.now,
+                                              result: .failure(message: summary),
+                                              message: message, origin: origin,
+                                              response: detail))
             if origin != .manual {
                 notifier.notifyFailure(title: state.strings.notificationFailureTitle, message: summary)
             }

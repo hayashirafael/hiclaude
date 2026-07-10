@@ -5,95 +5,206 @@ struct HistoryTab: View {
     private var strings: L10n { state.strings }
 
     var body: some View {
-        if state.history.isEmpty {
-            Text(strings.noHistory)
+        Group {
+            if state.history.isEmpty { emptyState } else { historyList }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 32, weight: .light))
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, minHeight: 200)
-                .padding(40)
-        } else {
-            Form {
-                Section {
-                    ForEach(Array(state.history.enumerated()), id: \.offset) { _, event in
-                        row(event)
-                    }
-                } footer: {
-                    Text(strings.historyFooter(limit: AppState.historyLimit))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .formStyle(.grouped)
+            Text(strings.noHistory).font(.headline)
+            Text(strings.noHistoryDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 300)
         }
+        .frame(maxWidth: .infinity, minHeight: 260)
+        .padding(40)
     }
 
-    @ViewBuilder
-    private func row(_ event: FireEvent) -> some View {
-        if let response = event.response, !response.isEmpty {
-            DisclosureGroup {
-                Text(response)
+    private var historyList: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(Array(state.history.enumerated()), id: \.offset) { _, event in
+                    card(event)
+                }
+                Text(strings.historyFooter(limit: AppState.historyLimit))
                     .font(.caption)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } label: {
-                header(event)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 6)
             }
-        } else {
-            header(event)
+            .padding(16)
         }
     }
 
-    private func header(_ event: FireEvent) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol(event)).foregroundStyle(color(event))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title(event))
-                if !subtitle(event).isEmpty {
-                    Text(subtitle(event)).font(.caption2).foregroundStyle(.secondary)
+    private func card(_ event: FireEvent) -> some View {
+        let identity = state.identity(for: event)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                providerMark(identity)
+                identityHeader(identity)
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 5) {
+                    statusBadge(event)
+                    Text(Fmt.dayTime(event.date, language: state.language))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
-            Spacer()
+
+            Divider()
+
+            Text(event.messageText ?? strings.historyUnknownCommand)
+                .font(.body.weight(.medium))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(resultDetail(event))
+                .font(.caption)
+                .foregroundStyle(statusColor(event))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 6) {
+                providerBadge(identity)
+                if let model = modelLabel(identity) {
+                    badge(model, systemImage: "cpu")
+                }
+                if let origin = event.origin, let label = strings.origin(origin) {
+                    badge(label, systemImage: origin == .renewal
+                          ? "arrow.triangle.2.circlepath" : "calendar")
+                }
+            }
+
+            if let response = event.response, !response.isEmpty {
+                DisclosureGroup(responseTitle(event)) {
+                    Text(response)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 5)
+                }
+                .font(.caption)
+            }
+        }
+        .padding(13)
+        .background(.background, in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(.separator.opacity(0.65), lineWidth: 1)
         }
     }
 
-    private func symbol(_ event: FireEvent) -> String {
-        if event.origin == .renewal { return "arrow.triangle.2.circlepath" }
-        if event.origin == .agenda { return "calendar" }
+    private func providerMark(_ identity: EventIdentity) -> some View {
+        ProviderIcon(provider: identity.provider, size: 21,
+                     fallbackSystemName: identity.accountName == nil ? "terminal" : "questionmark")
+            .frame(width: 34, height: 34)
+            .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func identityHeader(_ identity: EventIdentity) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(identity.displayName ?? (identity.accountName == nil
+                 ? strings.command : strings.historyUnknownAccount))
+                .font(.headline)
+                .lineLimit(1)
+            if let email = identity.email, email != identity.displayName {
+                Text(email)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func providerBadge(_ identity: EventIdentity) -> some View {
+        let title: String
+        let fallback: String
+        if let provider = identity.provider {
+            title = provider.displayName
+            fallback = "questionmark"
+        } else if identity.accountName == nil {
+            title = strings.command
+            fallback = "terminal"
+        } else {
+            title = strings.historyUnknownProvider
+            fallback = "questionmark"
+        }
+        return ProviderBadge(provider: identity.provider, title: title,
+                             fallbackSystemName: fallback)
+    }
+
+    private func modelLabel(_ identity: EventIdentity) -> String? {
+        if let model = identity.modelName { return model }
+        return identity.provider == .codex ? strings.historyAccountDefaultModel : nil
+    }
+
+    private func badge(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.secondary.opacity(0.12), in: Capsule())
+    }
+
+    private func statusBadge(_ event: FireEvent) -> some View {
+        Label(statusTitle(event), systemImage: statusSymbol(event))
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(statusColor(event))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(statusColor(event).opacity(0.12), in: Capsule())
+    }
+
+    private func statusTitle(_ event: FireEvent) -> String {
         switch event.result {
-        case .success: return "checkmark.circle"
-        case .skipped: return "arrow.uturn.right.circle"
-        case .failure: return "xmark.circle"
-        case .missed: return "moon.zzz"
+        case .success: return strings.historySuccess
+        case .failure: return strings.historyFailure
+        case .skipped: return strings.historySkipped
+        case .missed: return strings.historyMissed
         }
     }
 
-    private func color(_ event: FireEvent) -> Color {
+    private func statusSymbol(_ event: FireEvent) -> String {
+        switch event.result {
+        case .success: return "checkmark.circle.fill"
+        case .failure: return "xmark.circle.fill"
+        case .skipped: return "arrow.uturn.right.circle.fill"
+        case .missed: return "moon.zzz.fill"
+        }
+    }
+
+    private func statusColor(_ event: FireEvent) -> Color {
         switch event.result {
         case .success: return .green
-        case .skipped: return .secondary
         case .failure: return .red
+        case .skipped: return .secondary
         case .missed: return .orange
         }
     }
 
-    private func title(_ event: FireEvent) -> String {
-        let time = Fmt.dayTime(event.date, language: state.language)
+    private func resultDetail(_ event: FireEvent) -> String {
         switch event.result {
         case .success:
-            return strings.succeeded(time, event.messageText ?? "hi")
-        case .skipped(let until):
-            return strings.skippedUntil(time, Fmt.hhmm(until, language: state.language))
+            return strings.historyExecutedSuccessfully
         case .failure(let message):
-            return strings.failed(time, message)
+            return message
+        case .skipped(let until):
+            return strings.historyWindowActive(
+                until: Fmt.hhmm(until, language: state.language))
         case .missed(let occurrence):
-            return strings.missedWhileClosed(time, Fmt.dayTime(occurrence, language: state.language))
+            return strings.historyMissedOccurrence(
+                Fmt.dayTime(occurrence, language: state.language))
         }
     }
 
-    private func subtitle(_ event: FireEvent) -> String {
-        var parts: [String] = []
-        if let account = event.account { parts.append(account) }
-        if let origin = event.origin, let label = strings.origin(origin) {
-            parts.append(label)
-        }
-        return parts.joined(separator: " · ")
+    private func responseTitle(_ event: FireEvent) -> String {
+        if case .failure = event.result { return strings.historyDetails }
+        return strings.historyResponse
     }
 }

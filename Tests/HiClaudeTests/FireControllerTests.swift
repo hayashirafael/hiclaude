@@ -74,17 +74,17 @@ final class FireControllerTests: XCTestCase {
         detector.end = end
         await controller.fire(message: AppState.defaultMessage, origin: .renewal)
         XCTAssertEqual(runner.calls, 0)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .skipped(activeUntil: end),
-                                 messageText: "1+1", account: ".claude", origin: .renewal))
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .skipped(activeUntil: end),
+            message: AppState.defaultMessage, origin: .renewal))
     }
 
     func testSucessoRegistraEventoNoHistorico() async {
         await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
         XCTAssertEqual(runner.calls, 1)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .success,
-                                 messageText: "1+1", account: ".claude", origin: .scheduled))
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .success,
+            message: AppState.defaultMessage, origin: .scheduled))
         XCTAssertEqual(state.history.count, 1)
         XCTAssertTrue(notifier.messages.isEmpty)
     }
@@ -92,10 +92,10 @@ final class FireControllerTests: XCTestCase {
     func testFalhaAgendadaNotifica() async {
         runner.result = .failure(.failed("sem rede"))
         await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .failure(message: "sem rede"),
-                                 messageText: "1+1", account: ".claude", origin: .scheduled))
-        XCTAssertEqual(notifier.titles, ["HiClaude: run failed"])
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .failure(message: "sem rede"),
+            message: AppState.defaultMessage, origin: .scheduled))
+        XCTAssertEqual(notifier.titles, ["HiYashi: run failed"])
         XCTAssertEqual(notifier.messages, ["sem rede"])
     }
 
@@ -137,9 +137,8 @@ final class FireControllerTests: XCTestCase {
         await controller.fire(message: msg, origin: .scheduled)
         XCTAssertEqual(runner.calls, 1)
         XCTAssertEqual(runner.lastMessage, msg)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .success,
-                                 messageText: "echo oi", account: ".claude", origin: .scheduled))
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .success, message: msg, origin: .scheduled))
     }
 
     func testRespostaSalvaENotificadaQuandoLigado() async {
@@ -148,7 +147,7 @@ final class FireControllerTests: XCTestCase {
         await controller.fire(message: msg, origin: .scheduled)
         XCTAssertEqual(state.lastEvent?.response, "resposta do claude")
         XCTAssertEqual(notifier.responses.count, 1)
-        XCTAssertEqual(notifier.responses.first?.messageText, "HiClaude: resumo")
+        XCTAssertEqual(notifier.responses.first?.messageText, "HiYashi: resumo")
     }
 
     func testRespostaIgnoradaQuandoDesligado() async {
@@ -232,14 +231,14 @@ final class FireControllerTests: XCTestCase {
                                     terminalLauncher: terminal,
                                     notifier: notifier, clock: FakeClock(now: now))
 
-        await controller.fire(message: Message(text: "bom dia", kind: .claude), origin: .scheduled)
+        let message = Message(text: "bom dia", kind: .claude)
+        await controller.fire(message: message, origin: .scheduled)
 
         XCTAssertEqual(terminal.calls, 1)
         XCTAssertEqual(terminal.lastMessage, Message(text: "bom dia", kind: .claude))
         XCTAssertEqual(runner.calls, 0)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .success,
-                                 messageText: "bom dia", account: ".claude", origin: .scheduled))
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .success, message: message, origin: .scheduled))
     }
 
     func testTerminalInterativoAbreMesmoComJanelaAtiva() async {
@@ -250,13 +249,13 @@ final class FireControllerTests: XCTestCase {
         let end = now.addingTimeInterval(3600)
         detector.end = end
 
-        await controller.fire(message: Message(text: "bom dia", kind: .claude), origin: .agenda)
+        let message = Message(text: "bom dia", kind: .claude)
+        await controller.fire(message: message, origin: .agenda)
 
         XCTAssertEqual(terminal.calls, 1)
         XCTAssertEqual(runner.calls, 0)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .success,
-                                 messageText: "bom dia", account: ".claude", origin: .agenda))
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .success, message: message, origin: .agenda))
     }
 
     func testAgendaBatchComRespostaExecutaMesmoComJanelaAtiva() async {
@@ -267,16 +266,15 @@ final class FireControllerTests: XCTestCase {
         detector.end = now.addingTimeInterval(3600)
         runner.result = .success("Porto Alegre")
 
-        await controller.fire(message: Message(text: "capital do RS", kind: .claude,
-                                               showResponse: true, runInTerminal: false),
-                              origin: .agenda)
+        let message = Message(text: "capital do RS", kind: .claude,
+                              showResponse: true, runInTerminal: false)
+        await controller.fire(message: message, origin: .agenda)
 
         XCTAssertEqual(terminal.calls, 0)
         XCTAssertEqual(runner.calls, 1)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .success,
-                                 messageText: "capital do RS", account: ".claude",
-                                 origin: .agenda, response: "Porto Alegre"))
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .success, message: message,
+            origin: .agenda, response: "Porto Alegre"))
         XCTAssertEqual(notifier.responses.count, 1)
         XCTAssertEqual(notifier.responses.first?.response, "Porto Alegre")
     }
@@ -289,13 +287,14 @@ final class FireControllerTests: XCTestCase {
         let end = now.addingTimeInterval(3600)
         detector.end = end
 
-        await controller.fire(message: Message(text: "1+1", kind: .claude), origin: .renewal)
+        let message = Message(text: "1+1", kind: .claude)
+        await controller.fire(message: message, origin: .renewal)
 
         XCTAssertEqual(terminal.calls, 0)
         XCTAssertEqual(runner.calls, 0)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .skipped(activeUntil: end),
-                                 messageText: "1+1", account: ".claude", origin: .renewal))
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .skipped(activeUntil: end),
+            message: message, origin: .renewal))
     }
 
     func testTerminalInterativoDesligadoUsaRunnerBatch() async {
@@ -321,12 +320,13 @@ final class FireControllerTests: XCTestCase {
                                     terminalLauncher: terminal,
                                     notifier: notifier, clock: FakeClock(now: now))
 
-        await controller.fire(message: Message(text: "bom dia", kind: .claude), origin: .scheduled)
+        let message = Message(text: "bom dia", kind: .claude)
+        await controller.fire(message: message, origin: .scheduled)
 
         XCTAssertEqual(runner.calls, 0)
-        XCTAssertEqual(state.lastEvent,
-                       FireEvent(date: now, result: .failure(message: "Terminal nao abriu"),
-                                 messageText: "bom dia", account: ".claude", origin: .scheduled))
+        XCTAssertEqual(state.lastEvent, state.makeEvent(
+            date: now, result: .failure(message: "Terminal nao abriu"),
+            message: message, origin: .scheduled))
         XCTAssertEqual(notifier.messages, ["Terminal nao abriu"])
     }
 }

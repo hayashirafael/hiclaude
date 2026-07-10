@@ -16,7 +16,7 @@ enum LoginItem {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            NSLog("HiClaude LoginItem: \(error)")
+            NSLog("HiYashi LoginItem: \(error)")
         }
     }
 }

@@ -60,18 +60,42 @@ struct HorariosView: View {
 
     @ViewBuilder
     private func row(_ task: ScheduledTask) -> some View {
-        HStack(alignment: .top) {
+        let msg = task.resolvedCommand
+        HStack(alignment: .top, spacing: 10) {
             Toggle("", isOn: enabledBinding(task))
                 .toggleStyle(.switch)
                 .controlSize(.mini)
                 .labelsHidden()
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title(task))
-                Text(subtitle(task)).font(.caption2).foregroundStyle(.secondary)
-                if task.resolvedCommand.kind != .shell,
-                   let cfg = task.resolvedCommand.configDir, !cfg.isEmpty,
+            ProviderIcon(provider: provider(for: msg.kind), size: 20)
+                .foregroundStyle(task.enabled ? .primary : .secondary)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(title(task))
+                        .fontWeight(.medium)
+                        .foregroundStyle(task.enabled ? .primary : .secondary)
+                    repetitionBadge(task)
+                }
+                if task.name != nil, !msg.text.isEmpty {
+                    Text(msg.text)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+                if let target = targetLine(task) {
+                    detailLabel(target, systemImage: "person.crop.circle")
+                }
+                detailLabel(scheduleLine(task),
+                            systemImage: task.repetition == .continuous
+                                ? "arrow.triangle.2.circlepath" : "clock")
+                if let next = nextLine(task) {
+                    Label(next, systemImage: "arrow.right.circle")
+                        .font(.caption2).foregroundStyle(.tint)
+                }
+                if msg.kind != .shell,
+                   let cfg = msg.configDir, !cfg.isEmpty,
                    state.accountDir(for: task) == nil {
-                    Text(strings.accountFolderMissing)
+                    Label(strings.accountFolderMissing,
+                          systemImage: "exclamationmark.triangle")
                         .font(.caption2).foregroundStyle(.orange)
                 }
             }
@@ -85,37 +109,82 @@ struct HorariosView: View {
             }
             .buttonStyle(.plain)
         }
+        .padding(.vertical, 2)
+    }
+
+    private func detailLabel(_ text: String, systemImage: String) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.caption2).foregroundStyle(.secondary)
+    }
+
+    private func repetitionBadge(_ task: ScheduledTask) -> some View {
+        Text(task.repetition == .continuous ? strings.continuousBadge : strings.fixedTimes)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.secondary.opacity(0.12), in: Capsule())
     }
 
     private func title(_ task: ScheduledTask) -> String {
         task.name ?? task.resolvedCommand.text
     }
 
-    /// "Codex · conta X · contínua · renova 14:05" ou
-    /// "Claude · 08:00 · 13:00 — seg a sex · próxima qua 08:00".
-    private func subtitle(_ task: ScheduledTask) -> String {
-        var parts: [String] = []
-        switch task.resolvedCommand.kind {
-        case .claude, .codex, .shell: parts.append(strings.taskKind(task.resolvedCommand.kind))
+    private func provider(for kind: Message.Kind) -> Provider? {
+        switch kind {
+        case .claude: return .claude
+        case .codex: return .codex
+        case .shell: return nil
         }
-        if let dir = state.accountDir(for: task) { parts.append(state.label(for: dir)) }
-        switch task.repetition {
-        case .continuous:
-            parts.append(strings.continuous)
-            if task.enabled, let dir = state.accountDir(for: task),
-               let next = state.nextRenewals[dir], next > Date() {
-                parts.append(strings.renewsAt(Fmt.hhmm(next, language: state.language)))
-            } else if task.enabled {
-                parts.append(strings.waitingForWindow)
-            }
-        case .fixed:
-            let horarios = task.times.sorted().map(Fmt.minutes).joined(separator: " · ")
-            parts.append("\(horarios) - \(Self.daysSummary(task.weekdays, language: state.language))")
-            if task.enabled, let next = state.nextTaskFires[task.uid], next > Date() {
-                parts.append(strings.nextAt(Fmt.weekdayTime(next, language: state.language)))
-            }
+    }
+
+    /// Conta + modelo do disparo: "ailton@… · Haiku 4.5 · low" (Claude),
+    /// "conta · gpt-x" (Codex). Shell não mira conta → nil.
+    private func targetLine(_ task: ScheduledTask) -> String? {
+        let msg = task.resolvedCommand
+        guard msg.kind != .shell else { return nil }
+        var parts: [String] = []
+        if let dir = state.accountDir(for: task) {
+            parts.append(state.label(for: dir))
+        } else {
+            parts.append(msg.kind == .claude ? strings.globalDefault : strings.codexDefault)
+        }
+        switch msg.kind {
+        case .claude:
+            parts.append("\(msg.resolvedModel.label) · \(msg.resolvedEffort.rawValue)")
+        case .codex:
+            if let model = msg.codexModel, !model.isEmpty { parts.append(model) }
+        case .shell:
+            break
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// "17:14 · every day" (fixos) ou a descrição da janela contínua.
+    private func scheduleLine(_ task: ScheduledTask) -> String {
+        switch task.repetition {
+        case .continuous:
+            return strings.fixedContinuousDescription
+        case .fixed:
+            let horarios = task.times.sorted().map(Fmt.minutes).joined(separator: " · ")
+            return "\(horarios) — \(Self.daysSummary(task.weekdays, language: state.language))"
+        }
+    }
+
+    /// Próximo disparo: "next Sat 17:14", "renews 14:05" ou "waiting for window".
+    private func nextLine(_ task: ScheduledTask) -> String? {
+        guard task.enabled else { return nil }
+        switch task.repetition {
+        case .continuous:
+            if let dir = state.accountDir(for: task),
+               let next = state.nextRenewals[dir], next > Date() {
+                return strings.renewsAt(Fmt.hhmm(next, language: state.language))
+            }
+            return strings.waitingForWindow
+        case .fixed:
+            guard let next = state.nextTaskFires[task.uid], next > Date() else { return nil }
+            return strings.nextAt(Fmt.weekdayTime(next, language: state.language))
+        }
     }
 
     /// Resumo dos dias: "todos os dias", "seg a sex", "fim de semana" ou lista.
