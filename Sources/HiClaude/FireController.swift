@@ -67,10 +67,29 @@ final class FireController {
             }
         case .failure(let error):
             if case .cliNotFound(let provider) = error { state.cliFound[provider] = false }
-            state.recordEvent(FireEvent(date: clock.now, result: .failure(message: error.userMessage),
-                                        messageText: message.text, account: account, origin: origin))
-            if origin != .manual { notifier.notifyFailure(message: error.userMessage) }
+            let summary: String
+            var detail: String? = nil
+            if case .failed(let full) = error {
+                summary = Self.failureSummary(full)
+                if full != summary { detail = String(full.prefix(Self.responseLimit)) }
+            } else {
+                summary = error.userMessage
+            }
+            state.recordEvent(FireEvent(date: clock.now, result: .failure(message: summary),
+                                        messageText: message.text, account: account,
+                                        origin: origin, response: detail))
+            if origin != .manual { notifier.notifyFailure(message: summary) }
         }
         return true
+    }
+
+    /// Resumo de um stderr longo para o título do histórico: a última linha
+    /// não vazia (onde CLIs imprimem o erro final), truncada — o texto
+    /// completo vai em `response` e vira detalhe expansível na UI.
+    static func failureSummary(_ full: String) -> String {
+        let line = full.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .last { !$0.isEmpty } ?? full
+        return String(line.prefix(120))
     }
 }

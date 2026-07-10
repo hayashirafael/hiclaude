@@ -156,4 +156,46 @@ final class FireControllerTests: XCTestCase {
         XCTAssertNil(state.lastEvent?.response)
         XCTAssertTrue(notifier.responses.isEmpty)
     }
+
+    // MARK: - Resumo de falha (histórico legível)
+
+    func testFalhaLongaGravaResumoCurtoEDetalheCompleto() async {
+        let stderrCompleto = """
+        warning: Model metadata for `gpt-5.1-codex-mini` not found.
+
+        ERROR: {"type":"error","status":400,"error":{"message":"The 'gpt-5.1-codex-mini' model is not supported"}}
+        """
+        runner.result = .failure(.failed(stderrCompleto))
+        await controller.fire(message: Message(text: "1+1", kind: .codex), origin: .manual)
+
+        guard case .failure(let message) = state.history.first?.result else {
+            return XCTFail("esperava falha no histórico")
+        }
+        // Resumo = última linha não vazia, não o stderr inteiro.
+        XCTAssertTrue(message.hasPrefix("ERROR: {\"type\":\"error\""))
+        XCTAssertFalse(message.contains("warning:"))
+        // Detalhe completo vai para response (vira DisclosureGroup na UI).
+        XCTAssertEqual(state.history.first?.response, stderrCompleto)
+    }
+
+    func testResumoDeFalhaTruncaEm120Caracteres() {
+        let linhaLonga = String(repeating: "x", count: 300)
+        XCTAssertEqual(FireController.failureSummary(linhaLonga).count, 120)
+    }
+
+    func testResumoUsaUltimaLinhaNaoVazia() {
+        XCTAssertEqual(FireController.failureSummary("primeira\n\núltima  \n\n"), "última")
+        XCTAssertEqual(FireController.failureSummary("só uma linha"), "só uma linha")
+    }
+
+    func testErroEstruturadoNaoGanhaDetalhe() async {
+        runner.result = .failure(.timeout)
+        await controller.fire(message: Message(text: "1+1", kind: .claude), origin: .manual)
+
+        guard case .failure(let message) = state.history.first?.result else {
+            return XCTFail("esperava falha no histórico")
+        }
+        XCTAssertEqual(message, "o comando não respondeu em 60s")
+        XCTAssertNil(state.history.first?.response)
+    }
 }
