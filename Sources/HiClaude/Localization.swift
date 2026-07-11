@@ -166,6 +166,10 @@ struct L10n {
         text(en: "Show response (history + notification)",
              pt: "Mostrar resposta (histórico + notificação)")
     }
+    var notifyOnSuccess: String {
+        text(en: "Notify on macOS when this task runs",
+             pt: "Notificar no macOS quando esta tarefa for executada")
+    }
     var runInTerminal: String {
         text(en: "Open in Terminal (interactive)",
              pt: "Abrir no Terminal (interativo)")
@@ -269,6 +273,12 @@ struct L10n {
 
     var notificationFailureTitle: String { text(en: "HiYashi: run failed", pt: "HiYashi: disparo falhou") }
     func notificationResponseTitle(_ messageText: String) -> String { "HiYashi: \(messageText)" }
+    func notificationSuccessTitle(_ name: String) -> String { "HiYashi: \(name)" }
+    /// Corpo curto "conta · HH:MM · resultado"; sem segmento de conta para shell.
+    func notificationSuccessBody(account: String?, time: String) -> String {
+        let result = text(en: "ran successfully", pt: "executada com sucesso")
+        return [account, time, result].compactMap { $0 }.joined(separator: " · ")
+    }
 
     func daysSummary(_ weekdays: Set<Int>) -> String {
         if weekdays == Set(1...7) { return text(en: "every day", pt: "todos os dias") }

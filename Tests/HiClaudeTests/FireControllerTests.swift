@@ -31,12 +31,16 @@ final class MockNotifier: Notifying {
     var messages: [String] = []
     var titles: [String] = []
     var responses: [(messageText: String, response: String)] = []
+    var successes: [(title: String, body: String)] = []
     func notifyFailure(title: String, message: String) {
         titles.append(title)
         messages.append(message)
     }
     func notifyResponse(title: String, response: String) {
         responses.append((title, response))
+    }
+    func notifySuccess(title: String, body: String) {
+        successes.append((title, body))
     }
 }
 
@@ -87,6 +91,7 @@ final class FireControllerTests: XCTestCase {
             message: AppState.defaultMessage, origin: .scheduled))
         XCTAssertEqual(state.history.count, 1)
         XCTAssertTrue(notifier.messages.isEmpty)
+        XCTAssertTrue(notifier.successes.isEmpty)
     }
 
     func testFalhaAgendadaNotifica() async {
@@ -311,6 +316,101 @@ final class FireControllerTests: XCTestCase {
         XCTAssertEqual(runner.calls, 1)
         XCTAssertEqual(runner.lastMessage, Message(text: "bom dia", kind: .claude,
                                                    runInTerminal: false))
+    }
+
+    // MARK: - Notificação de sucesso por tarefa (notifyOnSuccess)
+
+    /// Corpo esperado, montado com os mesmos helpers da implementação
+    /// (padrão dos testes que comparam com state.makeEvent).
+    private func corpoDeSucesso(para msg: Message) -> String {
+        let conta = msg.kind == .shell ? nil : state.label(for: state.effectiveConfigDir(for: msg))
+        return state.strings.notificationSuccessBody(
+            account: conta, time: Fmt.hhmm(now, language: state.language))
+    }
+
+    func testNotifyOnSuccessNotificaComNomeDaTarefa() async {
+        let msg = Message(text: "1+1", kind: .claude, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .agenda, taskName: "Renovar")
+        XCTAssertEqual(notifier.successes.count, 1)
+        XCTAssertEqual(notifier.successes.first?.title, "HiYashi: Renovar")
+        XCTAssertEqual(notifier.successes.first?.body, corpoDeSucesso(para: msg))
+    }
+
+    func testNotifyOnSuccessSemNomeUsaTextoDoComando() async {
+        let msg = Message(text: "bom dia", kind: .claude, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .agenda)
+        XCTAssertEqual(notifier.successes.first?.title, "HiYashi: bom dia")
+    }
+
+    func testNotifyOnSuccessDesligadoNaoNotifica() async {
+        await controller.fire(message: Message(text: "1+1", kind: .claude), origin: .agenda)
+        XCTAssertTrue(notifier.successes.isEmpty)
+    }
+
+    func testNotifyOnSuccessNaoNotificaEmFalha() async {
+        runner.result = .failure(.failed("sem rede"))
+        let msg = Message(text: "1+1", kind: .claude, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .agenda)
+        XCTAssertTrue(notifier.successes.isEmpty)
+        XCTAssertEqual(notifier.messages, ["sem rede"]) // falha notifica como hoje
+    }
+
+    func testNotifyOnSuccessNaoNotificaEmSkip() async {
+        detector.end = now.addingTimeInterval(3600)
+        let msg = Message(text: "1+1", kind: .claude, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .renewal)
+        XCTAssertEqual(runner.calls, 0)
+        XCTAssertTrue(notifier.successes.isEmpty)
+    }
+
+    func testNotifyOnSuccessComRespostaNaoDuplica() async {
+        runner.result = .success("42")
+        let msg = Message(text: "1+1", kind: .claude,
+                          showResponse: true, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .agenda)
+        XCTAssertEqual(notifier.responses.count, 1)
+        XCTAssertTrue(notifier.successes.isEmpty)
+    }
+
+    func testNotifyOnSuccessComRespostaVaziaNotificaSucesso() async {
+        runner.result = .success("")
+        let msg = Message(text: "1+1", kind: .claude,
+                          showResponse: true, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .agenda)
+        XCTAssertTrue(notifier.responses.isEmpty)
+        XCTAssertEqual(notifier.successes.count, 1)
+    }
+
+    func testNotifyOnSuccessNoTerminalNotificaAposAbrir() async {
+        let terminal = MockTerminalLauncher()
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal,
+                                    notifier: notifier, clock: FakeClock(now: now))
+        let msg = Message(text: "bom dia", kind: .claude, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .agenda, taskName: "Interativa")
+        XCTAssertEqual(terminal.calls, 1)
+        XCTAssertEqual(notifier.successes.first?.title, "HiYashi: Interativa")
+        XCTAssertEqual(notifier.successes.first?.body, corpoDeSucesso(para: msg))
+    }
+
+    func testNotifyOnSuccessNoTerminalNaoNotificaEmFalha() async {
+        let terminal = MockTerminalLauncher()
+        terminal.result = .failure(.failed("Terminal nao abriu"))
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal,
+                                    notifier: notifier, clock: FakeClock(now: now))
+        let msg = Message(text: "bom dia", kind: .claude, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .agenda)
+        XCTAssertTrue(notifier.successes.isEmpty)
+    }
+
+    func testNotifyOnSuccessCorpoSemContaParaShell() async {
+        let msg = Message(text: "echo oi", kind: .shell, notifyOnSuccess: true)
+        await controller.fire(message: msg, origin: .agenda)
+        XCTAssertEqual(notifier.successes.count, 1)
+        XCTAssertEqual(notifier.successes.first?.body,
+                       state.strings.notificationSuccessBody(
+                           account: nil, time: Fmt.hhmm(now, language: state.language)))
     }
 
     func testFalhaAoAbrirTerminalRegistraFalhaENotifica() async {

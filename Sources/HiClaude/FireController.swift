@@ -4,6 +4,7 @@ import os
 protocol Notifying {
     func notifyFailure(title: String, message: String)
     func notifyResponse(title: String, response: String)
+    func notifySuccess(title: String, body: String)
 }
 
 /// Orquestra um disparo: renovação redundante pode pular; demais origens
@@ -38,7 +39,7 @@ final class FireController {
     /// A renovação usa esse retorno para não marcar dedupe num disparo que
     /// nunca aconteceu de verdade (ver RenewalEngine.renew).
     @discardableResult
-    func fire(message: Message, origin: FireOrigin) async -> Bool {
+    func fire(message: Message, origin: FireOrigin, taskName: String? = nil) async -> Bool {
         guard !isRunning else {
             // Descarte silencioso: outro disparo está em andamento e o novo é
             // engolido. Logamos como erro para tornar visível esse "silenciador".
@@ -72,6 +73,9 @@ final class FireController {
                 state.cliFound[message.kind == .codex ? .codex : .claude] = true
                 state.recordEvent(state.makeEvent(date: clock.now, result: .success,
                                                   message: message, origin: origin))
+                if message.resolvedNotifyOnSuccess {
+                    notifySuccess(message: message, taskName: taskName, accountDir: accountDir)
+                }
             case .failure(let error):
                 if case .cliNotFound(let provider) = error { state.cliFound[provider] = false }
                 let summary = error.userMessage(language: state.language)
@@ -97,8 +101,11 @@ final class FireController {
                                               message: message, origin: origin,
                                               response: response))
             if let response {
+                // A notificação de resposta já comunica o sucesso — não duplica.
                 notifier.notifyResponse(title: state.strings.notificationResponseTitle(message.text),
                                         response: response)
+            } else if message.resolvedNotifyOnSuccess {
+                notifySuccess(message: message, taskName: taskName, accountDir: accountDir)
             }
         case .failure(let error):
             if case .cliNotFound(let provider) = error { state.cliFound[provider] = false }
@@ -120,6 +127,19 @@ final class FireController {
             }
         }
         return true
+    }
+
+    /// Notificação opt-in de sucesso (notifyOnSuccess): título com o nome da
+    /// tarefa (fallback no texto do comando), corpo "conta · HH:MM · resultado".
+    /// Sem gate por origem — a flag é opt-in explícito por tarefa; a contínua
+    /// notifica a cada renovação efetiva, nunca nos skips (sem hook lá).
+    private func notifySuccess(message: Message, taskName: String?, accountDir: URL) {
+        let accountLabel = message.kind == .shell ? nil : state.label(for: accountDir)
+        notifier.notifySuccess(
+            title: state.strings.notificationSuccessTitle(taskName ?? message.text),
+            body: state.strings.notificationSuccessBody(
+                account: accountLabel,
+                time: Fmt.hhmm(clock.now, language: state.language)))
     }
 
     /// Resumo de um stderr longo para o título do histórico: a última linha

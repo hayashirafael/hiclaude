@@ -44,7 +44,8 @@ final class AppEnvironment: ObservableObject {
                       $0.enabled && $0.repetition == .continuous
                           && self.state.accountDir(for: $0) == account
                   }) else { return true }
-            return await self.controller.fire(message: task.resolvedCommand, origin: .renewal)
+            return await self.controller.fire(message: task.resolvedCommand, origin: .renewal,
+                                              taskName: task.name)
         }
         renewalEngine.onStatus = { [weak self] next in
             self?.state.nextRenewals = next
@@ -62,7 +63,7 @@ final class AppEnvironment: ObservableObject {
                     message: cmd, origin: .agenda))
                 return true
             }
-            return await self.controller.fire(message: cmd, origin: .agenda)
+            return await self.controller.fire(message: cmd, origin: .agenda, taskName: task.name)
         }
         taskScheduler.onStatus = { [weak self] next in
             self?.state.nextTaskFires = next
