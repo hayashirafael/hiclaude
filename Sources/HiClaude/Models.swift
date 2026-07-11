@@ -145,6 +145,17 @@ struct ScheduledTask: Identifiable, Equatable {
     var resolvedCommand: Message { command ?? AppState.defaultMessage }
 }
 
+/// Decodificação lossy de arrays: um elemento ilegível vira `nil` em vez de
+/// derrubar o array inteiro. Protege o blob persistido de `tasks`/`history`
+/// contra um único item com raw value desconhecido (downgrade para uma build
+/// mais antiga) que apagaria toda a lista.
+struct FailableDecodable<T: Decodable>: Decodable {
+    let value: T?
+    init(from decoder: Decoder) throws {
+        value = try? T(from: decoder)
+    }
+}
+
 extension ScheduledTask: Codable {
     private enum CodingKeys: String, CodingKey {
         case uid, name, commandUID, command, repetition, times, weekdays, enabled

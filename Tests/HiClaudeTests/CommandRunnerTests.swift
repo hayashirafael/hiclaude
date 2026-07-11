@@ -295,6 +295,33 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertLessThan(elapsed, 10, "sendHi() nao retornou em tempo limitado: \(elapsed)s")
     }
 
+    /// Regressao: o fallback via shell de login (`locateViaShell`) rodava
+    /// `waitUntilExit()` sem timeout. Um profile (`~/.zprofile`) que pendura —
+    /// pedindo input, esperando rede — travaria a busca para sempre; e como
+    /// `locate()` roda dentro de `run()`, o `isRunning` do FireController nunca
+    /// seria liberado e todo disparo futuro seria descartado em silencio. A
+    /// busca deve desistir em tempo limitado e devolver nil.
+    func testLocateViaShellImpoeTimeoutENaoPenduraIndefinidamente() {
+        let shellQuePendura = makeScript("sleep 30")
+        let start = Date()
+        let result = CommandRunner.locateViaShell(shell: shellQuePendura, cliName: "claude", timeout: 1)
+        let elapsed = Date().timeIntervalSince(start)
+        XCTAssertNil(result)
+        XCTAssertLessThan(elapsed, 10, "locateViaShell nao respeitou o timeout: \(elapsed)s")
+    }
+
+    /// Regressao: `locateViaShell` nunca lia o pipe de stderr. Um profile que
+    /// ecoa mais que o buffer do SO (~64KB) em stderr trava o write do filho, o
+    /// `command -v` nunca termina e `waitUntilExit()` pendura para sempre. Este
+    /// shell fake despeja 200KB em stderr ANTES de imprimir o caminho no stdout:
+    /// so passa se o stderr for drenado concorrentemente.
+    func testLocateViaShellNaoTravaComStderrGrande() {
+        let alvo = "/tmp/fake-cli-\(UUID().uuidString)/claude"
+        let shell = makeScript("head -c 200000 /dev/zero | tr '\\0' 'e' >&2; printf '%s\\n' '\(alvo)'; exit 0")
+        let result = CommandRunner.locateViaShell(shell: shell, cliName: "claude", timeout: 5)
+        XCTAssertEqual(result?.path, alvo)
+    }
+
     private func makeExecutable(_ script: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("fake-\(UUID().uuidString)")

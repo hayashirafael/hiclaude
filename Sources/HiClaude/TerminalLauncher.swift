@@ -138,8 +138,16 @@ struct TerminalLauncher: TerminalLaunching {
     static func seedTrust(accountDir: String, workingDir: String) {
         let url = URL(fileURLWithPath: accountDir).appendingPathComponent(".claude.json")
         var root: [String: Any] = [:]
-        if let data = try? Data(contentsOf: url),
-           let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let data = try? Data(contentsOf: url) {
+            // Arquivo existe: só mexemos se soubermos parseá-lo. Um parse que
+            // falha (bytes truncados por escrita concorrente do CLI, JSON
+            // corrompido) NÃO pode virar root=[:] e ser regravado por cima —
+            // isso apagaria oauthAccount, trust de outros projetos e settings.
+            // Sem lugar seguro para semear, abortamos: no pior caso o prompt
+            // interativo aparece uma vez.
+            guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return
+            }
             root = parsed
         }
         var projects = root["projects"] as? [String: Any] ?? [:]

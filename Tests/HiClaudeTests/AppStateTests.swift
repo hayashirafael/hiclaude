@@ -883,4 +883,25 @@ final class AppStateTests: XCTestCase {
         state.accountFilter = AppState.defaultCodexConfigDir
         XCTAssertFalse(state.taskMatchesFilter(task))
     }
+
+    func testInitPreservaAgendamentosDecodificaveisQuandoUmItemEstaCorrompido() {
+        // Regressão de perda de dados: o decode de [ScheduledTask] é tudo-ou-nada.
+        // Um único item com raw value desconhecido (ex.: usuário criou um
+        // agendamento numa build futura com um novo case de Repetition e depois
+        // voltou para esta build via downgrade) fazia o array inteiro lançar,
+        // apagando TODAS as renovações — e a primeira mutação persistia []
+        // por cima do blob antigo. O decode deve ser lossy: o item ilegível
+        // some, os bons sobrevivem.
+        let d = freshDefaults()
+        let bom = UUID()
+        let blob = """
+        [{"uid":"\(bom.uuidString)","repetition":"continuous"},
+         {"uid":"\(UUID().uuidString)","repetition":"quinzenal"}]
+        """
+        d.set(Data(blob.utf8), forKey: "tasks")
+
+        let state = AppState(defaults: d)
+
+        XCTAssertEqual(state.tasks.map(\.uid), [bom])
+    }
 }

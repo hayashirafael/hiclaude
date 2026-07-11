@@ -142,6 +142,30 @@ final class TerminalLauncherTests: XCTestCase {
         XCTAssertEqual(entrada["hasClaudeMdExternalIncludesWarningShown"] as? Bool, true)
     }
 
+    func testLaunchNaoSobrescreveClaudeJsonIlegivel() async throws {
+        // Regressão de perda de dados: um .claude.json que EXISTE mas cujo
+        // parse falha (bytes truncados por escrita concorrente do CLI, JSON
+        // corrompido) não pode ser obliterado. O seedTrust antigo deixava
+        // root=[:] e regravava {"projects":{…}} por cima — apagando
+        // oauthAccount, trust de outros projetos e settings. Sem lugar seguro
+        // para semear, o correto é não escrever e deixar o prompt aparecer.
+        let conta = try makeTempDir()
+        let proj = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: conta); try? FileManager.default.removeItem(at: proj) }
+        let jsonURL = conta.appendingPathComponent(".claude.json")
+        let bytesCorrompidos = Data(#"{"oauthAccount":{"emailAddress":"x@y.z"},"projec"#.utf8)
+        try bytesCorrompidos.write(to: jsonURL)
+
+        var launcher = TerminalLauncher(claudeBinaryOverride: URL(fileURLWithPath: "/tmp/claude"))
+        launcher.appleScriptRunner = { _ in .success(()) }
+        let msg = Message(text: "oi", kind: .claude,
+                          configDir: conta.path, workingDir: proj.path)
+        guard case .success = await launcher.launch(msg) else { return XCTFail() }
+
+        // O arquivo permanece byte a byte intacto — nada foi destruído.
+        XCTAssertEqual(try Data(contentsOf: jsonURL), bytesCorrompidos)
+    }
+
     func testLaunchCodexNaoMexeEmClaudeJson() async throws {
         let conta = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: conta) }

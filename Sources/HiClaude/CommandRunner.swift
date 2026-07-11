@@ -101,20 +101,65 @@ struct CommandRunner: CommandRunning {
             }
         }
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        return locateViaShell(shell: URL(fileURLWithPath: shell), cliName: provider.cliName)
+    }
+
+    /// Fallback: pergunta ao shell de login onde está o binário (cobre nvm/asdf
+    /// e instalações exóticas). Roda um subprocesso, então precisa da mesma
+    /// blindagem de `run()`: drena os pipes e impõe timeout. Sem isso, um
+    /// `~/.zprofile` que ecoa >64KB em stderr trava o write do filho (deadlock
+    /// clássico de Process/Pipe) ou um profile que pede input pendura para
+    /// sempre — e como `locate()` roda dentro de `run()`, o `isRunning` do
+    /// FireController nunca é liberado e TODO disparo futuro é descartado em
+    /// silêncio até reiniciar o app.
+    static func locateViaShell(shell: URL, cliName: String, timeout: TimeInterval = 10) -> URL? {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: shell)
-        process.arguments = ["-l", "-c", "command -v \(provider.cliName)"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        guard (try? process.run()) != nil else { return nil }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0,
-              let data = try? pipe.fileHandleForReading.readToEnd(),
-              let path = String(data: data, encoding: .utf8)?
-                  .trimmingCharacters(in: .whitespacesAndNewlines),
-              !path.isEmpty else { return nil }
-        return URL(fileURLWithPath: path)
+        process.executableURL = shell
+        process.arguments = ["-l", "-c", "command -v \(cliName)"]
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+        // stdin fechado: um profile que pede input (ssh-add, prompts) não pendura.
+        process.standardInput = FileHandle.nullDevice
+
+        // Drena os dois pipes concorrentemente — senão uma saída maior que o
+        // buffer do SO (~64KB) em stdout/stderr trava o write do filho e o
+        // processo nunca termina (mesmo deadlock que run() mitiga).
+        let outBuffer = PipeBuffer()
+        let errBuffer = PipeBuffer()
+        outPipe.fileHandleForReading.readabilityHandler = { h in
+            let c = h.availableData; if !c.isEmpty { outBuffer.append(c) }
+        }
+        errPipe.fileHandleForReading.readabilityHandler = { h in
+            let c = h.availableData; if !c.isEmpty { errBuffer.append(c) }
+        }
+        func clearHandlers() {
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
+        }
+        guard (try? process.run()) != nil else { clearHandlers(); return nil }
+
+        // Poll com deadline em vez de waitUntilExit() sem timeout: um profile
+        // que pendura não pode travar a busca para sempre (o guard isRunning do
+        // FireController depende de locate() retornar).
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline { usleep(50_000) }
+        if process.isRunning {
+            process.terminate() // SIGTERM; escala para SIGKILL se ignorado.
+            let grace = Date().addingTimeInterval(1)
+            while process.isRunning && Date() < grace { usleep(50_000) }
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            clearHandlers()
+            return nil
+        }
+        clearHandlers()
+        if let rest = try? outPipe.fileHandleForReading.readToEnd(), !rest.isEmpty {
+            outBuffer.append(rest)
+        }
+        guard process.terminationStatus == 0 else { return nil }
+        let path = outBuffer.trimmedString()
+        return path.isEmpty ? nil : URL(fileURLWithPath: path)
     }
 
     func run(_ message: Message) async -> Result<String, RunnerError> {

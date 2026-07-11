@@ -504,8 +504,12 @@ final class AppState: ObservableObject {
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         var loadedTasks: [ScheduledTask] = []
         if let data = defaults.data(forKey: Keys.tasks),
-           let decoded = try? JSONDecoder().decode([ScheduledTask].self, from: data) {
-            loadedTasks = decoded
+           let decoded = try? JSONDecoder().decode([FailableDecodable<ScheduledTask>].self, from: data) {
+            // Decode lossy: um item ilegível (ex.: raw value de uma build
+            // futura após downgrade) some, mas os demais agendamentos
+            // sobrevivem — em vez de o array inteiro lançar e a primeira
+            // mutação persistir [] por cima do blob antigo.
+            loadedTasks = decoded.compactMap(\.value)
         }
         // Migração de mão única para agendamentos unificados: embute o
         // favorito nas tarefas legadas e converte renovações em agendamentos.
