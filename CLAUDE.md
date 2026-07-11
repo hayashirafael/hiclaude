@@ -122,8 +122,12 @@ globally-active message.
   case/rawValue is unchanged for persistence, only its displayed title
   changed from "Horários" to "Tarefas"/"Tasks") →
   `ContasView` (informative: provider/folder/active-schedule count),
-  `HorariosView` (the unified agendamento list, filterable by
-  `AppState.accountFilter`) + `AgendamentoFormSheet`
+  `HorariosView` (unified agendamento list: fixed header bar with summary ·
+  filters (account/provider/status/type) · sort · new-task button; compact
+  rows expand on click; per-row manual "run now" via
+  `AppEnvironment.fireNow`, origin `.manual`; list logic in the pure
+  `HorariosListModel`; also scoped by the menu panel's `AppState.accountFilter`
+  deep-link, with a clear-filter chip) + `AgendamentoFormSheet`
   (fixed times as chips via `TimeChipsEditor`, 5h chain generator, day
   presets, next-fire preview), `HistoryTab` (also filterable by
   `accountFilter`), `GeneralTab`).

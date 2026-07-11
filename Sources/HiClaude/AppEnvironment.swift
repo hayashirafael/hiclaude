@@ -119,6 +119,25 @@ final class AppEnvironment: ObservableObject {
         reconfigureSchedules()
     }
 
+    /// Disparo manual imediato de um agendamento (botão "Executar agora" da
+    /// tela Horários). Origem `.manual`: nunca pula por janela ativa e não
+    /// emite notificação de falha (o usuário está olhando a tela). Replica o
+    /// guard de pasta ausente do `taskScheduler.onFire` — conta explícita
+    /// cuja pasta sumiu não dispara (cairia na conta padrão errada).
+    func fireNow(_ task: ScheduledTask) async {
+        let cmd = task.resolvedCommand
+        if cmd.kind != .shell, let path = cmd.configDir, !path.isEmpty,
+           state.accountDir(for: task) == nil {
+            log.error("fireNow: pasta da conta ausente uid=\(task.uid, privacy: .public)")
+            state.recordEvent(state.makeEvent(
+                date: Date(), result: .failure(message: state.strings.accountFolderMissingEvent),
+                message: cmd, origin: .manual))
+            return
+        }
+        log.info("fireNow: disparo manual uid=\(task.uid, privacy: .public)")
+        await controller.fire(message: cmd, origin: .manual, taskName: task.name)
+    }
+
     /// Reconfigura os dois motores a partir da lista unificada: contínuos
     /// alimentam o RenewalEngine (por conta), fixos o TaskScheduler.
     private func reconfigureSchedules() {

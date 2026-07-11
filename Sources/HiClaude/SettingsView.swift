@@ -19,6 +19,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 /// Janela de configuração em sidebar, estilo Ajustes do Sistema.
 struct SettingsView: View {
     @ObservedObject var state: AppState
+    let env: AppEnvironment
 
     var body: some View {
         NavigationSplitView {
@@ -37,7 +38,7 @@ struct SettingsView: View {
     private var detail: some View {
         switch state.settingsSection {
         case .contas: ContasView(state: state)
-        case .horarios: HorariosView(state: state)
+        case .horarios: HorariosView(state: state, env: env)
         case .historico: HistoryTab(state: state)
         case .geral: GeneralTab(state: state)
         }

@@ -133,4 +133,41 @@ final class AppEnvironmentTests: XCTestCase {
         await env.refreshWindowEnds()
         XCTAssertTrue(state.windowEnds.isEmpty)
     }
+
+    /// Disparo manual do botão "Executar agora": comando padrão (Claude,
+    /// runInTerminal resolvido = true) passa pelo launcher fake e registra
+    /// sucesso com origem manual.
+    func testFireNowRegistraSucessoComOrigemManual() async {
+        let clock = MutableClock(date(2099, 7, 9, 12, 40))
+        let (env, state, _) = makeEnv(clock: clock)
+        await drain(env)
+
+        let t = fixedTask(times: [764])
+        await env.fireNow(t)
+
+        XCTAssertEqual(state.history.first?.origin, .manual)
+        XCTAssertEqual(state.history.first?.result, .success)
+    }
+
+    /// Conta explícita cuja pasta sumiu: não dispara; registra a falha com
+    /// origem manual (mesmo guard do taskScheduler.onFire).
+    func testFireNowComPastaAusenteRegistraFalhaSemDisparar() async {
+        let clock = MutableClock(date(2099, 7, 9, 12, 40))
+        let (env, state, _) = makeEnv(clock: clock)
+        await drain(env)
+
+        var msg = AppState.defaultMessage
+        msg.uid = nil
+        msg.configDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hiclaude-inexistente-\(UUID().uuidString)").path
+        let t = ScheduledTask(uid: UUID(), command: msg, repetition: .fixed,
+                              times: [764], weekdays: Set(1...7))
+
+        await env.fireNow(t)
+
+        XCTAssertEqual(state.history.first?.origin, .manual)
+        guard case .failure = state.history.first?.result else {
+            return XCTFail("esperava .failure, veio \(String(describing: state.history.first?.result))")
+        }
+    }
 }
