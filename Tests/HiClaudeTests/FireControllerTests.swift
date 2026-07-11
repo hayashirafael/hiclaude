@@ -429,4 +429,27 @@ final class FireControllerTests: XCTestCase {
             message: message, origin: .scheduled))
         XCTAssertEqual(notifier.messages, ["Terminal nao abriu"])
     }
+
+    // MARK: - Pause por conta
+
+    func testContaPausadaDescartaSemExecutarNemRegistrar() async {
+        state.setPaused(AppState.defaultConfigDir, true)
+        let didRun = await controller.fire(message: AppState.defaultMessage, origin: .renewal)
+        XCTAssertTrue(didRun) // true = engines não entram em pendingRetry
+        XCTAssertEqual(runner.calls, 0)
+        XCTAssertTrue(state.history.isEmpty)
+        XCTAssertTrue(notifier.messages.isEmpty)
+    }
+
+    func testOutraContaPausadaNaoAfetaODisparo() async {
+        state.setPaused(AppState.defaultCodexConfigDir, true)
+        await controller.fire(message: AppState.defaultMessage, origin: .agenda)
+        XCTAssertEqual(runner.calls, 1)
+    }
+
+    func testShellNuncaEPausado() async {
+        state.setPaused(AppState.defaultConfigDir, true)
+        await controller.fire(message: Message(text: "echo oi", kind: .shell), origin: .agenda)
+        XCTAssertEqual(runner.calls, 1)
+    }
 }

@@ -51,6 +51,15 @@ final class FireController {
 
         let accountDir = state.effectiveConfigDir(for: message)
         let account = accountDir.lastPathComponent
+
+        // Conta pausada: descarta sem executar nem registrar. Retorna true para
+        // os engines não re-tentarem via pendingRetry — ao retomar, vale só o
+        // próximo evento da cadeia (nunca catch-up retroativo do que foi pausado).
+        if message.kind != .shell, state.isPaused(accountDir) {
+            log.info("fire: descartado — conta pausada origin=\(String(describing: origin), privacy: .public) conta=\(account, privacy: .public)")
+            return true
+        }
+
         // Passou o guard: este disparo assume a execução (isRunning=true).
         log.info("fire: inicio origin=\(String(describing: origin), privacy: .public) conta=\(account, privacy: .public) msg=\(message.text, privacy: .private)")
 
