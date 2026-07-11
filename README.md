@@ -22,16 +22,18 @@ Code transcripts, making no network calls of its own.
   (chains 5-hour windows 24/7 — the old automatic renewal) or **Fixed times**
   (times × weekdays). Managed in the **Schedules** section
 - **Configurable commands** — a Claude prompt (model, effort, safe-mode,
-  working directory), a Codex prompt (model, reasoning effort), or any shell
-  command — embedded directly in the schedule. Claude/Codex prompts open in
-  Terminal.app by default so you can keep interacting in the same session; turn
-  that off to run them in batch mode
-- **Multi-account, Claude and Codex** — the default dirs (`~/.claude` and
-  `~/.codex`) are always detected; other `~/.claude*` dirs are picked up once,
-  on first launch, and from then on you add accounts anytime via
-  "Add account…" — shows the logged-in email, supports custom aliases
+  working directory), a Codex prompt (model, reasoning effort, working
+  directory), or any shell command — embedded directly in the schedule.
+  Claude/Codex prompts open in Terminal.app by default so you can keep
+  interacting in the same session; turn that off to run them in batch mode
+- **Multi-account, Claude and Codex** — the default dirs (`~/.claude`,
+  `~/.codex`) are picked up automatically when they exist; other `~/.claude*`
+  dirs are detected once, on first launch, and from then on you add accounts
+  anytime via "Add account…" — shows the logged-in email, supports custom
+  aliases
 - **History** — recent dispatches with status and expandable response (full
-  error detail on failures)
+  error detail on failures); optional macOS notifications on failures and
+  responses, plus opt-in success notifications per schedule
 - **Language** — English by default, with a Portuguese option in Settings
 - Per-account **Pause/Resume** (from the menu panel) and optional **Launch at
   Login**
@@ -132,8 +134,10 @@ account already has an active window. When no working directory is set,
 interactive sessions open in
 `~/Library/Application Support/HiYashi/workspace` (never the home folder,
 whose trust Claude Code only keeps per session), and HiYashi
-pre-trusts the folder in the account's `.claude.json` so no "do you trust this
-folder?" prompt appears. Only one HiYashi instance runs at a time: a second
+pre-trusts the folder in the account's `.claude.json` — and pre-approves
+external `CLAUDE.md` imports — so neither the "do you trust this folder?" nor
+the "allow external imports?" prompt blocks the unattended session. Only one
+HiYashi instance runs at a time: a second
 launch shows a notice and quits (two instances would double-fire schedules).
 The defaults — Haiku, low effort, `--safe-mode` (skips CLAUDE.md/skills/MCP) and
 the command `1+1` — make it the cheapest possible ping that opens the window. A
@@ -144,15 +148,17 @@ and has its own minimal built-in `1+1` default. When you leave the Codex model
 `config.toml` default is used — the only value guaranteed to be accepted by the
 account's plan. Shell commands run through your login shell.
 
-Which account is Claude vs. Codex is inferred from folder content, not name:
-a `.claude.json` or `projects/` subfolder means Claude; an `auth.json` or
-`sessions/` subfolder means Codex.
+Which account is Claude vs. Codex is inferred from folder content, not name,
+in this order: a `.claude.json` means Claude; else an `auth.json` means Codex;
+else a `projects/` subfolder means Claude; else a `sessions/` subfolder means
+Codex. So `auth.json` wins over `projects/` when both are present.
 
 A **Continuous** schedule arms at the end of the detected window and chains
 the next one, 24/7; a redundant renewal attempt is skipped while the account
 window is still active. A **Fixed times** schedule always fires at its times ×
-weekdays, in either batch or interactive mode. On wake (or launch), fixed times
-fire at most once to catch up the most recent occurrence missed — a long sleep
-never triggers a burst of backlogged fires. The old *Scheduled* renewal (daily
+weekdays, in either batch or interactive mode. On wake, fixed times fire at
+most once to catch up the most recent occurrence missed — a long sleep never
+triggers a burst of backlogged fires, and launch itself never replays
+occurrences missed before it. The old *Scheduled* renewal (daily
 anchor + 0/5/10/15h) is simply a fixed-times schedule with four times after
 migration.

@@ -23,16 +23,18 @@ transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
   fixos** (horários × dias da semana). Tudo na seção **Horários**
 - **Comandos configuráveis** — um prompt do Claude (modelo, esforço,
   safe-mode, pasta de trabalho), um prompt do Codex (modelo, esforço de
-  raciocínio), ou qualquer comando shell — embutido direto no agendamento.
-  Prompts Claude/Codex abrem no Terminal.app por padrão, para você continuar
-  interagindo na mesma sessão; se desligar essa opção, rodam em modo batch
-- **Multi-conta, Claude e Codex** — as pastas padrão (`~/.claude` e
-  `~/.codex`) são sempre detectadas; outras pastas `~/.claude*` entram uma
-  única vez, no primeiro launch, e daí em diante novas contas são adicionadas
-  a qualquer momento via "Adicionar conta…" — mostra o e-mail logado, aceita
-  apelidos
+  raciocínio, pasta de trabalho), ou qualquer comando shell — embutido direto
+  no agendamento. Prompts Claude/Codex abrem no Terminal.app por padrão, para
+  você continuar interagindo na mesma sessão; se desligar essa opção, rodam em
+  modo batch
+- **Multi-conta, Claude e Codex** — as pastas padrão (`~/.claude`, `~/.codex`)
+  são detectadas automaticamente quando existem; outras pastas `~/.claude*`
+  entram uma única vez, no primeiro launch, e daí em diante novas contas são
+  adicionadas a qualquer momento via "Adicionar conta…" — mostra o e-mail
+  logado, aceita apelidos
 - **Histórico** — disparos recentes com status e resposta expansível (detalhe
-  completo do erro nas falhas)
+  completo do erro nas falhas); notificações do macOS opcionais em falhas e
+  respostas, além de notificações de sucesso opt-in por agendamento
 - **Idioma** — inglês por padrão, com opção para português nas Configurações
 - **Pausar/Retomar** por conta (a partir do painel do menu) e **Iniciar com o
   Mac** opcional
@@ -133,7 +135,9 @@ fixo interativo abre no horário agendado mesmo quando a conta já tem janela
 ativa. Sem diretório de trabalho definido, as sessões interativas abrem em
 `~/Library/Application Support/HiYashi/workspace` (nunca no home, cujo trust o
 Claude Code só mantém por sessão), e o HiYashi pré-confia a pasta no
-`.claude.json` da conta para o prompt "do you trust this folder?" não aparecer.
+`.claude.json` da conta — e pré-aprova os imports externos do `CLAUDE.md` —
+para que nem o prompt "do you trust this folder?" nem o "allow external
+imports?" travem a sessão não-supervisionada.
 Só uma instância do HiYashi roda por vez: uma segunda aberta avisa e encerra
 (duas instâncias disparariam os agendamentos em dobro).
 Os padrões —
@@ -146,16 +150,19 @@ o raciocínio) do Codex em branco, o HiYashi omite a flag para o default da
 própria conta (`config.toml`) valer — o único valor garantidamente aceito pelo
 plano da conta. Comandos shell rodam pelo seu shell de login.
 
-Qual conta é Claude ou Codex é inferido pelo conteúdo da pasta, não pelo nome:
-um `.claude.json` ou subpasta `projects/` indica Claude; um `auth.json` ou
-subpasta `sessions/` indica Codex.
+Qual conta é Claude ou Codex é inferido pelo conteúdo da pasta, não pelo nome,
+nesta ordem: um `.claude.json` indica Claude; senão um `auth.json` indica
+Codex; senão uma subpasta `projects/` indica Claude; senão uma subpasta
+`sessions/` indica Codex. Ou seja, `auth.json` vence `projects/` quando os dois
+existem.
 
 Um agendamento **Contínuo** arma no fim da janela detectada e encadeia a
 próxima, 24/7; uma tentativa redundante é pulada enquanto a janela da conta
 ainda está ativa. Um agendamento de **Horários fixos** sempre dispara nos seus
-horários × dias da semana, tanto em batch quanto no modo interativo. No wake (ou
-no launch), horários fixos disparam no máximo uma vez para recuperar a
-ocorrência mais recente que perdeu — um sleep longo nunca gera uma rajada de
-disparos atrasados. A antiga renovação *Programada* (âncora diária +
+horários × dias da semana, tanto em batch quanto no modo interativo. No wake,
+horários fixos disparam no máximo uma vez para recuperar a ocorrência mais
+recente que perdeu — um sleep longo nunca gera uma rajada de disparos
+atrasados, e o launch em si nunca reproduz ocorrências perdidas antes dele.
+A antiga renovação *Programada* (âncora diária +
 0/5/10/15h) é apenas um agendamento de horários fixos com quatro horários após
 a migração.
