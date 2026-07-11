@@ -35,10 +35,13 @@ struct L10n {
     var clearFilter: String { text(en: "Clear filter", pt: "Limpar filtro") }
     var general: String { text(en: "General", pt: "Geral") }
     var command: String { text(en: "Command", pt: "Comando") }
-    var paused: String { text(en: "Paused", pt: "Pausado") }
-    var pause: String { text(en: "Pause", pt: "Pausar") }
-    var resume: String { text(en: "Resume", pt: "Retomar") }
     var quit: String { text(en: "Quit", pt: "Sair") }
+    var settingsShort: String { text(en: "Settings", pt: "Ajustes") }
+    var pauseAccount: String { text(en: "Pause account", pt: "Pausar conta") }
+    var resumeAccount: String { text(en: "Resume account", pt: "Retomar conta") }
+    var pausedBadge: String { text(en: "paused", pt: "pausada") }
+    var accountTasks: String { text(en: "Account tasks", pt: "Tarefas da conta") }
+    var accountHistory: String { text(en: "Account history", pt: "Histórico da conta") }
     var add: String { text(en: "Add", pt: "Adicionar") }
     var save: String { text(en: "Save", pt: "Salvar") }
     var cancel: String { text(en: "Cancel", pt: "Cancelar") }
@@ -244,18 +247,6 @@ struct L10n {
     var renewalFallbackName: String { text(en: "renewal", pt: "renovação") }
     func renewsAt(_ time: String) -> String { text(en: "renews \(time)", pt: "renova \(time)") }
     func nextAt(_ time: String) -> String { text(en: "next \(time)", pt: "próxima \(time)") }
-    func nextHi(_ time: String) -> String { text(en: "next hi \(time)", pt: "próximo hi \(time)") }
-    func lastAt(_ time: String, _ mark: String) -> String { text(en: "last \(time) \(mark)", pt: "último \(time) \(mark)") }
-    func nextTask(_ name: String, _ date: String) -> String {
-        text(en: "Next task: \(name) · \(date)", pt: "Próxima tarefa: \(name) · \(date)")
-    }
-    func scheduledAccountsHeader(_ count: Int) -> String {
-        switch count {
-        case 0: return noActiveSchedules
-        case 1: return text(en: "1 account with schedules", pt: "1 conta com agendamentos")
-        default: return text(en: "\(count) accounts with schedules", pt: "\(count) contas com agendamentos")
-        }
-    }
 
     var noHistory: String { text(en: "No runs recorded yet.", pt: "Sem disparos registrados ainda.") }
     var noHistoryDescription: String {

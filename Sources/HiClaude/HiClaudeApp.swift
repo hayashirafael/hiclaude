@@ -29,11 +29,11 @@ struct HiYashiApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(state: env.state, env: env)
+            MenuPanel(state: env.state, env: env)
         } label: {
             MenuBarLabel(state: env.state)
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
 
         Window(env.state.strings.settingsTitle, id: "schedule") {
             SettingsView(state: env.state)
