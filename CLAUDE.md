@@ -95,7 +95,11 @@ globally-active message.
 - UI: `MenuContent.swift` (per-account status menu + next-task line),
   `SettingsView.swift` (sidebar: Contas · Horários · Histórico · Geral →
   `ContasView` (informative: provider/folder/active-schedule count),
-  `HorariosView` (the unified agendamento list) + `AgendamentoFormSheet`
+  `HorariosView` (unified agendamento list: fixed header bar with summary ·
+  filters (account/provider/status/type) · sort · new-task button; compact
+  rows expand on click; per-row manual "run now" via
+  `AppEnvironment.fireNow`, origin `.manual`; list logic in the pure
+  `HorariosListModel`) + `AgendamentoFormSheet`
   (fixed times as chips via `TimeChipsEditor`, 5h chain generator, day
   presets, next-fire preview), `HistoryTab`, `GeneralTab`).
 
