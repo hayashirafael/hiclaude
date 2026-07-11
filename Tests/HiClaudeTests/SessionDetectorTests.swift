@@ -134,6 +134,27 @@ final class SessionDetectorTests: XCTestCase {
         XCTAssertNotNil(comJanela)
     }
 
+    func testVarreduraParseiaTimestampsComRuidoESemNewlineFinal() async throws {
+        // Guard do reader mapeado: linhas sem timestamp intercaladas, uma linha
+        // em branco, e a última linha SEM '\n' final — todas devem ser tratadas
+        // e o timestamp recente detectado.
+        let fm = FileManager.default
+        let conta = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let proj = conta.appendingPathComponent("projects/proj-a")
+        try fm.createDirectory(at: proj, withIntermediateDirectories: true)
+        let iso = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-1800))
+        let conteudo = """
+        {"type":"summary"}
+
+        {"type":"user","timestamp":"\(iso)"}
+        """ // sem '\n' no fim
+        try conteudo.write(to: proj.appendingPathComponent("s.jsonl"),
+                           atomically: true, encoding: .utf8)
+        let detector = SessionDetector(clock: SystemClock())
+        let end = await detector.activeWindowEnd(account: conta)
+        XCTAssertNotNil(end)
+    }
+
     func testJanelaCodexNaoArredondaParaHoraCheia() {
         // 10:25 → bloco Claude começaria às 10:00 (fim 15:00);
         // bloco Codex começa às 10:25 (fim 15:25).

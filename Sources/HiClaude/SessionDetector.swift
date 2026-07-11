@@ -99,15 +99,18 @@ struct SessionDetector: SessionDetecting {
     private func collectTimestamps(projectsDir: URL, since: Date) async -> [Date] {
         var result: [Date] = []
         for url in candidateFiles(projectsDir: projectsDir, since: since) {
-            do {
-                // Streaming linha a linha — nunca carrega o arquivo inteiro
-                for try await line in url.lines {
-                    if let t = Self.timestamp(fromLine: line), t >= since {
-                        result.append(t)
-                    }
+            // Leitura mapeada + split síncrono, em vez de `url.lines` async: o
+            // stream assíncrono tinha overhead por linha e por chamada; o
+            // mapeamento (`.mappedIfSafe`) evita carregar arquivos grandes de
+            // uma vez. Um arquivo ilegível (ou um diretório com extensão
+            // .jsonl) faz `Data(contentsOf:)` lançar → ignora, nunca bloqueia
+            // um disparo legítimo.
+            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+                  let text = String(data: data, encoding: .utf8) else { continue }
+            for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+                if let t = Self.timestamp(fromLine: String(line)), t >= since {
+                    result.append(t)
                 }
-            } catch {
-                continue // arquivo ilegível → ignora (nunca bloquear um disparo legítimo)
             }
         }
         return result
