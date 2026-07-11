@@ -95,8 +95,9 @@ globally-active message.
 - UI: `MenuContent.swift` (per-account status menu + next-task line),
   `SettingsView.swift` (sidebar: Contas · Horários · Histórico · Geral →
   `ContasView` (informative: provider/folder/active-schedule count),
-  `HorariosView` (the unified agendamento list) + `AgendamentoFormSheet`,
-  `HistoryTab`, `GeneralTab`).
+  `HorariosView` (the unified agendamento list) + `AgendamentoFormSheet`
+  (fixed times as chips via `TimeChipsEditor`, 5h chain generator, day
+  presets, next-fire preview), `HistoryTab`, `GeneralTab`).
 
 ## Commands
 
