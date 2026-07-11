@@ -236,6 +236,7 @@ struct L10n {
     }
 
     var waitingForWindow: String { text(en: "waiting for window", pt: "aguardando janela") }
+    var renewalFallbackName: String { text(en: "renewal", pt: "renovação") }
     func renewsAt(_ time: String) -> String { text(en: "renews \(time)", pt: "renova \(time)") }
     func nextAt(_ time: String) -> String { text(en: "next \(time)", pt: "próxima \(time)") }
     func nextHi(_ time: String) -> String { text(en: "next hi \(time)", pt: "próximo hi \(time)") }
