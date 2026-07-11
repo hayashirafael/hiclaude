@@ -36,7 +36,7 @@ struct HiYashiApp: App {
         .menuBarExtraStyle(.menu)
 
         Window(env.state.strings.settingsTitle, id: "schedule") {
-            SettingsView(state: env.state)
+            SettingsView(state: env.state, env: env)
         }
         .windowResizability(.contentSize)
     }

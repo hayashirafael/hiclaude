@@ -19,6 +19,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 /// Janela de configuração em sidebar, estilo Ajustes do Sistema.
 struct SettingsView: View {
     @ObservedObject var state: AppState
+    let env: AppEnvironment
 
     var body: some View {
         NavigationSplitView {
