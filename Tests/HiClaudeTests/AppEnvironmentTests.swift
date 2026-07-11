@@ -170,4 +170,21 @@ final class AppEnvironmentTests: XCTestCase {
             return XCTFail("esperava .failure, veio \(String(describing: state.history.first?.result))")
         }
     }
+
+    /// Ação explícita do usuário sobrepõe a pausa da conta: "Executar agora"
+    /// numa conta pausada dispara mesmo assim e registra sucesso (ao contrário
+    /// dos disparos agendados/renovação, descartados enquanto pausada).
+    func testFireNowSobrepoePausaDaConta() async {
+        let clock = MutableClock(date(2099, 7, 9, 12, 40))
+        let (env, state, _) = makeEnv(clock: clock)
+        await drain(env)
+
+        // A tarefa padrão mira a conta Claude padrão (~/.claude); pausa ela.
+        state.setPaused(AppState.defaultConfigDir, true)
+        let t = fixedTask(times: [764])
+        await env.fireNow(t)
+
+        XCTAssertEqual(state.history.first?.origin, .manual)
+        XCTAssertEqual(state.history.first?.result, .success)
+    }
 }

@@ -120,10 +120,11 @@ final class AppEnvironment: ObservableObject {
     }
 
     /// Disparo manual imediato de um agendamento (botão "Executar agora" da
-    /// tela Horários). Origem `.manual`: nunca pula por janela ativa e não
-    /// emite notificação de falha (o usuário está olhando a tela). Replica o
-    /// guard de pasta ausente do `taskScheduler.onFire` — conta explícita
-    /// cuja pasta sumiu não dispara (cairia na conta padrão errada).
+    /// tela Horários). Origem `.manual`: nunca pula por janela ativa, sobrepõe
+    /// a pausa da conta (ação explícita do usuário sempre executa) e não emite
+    /// notificação de falha (o usuário está olhando a tela). Replica o guard de
+    /// pasta ausente do `taskScheduler.onFire` — conta explícita cuja pasta
+    /// sumiu não dispara (cairia na conta padrão errada).
     func fireNow(_ task: ScheduledTask) async {
         let cmd = task.resolvedCommand
         if cmd.kind != .shell, let path = cmd.configDir, !path.isEmpty,

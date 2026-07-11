@@ -55,7 +55,10 @@ final class FireController {
         // Conta pausada: descarta sem executar nem registrar. Retorna true para
         // os engines não re-tentarem via pendingRetry — ao retomar, vale só o
         // próximo evento da cadeia (nunca catch-up retroativo do que foi pausado).
-        if message.kind != .shell, state.isPaused(accountDir) {
+        // Exceção: disparo manual (.manual) sobrepõe a pausa — é ação explícita
+        // do usuário na tela ("Executar agora"), que sempre executa (mesma
+        // semântica do shell, que nunca é pausado).
+        if origin != .manual, message.kind != .shell, state.isPaused(accountDir) {
             log.info("fire: descartado — conta pausada origin=\(String(describing: origin), privacy: .public) conta=\(account, privacy: .public)")
             return true
         }
