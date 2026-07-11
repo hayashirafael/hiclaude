@@ -2,7 +2,27 @@ import Foundation
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var paused: Bool { didSet { defaults.set(paused, forKey: Keys.paused) } }
+    /// Contas pausadas (path padronizado). O pause é por conta: os engines
+    /// continuam armando timers; o FireController descarta o disparo.
+    @Published var pausedAccounts: Set<String> {
+        didSet { defaults.set(Array(pausedAccounts), forKey: Keys.pausedAccounts) }
+    }
+
+    func isPaused(_ dir: URL) -> Bool {
+        pausedAccounts.contains(dir.standardizedFileURL.path)
+    }
+
+    func setPaused(_ dir: URL, _ on: Bool) {
+        let key = dir.standardizedFileURL.path
+        if on { pausedAccounts.insert(key) } else { pausedAccounts.remove(key) }
+    }
+
+    /// Todas as contas agendadas pausadas (e existe ao menos uma) — esmaece o
+    /// glifo da barra.
+    var allScheduledAccountsPaused: Bool {
+        let dirs = Set(tasks.filter { $0.enabled }.compactMap { accountDir(for: $0) })
+        return !dirs.isEmpty && dirs.allSatisfy { isPaused($0) }
+    }
 
     static let historyLimit = 20
 
@@ -428,7 +448,8 @@ final class AppState: ObservableObject {
 
     private let defaults: UserDefaults
     private enum Keys {
-        static let paused = "paused"
+        static let paused = "paused" // legado — só a migração lê/remove
+        static let pausedAccounts = "pausedAccounts"
         static let history = "history"
         static let favorites = "favorites"
         static let showRemainingInBar = "showRemainingInBar"
@@ -444,7 +465,7 @@ final class AppState: ObservableObject {
          home: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.defaults = defaults
         self.previousAliveAt = defaults.object(forKey: Keys.lastAliveAt) as? Date
-        self.paused = defaults.bool(forKey: Keys.paused)
+        self.pausedAccounts = Set((defaults.array(forKey: Keys.pausedAccounts) as? [String]) ?? [])
         if let data = defaults.data(forKey: Keys.history),
            let decoded = try? JSONDecoder().decode([FireEvent].self, from: data) {
             self.history = decoded
@@ -504,6 +525,17 @@ final class AppState: ObservableObject {
             // contas extras (ex.: ~/.claude2) sem precisar recadastrar.
             self.registeredAccounts = Self.legacyConventionScan(home: home)
             defaults.set(self.registeredAccounts, forKey: Keys.registeredAccounts)
+        }
+        // Migração one-way do pause global: true vira pause de cada conta
+        // agendada. Atribuição dentro do init não dispara didSet — persistir
+        // explicitamente.
+        if defaults.object(forKey: Keys.paused) != nil {
+            if defaults.bool(forKey: Keys.paused) {
+                pausedAccounts = Set(tasks.filter { $0.enabled }
+                    .compactMap { accountDir(for: $0)?.standardizedFileURL.path })
+                defaults.set(Array(pausedAccounts), forKey: Keys.pausedAccounts)
+            }
+            defaults.removeObject(forKey: Keys.paused)
         }
     }
 

@@ -802,4 +802,55 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(shell.provider)
         XCTAssertNil(shell.modelName)
     }
+
+    // MARK: - Pause por conta
+
+    func testSetPausedPersisteEIsPausedLe() {
+        let defaults = freshDefaults()
+        let state = AppState(defaults: defaults)
+        let dir = AppState.defaultConfigDir
+        XCTAssertFalse(state.isPaused(dir))
+        state.setPaused(dir, true)
+        XCTAssertTrue(state.isPaused(dir))
+        // Persistência: um segundo AppState no mesmo suite lê o mesmo valor.
+        let reloaded = AppState(defaults: defaults)
+        XCTAssertTrue(reloaded.isPaused(dir))
+        state.setPaused(dir, false)
+        XCTAssertFalse(state.isPaused(dir))
+    }
+
+    func testMigracaoPausedGlobalTruePausaContasAgendadas() {
+        let defaults = freshDefaults()
+        defaults.set(true, forKey: "paused")
+        var task = ScheduledTask(uid: UUID(), command: AppState.defaultMessage)
+        task.repetition = .continuous
+        defaults.set(try? JSONEncoder().encode([task]), forKey: "tasks")
+        let migrated = AppState(defaults: defaults)
+        XCTAssertTrue(migrated.isPaused(AppState.defaultConfigDir))
+        XCTAssertNil(defaults.object(forKey: "paused")) // key legada removida
+        // Persistiu: um reload mantém a conta pausada.
+        XCTAssertTrue(AppState(defaults: defaults).isPaused(AppState.defaultConfigDir))
+    }
+
+    func testMigracaoPausedGlobalFalseSoRemoveAKey() {
+        let defaults = freshDefaults()
+        defaults.set(false, forKey: "paused")
+        let migrated = AppState(defaults: defaults)
+        XCTAssertTrue(migrated.pausedAccounts.isEmpty)
+        XCTAssertNil(defaults.object(forKey: "paused"))
+    }
+
+    func testAllScheduledAccountsPaused() {
+        let defaults = freshDefaults()
+        let state = AppState(defaults: defaults)
+        var task = ScheduledTask(uid: UUID(), command: AppState.defaultMessage)
+        task.repetition = .continuous
+        state.tasks = [task]
+        XCTAssertFalse(state.allScheduledAccountsPaused)
+        state.setPaused(AppState.defaultConfigDir, true)
+        XCTAssertTrue(state.allScheduledAccountsPaused)
+        // Sem nenhuma conta agendada, não conta como "tudo pausado".
+        state.tasks = []
+        XCTAssertFalse(state.allScheduledAccountsPaused)
+    }
 }

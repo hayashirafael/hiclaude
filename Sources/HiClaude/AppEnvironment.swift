@@ -118,12 +118,6 @@ final class AppEnvironment: ObservableObject {
         reconfigureSchedules()
     }
 
-    func togglePause() {
-        state.paused.toggle()
-        log.info("pausa alternada: paused=\(self.state.paused, privacy: .public)")
-        reconfigureSchedules()
-    }
-
     /// Reconfigura os dois motores a partir da lista unificada: contínuos
     /// alimentam o RenewalEngine (por conta), fixos o TaskScheduler.
     private func reconfigureSchedules() {
@@ -143,10 +137,11 @@ final class AppEnvironment: ObservableObject {
                 if let dir = self.state.accountDir(for: task) { accounts.insert(dir) }
             }
             let fixed = self.state.tasks.filter { $0.repetition == .fixed }
-            let paused = self.state.paused
-            self.log.info("reconfigure: fixos=\(fixed.count, privacy: .public) continuos=\(accounts.count, privacy: .public) paused=\(paused, privacy: .public)")
-            await self.renewalEngine.configure(accounts: accounts, paused: paused)
-            await self.taskScheduler.configure(tasks: fixed, paused: paused)
+            self.log.info("reconfigure: fixos=\(fixed.count, privacy: .public) continuos=\(accounts.count, privacy: .public)")
+            // O pause agora é por conta e aplicado no FireController; os engines
+            // nunca pausam globalmente (o parâmetro fica para os testes).
+            await self.renewalEngine.configure(accounts: accounts, paused: false)
+            await self.taskScheduler.configure(tasks: fixed, paused: false)
         }
     }
 

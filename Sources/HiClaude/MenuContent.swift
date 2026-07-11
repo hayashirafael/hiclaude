@@ -10,7 +10,7 @@ struct MenuBarLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(nsImage: MenuBarGlyph.image(for: glyphState))
-                .opacity(state.paused && !hasProblem ? 0.5 : 1)
+                .opacity(state.allScheduledAccountsPaused && !hasProblem ? 0.5 : 1)
             if state.showRemainingInBar, let end = soonestEnd {
                 Text(Fmt.remaining(until: end, from: Date()))
             }
@@ -65,7 +65,6 @@ struct MenuContent: View {
                                   Fmt.weekdayTime(entry.date, language: state.language)))
         }
         Divider()
-        Button(state.paused ? strings.resume : strings.pause) { env.togglePause() }
         Button(strings.settingsTitle + "...") {
             openWindow(id: "schedule")
             NSApp.activate(ignoringOtherApps: true)
@@ -82,7 +81,6 @@ struct MenuContent: View {
         if let missing = state.missingCLIs.first {
             return strings.installCLIWarning(missing)
         }
-        if state.paused { return strings.paused }
         let n = scheduledAccounts.count
         return strings.scheduledAccountsHeader(n)
     }
