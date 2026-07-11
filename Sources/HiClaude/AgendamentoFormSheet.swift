@@ -116,6 +116,7 @@ struct AgendamentoFormSheet: View {
                 Button(editing == nil ? strings.add : strings.save) { commit() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isValid)
+                    .help(saveDisabledReason ?? "")
             }
             .padding(.top, 4)
         }
@@ -174,6 +175,10 @@ struct AgendamentoFormSheet: View {
                 Toggle(strings.dayLetters[day - 1], isOn: dayBinding(day))
                     .toggleStyle(.button)
                     .controlSize(.small)
+                    // As letras únicas (D S T Q Q S S) são ambíguas: o nome
+                    // completo desambigua no hover e para leitores de tela.
+                    .help(strings.dayName(day))
+                    .accessibilityLabel(strings.dayName(day))
             }
         }
     }
@@ -226,6 +231,21 @@ struct AgendamentoFormSheet: View {
         case .fixed: return !times.isEmpty && !weekdays.isEmpty
         case .continuous: return kind != .shell && !continuousConflict
         }
+    }
+
+    /// Motivo de o Salvar estar desabilitado (tooltip); nil quando válido.
+    private var saveDisabledReason: String? {
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return strings.saveNeedsMessage
+        }
+        switch repetition {
+        case .fixed:
+            if times.isEmpty { return strings.saveNeedsTime }
+            if weekdays.isEmpty { return strings.saveNeedsDay }
+        case .continuous:
+            if continuousConflict { return strings.continuousConflict }
+        }
+        return nil
     }
 
     private func load() {

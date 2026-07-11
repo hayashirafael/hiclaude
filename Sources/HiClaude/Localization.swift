@@ -158,6 +158,9 @@ struct L10n {
     var runNow: String { text(en: "Run now", pt: "Executar agora") }
     var edit: String { text(en: "Edit", pt: "Editar") }
     var delete: String { text(en: "Delete", pt: "Excluir") }
+    var deleteScheduleConfirmTitle: String {
+        text(en: "Delete this schedule?", pt: "Excluir este agendamento?")
+    }
 
     /// "5 schedules · 3 active" / "5 agendamentos · 3 ativos".
     func scheduleSummary(total: Int, active: Int) -> String {
@@ -223,6 +226,9 @@ struct L10n {
              pt: "Abrir no Terminal (interativo)")
     }
     var model: String { text(en: "Model", pt: "Modelo") }
+    var effort: String { text(en: "Effort", pt: "Esforço") }
+    var safeMode: String { text(en: "Safe mode", pt: "Modo seguro") }
+    var reasoning: String { text(en: "Reasoning", pt: "Raciocínio") }
     var account: String { text(en: "Account", pt: "Conta") }
     var globalDefault: String { text(en: "Default (global)", pt: "Padrão (global)") }
     var codexDefault: String { text(en: "Default (~/.codex)", pt: "Padrão (~/.codex)") }
@@ -334,6 +340,30 @@ struct L10n {
         case .english: return ["S", "M", "T", "W", "T", "F", "S"]
         case .portuguese: return ["D", "S", "T", "Q", "Q", "S", "S"]
         }
+    }
+
+    /// Nome completo do dia (1 = domingo) — desambigua as letras únicas nos
+    /// botões de dia (help/accessibilityLabel).
+    func dayName(_ weekday: Int) -> String {
+        let names: [String]
+        switch language {
+        case .english:
+            names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        case .portuguese:
+            names = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"]
+        }
+        return names[(weekday - 1) % 7]
+    }
+
+    // Motivos do botão Salvar desabilitado (tooltip do form de agendamento).
+    var saveNeedsMessage: String {
+        text(en: "Enter a message or command", pt: "Digite uma mensagem ou comando")
+    }
+    var saveNeedsTime: String {
+        text(en: "Add at least one time", pt: "Adicione ao menos um horário")
+    }
+    var saveNeedsDay: String {
+        text(en: "Select at least one day", pt: "Selecione ao menos um dia")
     }
 
     private func text(en: String, pt: String) -> String {

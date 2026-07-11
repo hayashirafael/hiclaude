@@ -13,6 +13,8 @@ struct HorariosView: View {
     @State private var sort: HorariosSort = .padrao
     @State private var expanded: Set<UUID> = []
     @State private var firing: Set<UUID> = []
+    /// Agendamento aguardando confirmação de exclusão (excluir não tem undo).
+    @State private var pendingDelete: ScheduledTask? = nil
     private var strings: L10n { state.strings }
 
     var body: some View {
@@ -34,6 +36,17 @@ struct HorariosView: View {
             Button(strings.ok, role: .cancel) {}
         } message: {
             Text(strings.continuousConflict)
+        }
+        .confirmationDialog(
+            strings.deleteScheduleConfirmTitle,
+            isPresented: Binding(get: { pendingDelete != nil },
+                                 set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { task in
+            Button(strings.delete, role: .destructive) { remove(task) }
+            Button(strings.cancel, role: .cancel) {}
+        } message: { task in
+            Text(HorariosListModel.title(task))
         }
     }
 
@@ -230,7 +243,7 @@ struct HorariosView: View {
         .contextMenu {
             Button(strings.runNow) { runNow(task) }
             Button(strings.edit) { editing = task; showingForm = true }
-            Button(strings.delete, role: .destructive) { remove(task) }
+            Button(strings.delete, role: .destructive) { pendingDelete = task }
         }
     }
 
@@ -299,7 +312,7 @@ struct HorariosView: View {
                 Button { editing = task; showingForm = true } label: {
                     Label(strings.edit, systemImage: "pencil")
                 }
-                Button(role: .destructive) { remove(task) } label: {
+                Button(role: .destructive) { pendingDelete = task } label: {
                     Label(strings.delete, systemImage: "minus.circle")
                 }
             }

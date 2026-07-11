@@ -21,7 +21,7 @@ struct ClaudeConfigForm: View {
                 .labelsHidden()
             }
             GridRow {
-                ConfigRowLabel("Effort")
+                ConfigRowLabel(strings.effort)
                 Picker("", selection: $effort) {
                     ForEach(Message.Effort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
@@ -43,7 +43,7 @@ struct ClaudeConfigForm: View {
             }
             GridRow {
                 ConfigRowLabel("")
-                Toggle("Safe mode", isOn: $safeMode).toggleStyle(.checkbox)
+                Toggle(strings.safeMode, isOn: $safeMode).toggleStyle(.checkbox)
             }
         }
         .font(.caption)
@@ -66,7 +66,7 @@ struct CodexConfigForm: View {
                 TextField(strings.accountDefaultModel, text: $model)
             }
             GridRow {
-                ConfigRowLabel("Reasoning")
+                ConfigRowLabel(strings.reasoning)
                 Picker("", selection: $reasoning) {
                     ForEach(Message.CodexReasoning.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }

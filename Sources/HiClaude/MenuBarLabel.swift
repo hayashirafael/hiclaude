@@ -12,7 +12,10 @@ struct MenuBarLabel: View {
             Image(nsImage: MenuBarGlyph.image(for: glyphState))
                 .opacity(state.allScheduledAccountsPaused && !hasProblem ? 0.5 : 1)
             if state.showRemainingInBar, let end = soonestEnd {
+                // monospacedDigit: sem isso a largura oscila conforme os dígitos
+                // do tempo restante mudam (jitter na barra a cada minuto).
                 Text(Fmt.remaining(until: end, from: Date()))
+                    .monospacedDigit()
             }
         }
     }
