@@ -38,7 +38,7 @@ struct SettingsView: View {
     private var detail: some View {
         switch state.settingsSection {
         case .contas: ContasView(state: state)
-        case .horarios: HorariosView(state: state)
+        case .horarios: HorariosView(state: state, env: env)
         case .historico: HistoryTab(state: state)
         case .geral: GeneralTab(state: state)
         }
