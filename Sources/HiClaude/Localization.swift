@@ -155,6 +155,7 @@ struct L10n {
     var scheduleSection: String { text(en: "Schedule", pt: "Agendamento") }
     var nameOptional: String { text(en: "Name (optional)", pt: "Nome (opcional)") }
     var messageOrCommand: String { text(en: "Message or command", pt: "Mensagem ou comando") }
+    var none: String { text(en: "None", pt: "Nenhum") }
     var showResponse: String {
         text(en: "Show response (history + notification)",
              pt: "Mostrar resposta (histórico + notificação)")

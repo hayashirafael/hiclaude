@@ -16,6 +16,31 @@ final class ProviderVisualTests: XCTestCase {
         XCTAssertEqual(AgendamentoFormSheet.initialCommandText, "")
     }
 
+    func testNovoAgendamentoComecaSemModoDeSaida() {
+        XCTAssertEqual(AgendamentoFormSheet.initialOutputMode, .none)
+    }
+
+    func testModoDeSaidaNormalizaMensagensPersistidas() {
+        XCTAssertEqual(
+            AgendamentoFormSheet.outputMode(for: Message(text: "x", kind: .claude)),
+            .terminal)
+        XCTAssertEqual(
+            AgendamentoFormSheet.outputMode(for: Message(
+                text: "x", kind: .claude, showResponse: true, runInTerminal: false)),
+            .response)
+        XCTAssertEqual(
+            AgendamentoFormSheet.outputMode(for: Message(
+                text: "x", kind: .claude, runInTerminal: false)),
+            .none)
+        XCTAssertEqual(
+            AgendamentoFormSheet.outputMode(for: Message(
+                text: "x", kind: .claude, showResponse: true, runInTerminal: true)),
+            .terminal)
+        XCTAssertEqual(
+            AgendamentoFormSheet.outputMode(for: Message(text: "echo x", kind: .shell)),
+            .none)
+    }
+
     func testCandidatosDeBundleCobremAppEmpacotadoDevETestes() {
         let urls = ProviderVisual.resourceBundleCandidates(
             mainResourceURL: URL(fileURLWithPath: "/Apps/HiYashi.app/Contents/Resources"),

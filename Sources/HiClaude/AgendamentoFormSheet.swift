@@ -5,6 +5,20 @@ import SwiftUI
 struct AgendamentoFormSheet: View {
     static let initialCommandText = ""
 
+    enum OutputMode: Equatable {
+        case none
+        case terminal
+        case response
+    }
+
+    static let initialOutputMode: OutputMode = .none
+
+    static func outputMode(for message: Message) -> OutputMode {
+        if message.kind != .shell && message.resolvedRunInTerminal { return .terminal }
+        if message.resolvedShowResponse { return .response }
+        return .none
+    }
+
     @ObservedObject var state: AppState
     /// Agendamento em edição; nil = modo "adicionar".
     let editing: ScheduledTask?
@@ -18,8 +32,7 @@ struct AgendamentoFormSheet: View {
     @State private var safeMode = Message.defaultSafeMode
     @State private var codexModel = ""
     @State private var codexReasoning: Message.CodexReasoning = .low
-    @State private var showResponse = false
-    @State private var runInTerminal = true
+    @State private var outputMode: OutputMode = Self.initialOutputMode
     @State private var account: String? = nil
     @State private var workingDir = ""
     @State private var repetition: ScheduledTask.Repetition = .fixed
@@ -52,13 +65,14 @@ struct AgendamentoFormSheet: View {
                                 strings: strings)
             }
             VStack(alignment: .leading, spacing: 6) {
+                Toggle(strings.none, isOn: outputModeBinding(.none))
+                    .toggleStyle(.checkbox)
                 if kind != .shell {
-                    Toggle(strings.runInTerminal, isOn: $runInTerminal)
+                    Toggle(strings.runInTerminal, isOn: outputModeBinding(.terminal))
                         .toggleStyle(.checkbox)
                 }
-                Toggle(strings.showResponse, isOn: $showResponse)
+                Toggle(strings.showResponse, isOn: outputModeBinding(.response))
                     .toggleStyle(.checkbox)
-                    .disabled(kind != .shell && runInTerminal)
             }
             .font(.caption)
 
@@ -101,11 +115,9 @@ struct AgendamentoFormSheet: View {
         .onChange(of: kind) { newKind in
             if newKind == .shell {
                 account = nil
-                runInTerminal = false
+                if outputMode == .terminal { outputMode = .none }
                 if repetition == .continuous { repetition = .fixed }
                 return
-            } else if editing == nil || editing?.resolvedCommand.kind == .shell {
-                runInTerminal = true
             }
             guard let current = account else { return }
             let valid: Bool
@@ -122,6 +134,14 @@ struct AgendamentoFormSheet: View {
         Text(title.uppercased())
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
+    }
+
+    private func outputModeBinding(_ mode: OutputMode) -> Binding<Bool> {
+        Binding(
+            get: { outputMode == mode },
+            set: { selected in
+                if selected { outputMode = mode }
+            })
     }
 
     private var repetitionPicker: some View {
@@ -215,8 +235,7 @@ struct AgendamentoFormSheet: View {
         safeMode = msg.resolvedSafeMode
         codexModel = msg.codexModel ?? ""
         codexReasoning = msg.codexReasoning ?? .low
-        showResponse = msg.resolvedShowResponse
-        runInTerminal = msg.resolvedRunInTerminal
+        outputMode = Self.outputMode(for: msg)
         account = msg.configDir
         workingDir = msg.workingDir ?? ""
     }
@@ -240,8 +259,8 @@ struct AgendamentoFormSheet: View {
             safeMode: kind == .claude && safeMode != Message.defaultSafeMode ? safeMode : nil,
             configDir: kind != .shell ? effectiveAccount : nil,
             workingDir: kind != .shell && !workingDir.isEmpty ? workingDir : nil,
-            showResponse: showResponse && !(kind != .shell && runInTerminal) ? true : nil,
-            runInTerminal: kind != .shell && !runInTerminal ? false : nil,
+            showResponse: outputMode == .response ? true : nil,
+            runInTerminal: kind != .shell && outputMode != .terminal ? false : nil,
             codexModel: kind == .codex && !codexModel.trimmingCharacters(in: .whitespaces).isEmpty
                 ? codexModel.trimmingCharacters(in: .whitespaces) : nil,
             codexReasoning: kind == .codex && codexReasoning != .low ? codexReasoning : nil)
