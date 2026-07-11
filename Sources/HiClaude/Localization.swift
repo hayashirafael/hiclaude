@@ -28,6 +28,11 @@ struct L10n {
     var accounts: String { text(en: "Accounts", pt: "Contas") }
     var schedules: String { text(en: "Schedules", pt: "Horários") }
     var history: String { text(en: "History", pt: "Histórico") }
+    /// Chip de filtro por conta (deep-link do painel) nas abas Tarefas/Histórico.
+    func filteredBy(_ label: String) -> String {
+        text(en: "Filtered: \(label)", pt: "Filtrando: \(label)")
+    }
+    var clearFilter: String { text(en: "Clear filter", pt: "Limpar filtro") }
     var general: String { text(en: "General", pt: "Geral") }
     var command: String { text(en: "Command", pt: "Comando") }
     var paused: String { text(en: "Paused", pt: "Pausado") }

@@ -186,6 +186,20 @@ final class AppState: ObservableObject {
     /// Seção selecionada na janela de Configurações (deep-link a partir do menu).
     @Published var settingsSection: SettingsSection = .contas
 
+    /// Filtro de conta para as abas Tarefas/Histórico (deep-link do painel).
+    @Published var accountFilter: URL?
+
+    func matchesFilter(_ event: FireEvent) -> Bool {
+        guard let filter = accountFilter else { return true }
+        if let path = event.accountPath { return path == filter.standardizedFileURL.path }
+        return event.account == filter.lastPathComponent
+    }
+
+    func taskMatchesFilter(_ task: ScheduledTask) -> Bool {
+        guard let filter = accountFilter else { return true }
+        return accountDir(for: task) == filter.standardizedFileURL
+    }
+
     // nonisolated: valores imutáveis usados fora do ator (ex.:
     // `ScheduledTask.resolvedCommand`, que é um tipo não-isolado).
     nonisolated static let defaultMessage = Message(

@@ -27,10 +27,29 @@ struct HistoryTab: View {
         .padding(40)
     }
 
+    /// Eventos visíveis após o filtro de conta (deep-link do painel).
+    private var visibleHistory: [FireEvent] {
+        state.history.filter { state.matchesFilter($0) }
+    }
+
     private var historyList: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                ForEach(Array(state.history.enumerated()), id: \.offset) { _, event in
+                if let filter = state.accountFilter {
+                    HStack {
+                        Label(strings.filteredBy(state.label(for: filter)),
+                              systemImage: "line.3.horizontal.decrease.circle")
+                            .font(.caption)
+                        Spacer()
+                        Button { state.accountFilter = nil } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .help(strings.clearFilter)
+                    }
+                    .padding(.bottom, 2)
+                }
+                ForEach(Array(visibleHistory.enumerated()), id: \.offset) { _, event in
                     card(event)
                 }
                 Text(strings.historyFooter(limit: AppState.historyLimit))

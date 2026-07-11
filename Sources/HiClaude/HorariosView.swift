@@ -39,10 +39,32 @@ struct HorariosView: View {
         .padding(40)
     }
 
+    /// Agendamentos visíveis após o filtro de conta (deep-link do painel).
+    private var visibleTasks: [ScheduledTask] {
+        state.tasks.filter { state.taskMatchesFilter($0) }
+    }
+
     private var list: some View {
         Form {
+            if let filter = state.accountFilter {
+                Section {
+                    HStack {
+                        Label(strings.filteredBy(state.label(for: filter)),
+                              systemImage: "line.3.horizontal.decrease.circle")
+                            .font(.caption)
+                        Spacer()
+                        Button {
+                            state.accountFilter = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .help(strings.clearFilter)
+                    }
+                }
+            }
             Section {
-                ForEach(state.tasks) { task in row(task) }
+                ForEach(visibleTasks) { task in row(task) }
                 Button {
                     editing = nil
                     showingForm = true

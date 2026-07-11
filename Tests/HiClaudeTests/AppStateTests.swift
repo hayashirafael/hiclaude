@@ -853,4 +853,34 @@ final class AppStateTests: XCTestCase {
         state.tasks = []
         XCTAssertFalse(state.allScheduledAccountsPaused)
     }
+
+    // MARK: - Filtro de conta (deep-link do painel)
+
+    func testMatchesFilterPorAccountPath() {
+        let state = AppState(defaults: freshDefaults())
+        let event = FireEvent(date: Date(), result: .success,
+                              accountPath: AppState.defaultConfigDir.standardizedFileURL.path)
+        XCTAssertTrue(state.matchesFilter(event)) // sem filtro, tudo passa
+        state.accountFilter = AppState.defaultConfigDir
+        XCTAssertTrue(state.matchesFilter(event))
+        state.accountFilter = AppState.defaultCodexConfigDir
+        XCTAssertFalse(state.matchesFilter(event))
+    }
+
+    func testMatchesFilterLegadoPorNomeDaPasta() {
+        let state = AppState(defaults: freshDefaults())
+        let event = FireEvent(date: Date(), result: .success, account: ".claude")
+        state.accountFilter = AppState.defaultConfigDir
+        XCTAssertTrue(state.matchesFilter(event)) // sem accountPath, casa pelo nome
+    }
+
+    func testTaskMatchesFilter() {
+        let state = AppState(defaults: freshDefaults())
+        let task = ScheduledTask(uid: UUID(), command: AppState.defaultMessage)
+        XCTAssertTrue(state.taskMatchesFilter(task))
+        state.accountFilter = AppState.defaultConfigDir
+        XCTAssertTrue(state.taskMatchesFilter(task))
+        state.accountFilter = AppState.defaultCodexConfigDir
+        XCTAssertFalse(state.taskMatchesFilter(task))
+    }
 }
