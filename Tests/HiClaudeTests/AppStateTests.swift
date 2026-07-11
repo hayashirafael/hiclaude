@@ -884,6 +884,25 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(state.taskMatchesFilter(task))
     }
 
+    func testInitPreservaHistoricoDecodificavelQuandoUmEventoEstaCorrompido() throws {
+        // Como em `tasks`: um evento corrompido no blob de histórico não pode
+        // derrubar o array inteiro (que cairia no fallback do `lastEvent` e
+        // perderia todo o histórico). Decode lossy: o evento ruim some, os bons
+        // sobrevivem.
+        let d = freshDefaults()
+        let valido = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000),
+                               result: .success, account: ".claude")
+        let validoJSON = try String(data: JSONEncoder().encode(valido), encoding: .utf8)
+            .map { $0 } ?? ""
+        let blob = "[\(validoJSON),{\"lixo\":1}]"
+        d.set(Data(blob.utf8), forKey: "history")
+
+        let state = AppState(defaults: d)
+
+        XCTAssertEqual(state.history.count, 1)
+        XCTAssertEqual(state.history.first?.account, ".claude")
+    }
+
     func testInitPreservaAgendamentosDecodificaveisQuandoUmItemEstaCorrompido() {
         // Regressão de perda de dados: o decode de [ScheduledTask] é tudo-ou-nada.
         // Um único item com raw value desconhecido (ex.: usuário criou um

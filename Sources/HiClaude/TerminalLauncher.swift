@@ -49,7 +49,14 @@ struct TerminalLauncher: TerminalLaunching {
             return .failure(.failed("falha ao gravar o script do terminal: \(error.localizedDescription)"))
         }
         let script = Self.appleScript(forTerminalScript: "/bin/sh \(Self.shellQuote(file.path))")
-        return appleScriptRunner(script)
+        let result = appleScriptRunner(script)
+        if case .failure = result {
+            // O `rm` de auto-limpeza é a última linha do próprio script — se o
+            // Terminal não abriu, ele nunca roda. Remove aqui para o arquivo
+            // temporário não vazar.
+            try? FileManager.default.removeItem(at: file)
+        }
+        return result
     }
 
     static func spec(for message: Message,
@@ -137,6 +144,11 @@ struct TerminalLauncher: TerminalLaunching {
     /// quando as três chaves já estão `true`.
     static func seedTrust(accountDir: String, workingDir: String) {
         let url = URL(fileURLWithPath: accountDir).appendingPathComponent(".claude.json")
+        // Canonicaliza a chave: o `claude` grava o trust sob o caminho que o
+        // `getcwd` devolve depois do `cd` — símbolos resolvidos (/tmp →
+        // /private/tmp), sem barra final nem segmentos `.`/`..`. Semear sob o
+        // caminho cru (ex.: /tmp/x) não casaria e a sessão travaria no prompt.
+        let workingDir = URL(fileURLWithPath: workingDir).resolvingSymlinksInPath().path
         var root: [String: Any] = [:]
         if let data = try? Data(contentsOf: url) {
             // Arquivo existe: só mexemos se soubermos parseá-lo. Um parse que

@@ -485,8 +485,11 @@ final class AppState: ObservableObject {
         self.previousAliveAt = defaults.object(forKey: Keys.lastAliveAt) as? Date
         self.pausedAccounts = Set((defaults.array(forKey: Keys.pausedAccounts) as? [String]) ?? [])
         if let data = defaults.data(forKey: Keys.history),
-           let decoded = try? JSONDecoder().decode([FireEvent].self, from: data) {
-            self.history = decoded
+           let decoded = try? JSONDecoder().decode([FailableDecodable<FireEvent>].self, from: data) {
+            // Decode lossy (como `tasks`): um evento corrompido some, o resto do
+            // histórico sobrevive — em vez de o array inteiro lançar e o app
+            // cair no fallback do `lastEvent` legado, perdendo tudo.
+            self.history = decoded.compactMap(\.value)
         } else if let data = defaults.data(forKey: "lastEvent"),
                   let event = try? JSONDecoder().decode(FireEvent.self, from: data) {
             self.history = [event] // migração da versão antiga
@@ -528,6 +531,13 @@ final class AppState: ObservableObject {
             }
             migrou = true
         }
+        self.tasks = loadedTasks
+        if migrou {
+            defaults.set(try? JSONEncoder().encode(loadedTasks), forKey: Keys.tasks)
+        }
+        // Legado removido só DEPOIS de persistir o resultado migrado (acima):
+        // um crash entre migrar e persistir apagaria o legado sem ter salvo a
+        // migração, perdendo renovações/favoritos irreversivelmente.
         if defaults.object(forKey: Keys.renewals) != nil
             || defaults.object(forKey: "renewAccounts") != nil {
             defaults.removeObject(forKey: Keys.renewals)
@@ -535,10 +545,6 @@ final class AppState: ObservableObject {
         }
         if migrou, defaults.object(forKey: Keys.favorites) != nil {
             defaults.removeObject(forKey: Keys.favorites)
-        }
-        self.tasks = loadedTasks
-        if migrou {
-            defaults.set(try? JSONEncoder().encode(loadedTasks), forKey: Keys.tasks)
         }
         if let stored = defaults.array(forKey: Keys.registeredAccounts) as? [String] {
             self.registeredAccounts = stored

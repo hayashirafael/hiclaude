@@ -111,6 +111,34 @@ final class SessionDetectorTests: XCTestCase {
         XCTAssertEqual(end, SessionDetector.activeBlockEnd(timestamps: todas, now: agora))
     }
 
+    func testCadeiaAlemDe7DiasParaNoTetoDeLookback() async throws {
+        // Cadeia contínua (10 em 10 min) das últimas ~8 dias, sem gap de 5h: o
+        // loop de ampliação do lookback dobra 24h→48h→…, mas nunca acha o gap
+        // de 5h à esquerda, então deve PARAR no teto (maxLookback = 7 dias) em
+        // vez de crescer para sempre — e ainda devolver a janela ativa.
+        let fm = FileManager.default
+        let conta = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let proj = conta.appendingPathComponent("projects/proj-a")
+        try fm.createDirectory(at: proj, withIntermediateDirectories: true)
+
+        let agora = Date()
+        let iso = ISO8601DateFormatter()
+        var linhas = ""
+        var t = agora.addingTimeInterval(-8 * 24 * 3600) // 8 dias atrás
+        while t <= agora {
+            linhas += "{\"type\":\"user\",\"timestamp\":\"\(iso.string(from: t))\"}\n"
+            t = t.addingTimeInterval(600)
+        }
+        try linhas.write(to: proj.appendingPathComponent("s.jsonl"), atomically: true, encoding: .utf8)
+
+        let detector = SessionDetector(clock: SystemClock())
+        let end = await detector.activeWindowEnd(account: conta)
+        // Atividade contínua até agora → janela ativa (o teto não impede a
+        // detecção; só limita o quanto se olha para trás).
+        XCTAssertNotNil(end)
+        XCTAssertGreaterThan(end!, agora)
+    }
+
     func testArquivoIlegivelEIgnoradoSemBloquear() async throws {
         let fm = FileManager.default
         let conta = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")

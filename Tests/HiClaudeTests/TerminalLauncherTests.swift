@@ -87,7 +87,8 @@ final class TerminalLauncherTests: XCTestCase {
         let atualizado = try JSONSerialization.jsonObject(
             with: Data(contentsOf: jsonURL)) as! [String: Any]
         let projects = atualizado["projects"] as! [String: Any]
-        let entrada = projects[proj.path] as! [String: Any]
+        // Chave canonicalizada (símbolos resolvidos), como o CLI grava.
+        let entrada = projects[proj.resolvingSymlinksInPath().path] as! [String: Any]
         XCTAssertEqual(entrada["hasTrustDialogAccepted"] as? Bool, true)
         XCTAssertEqual(entrada["hasClaudeMdExternalIncludesApproved"] as? Bool, true)
         XCTAssertEqual(entrada["hasClaudeMdExternalIncludesWarningShown"] as? Bool, true)
@@ -109,7 +110,7 @@ final class TerminalLauncherTests: XCTestCase {
 
         let json = try JSONSerialization.jsonObject(with: Data(
             contentsOf: conta.appendingPathComponent(".claude.json"))) as! [String: Any]
-        let entrada = (json["projects"] as! [String: Any])[proj.path] as! [String: Any]
+        let entrada = (json["projects"] as! [String: Any])[proj.resolvingSymlinksInPath().path] as! [String: Any]
         XCTAssertEqual(entrada["hasTrustDialogAccepted"] as? Bool, true)
         XCTAssertEqual(entrada["hasClaudeMdExternalIncludesApproved"] as? Bool, true)
         XCTAssertEqual(entrada["hasClaudeMdExternalIncludesWarningShown"] as? Bool, true)
@@ -123,8 +124,10 @@ final class TerminalLauncherTests: XCTestCase {
         let conta = try makeTempDir()
         let proj = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: conta); try? FileManager.default.removeItem(at: proj) }
+        // Fixture sob a chave canônica (é assim que o CLI a grava).
+        let key = proj.resolvingSymlinksInPath().path
         let existente: [String: Any] = [
-            "projects": [proj.path: ["hasTrustDialogAccepted": true]]
+            "projects": [key: ["hasTrustDialogAccepted": true]]
         ]
         let jsonURL = conta.appendingPathComponent(".claude.json")
         try JSONSerialization.data(withJSONObject: existente).write(to: jsonURL)
@@ -136,7 +139,7 @@ final class TerminalLauncherTests: XCTestCase {
         guard case .success = await launcher.launch(msg) else { return XCTFail() }
 
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: jsonURL)) as! [String: Any]
-        let entrada = (json["projects"] as! [String: Any])[proj.path] as! [String: Any]
+        let entrada = (json["projects"] as! [String: Any])[key] as! [String: Any]
         XCTAssertEqual(entrada["hasTrustDialogAccepted"] as? Bool, true)
         XCTAssertEqual(entrada["hasClaudeMdExternalIncludesApproved"] as? Bool, true)
         XCTAssertEqual(entrada["hasClaudeMdExternalIncludesWarningShown"] as? Bool, true)
@@ -164,6 +167,50 @@ final class TerminalLauncherTests: XCTestCase {
 
         // O arquivo permanece byte a byte intacto — nada foi destruído.
         XCTAssertEqual(try Data(contentsOf: jsonURL), bytesCorrompidos)
+    }
+
+    func testSeedTrustUsaCaminhoCanonicalizadoComoChave() async throws {
+        // Um working dir com barra final e segmento `/./` deve virar a MESMA
+        // chave canônica que o CLI usaria (getcwd após o cd) — senão o trust
+        // semeado não casa e a sessão trava no prompt.
+        let conta = try makeTempDir()
+        let proj = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: conta); try? FileManager.default.removeItem(at: proj) }
+        let naoCanonico = proj.path + "/./"
+
+        var launcher = TerminalLauncher(claudeBinaryOverride: URL(fileURLWithPath: "/tmp/claude"))
+        launcher.appleScriptRunner = { _ in .success(()) }
+        let msg = Message(text: "oi", kind: .claude,
+                          configDir: conta.path, workingDir: naoCanonico)
+        guard case .success = await launcher.launch(msg) else { return XCTFail() }
+
+        let json = try JSONSerialization.jsonObject(with: Data(
+            contentsOf: conta.appendingPathComponent(".claude.json"))) as! [String: Any]
+        let projects = json["projects"] as! [String: Any]
+        let canonico = proj.resolvingSymlinksInPath().path
+        XCTAssertNotNil(projects[canonico], "trust não foi semeado sob a chave canônica")
+        XCTAssertNil(projects[naoCanonico], "a chave crua (não canônica) não deveria existir")
+        XCTAssertEqual(projects.count, 1)
+    }
+
+    func testScriptTemporarioRemovidoQuandoAppleScriptFalha() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        func scriptsDoTerminal() -> Set<String> {
+            let all = (try? FileManager.default.contentsOfDirectory(atPath: tempDir.path)) ?? []
+            return Set(all.filter { $0.hasPrefix("hiclaude-terminal-") && $0.hasSuffix(".sh") })
+        }
+        let antes = scriptsDoTerminal()
+        let conta = try makeTempDir()
+        let proj = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: conta); try? FileManager.default.removeItem(at: proj) }
+
+        var launcher = TerminalLauncher(claudeBinaryOverride: URL(fileURLWithPath: "/tmp/claude"))
+        launcher.appleScriptRunner = { _ in .failure(.failed("Terminal não abriu")) }
+        let msg = Message(text: "oi", kind: .claude, configDir: conta.path, workingDir: proj.path)
+        guard case .failure = await launcher.launch(msg) else { return XCTFail() }
+
+        XCTAssertEqual(scriptsDoTerminal().subtracting(antes), [],
+                       "o script temporário vazou após a falha do AppleScript")
     }
 
     func testLaunchCodexNaoMexeEmClaudeJson() async throws {
