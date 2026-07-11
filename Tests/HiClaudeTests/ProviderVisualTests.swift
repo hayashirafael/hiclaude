@@ -15,4 +15,27 @@ final class ProviderVisualTests: XCTestCase {
     func testNovoAgendamentoComecaSemComando() {
         XCTAssertEqual(AgendamentoFormSheet.initialCommandText, "")
     }
+
+    func testCandidatosDeBundleCobremAppEmpacotadoDevETestes() {
+        let urls = ProviderVisual.resourceBundleCandidates(
+            mainResourceURL: URL(fileURLWithPath: "/Apps/HiYashi.app/Contents/Resources"),
+            mainBundleURL: URL(fileURLWithPath: "/Apps/HiYashi.app"),
+            finderResourceURL: URL(fileURLWithPath: "/repo/.build/debug/Testes.xctest/Contents/Resources"),
+            finderBundleURL: URL(fileURLWithPath: "/repo/.build/debug/Testes.xctest")
+        )
+        XCTAssertEqual(urls.map(\.path), [
+            "/Apps/HiYashi.app/Contents/Resources/HiClaude_HiClaude.bundle",
+            "/Apps/HiYashi.app/HiClaude_HiClaude.bundle",
+            "/repo/.build/debug/Testes.xctest/Contents/Resources/HiClaude_HiClaude.bundle",
+            "/repo/.build/debug/HiClaude_HiClaude.bundle",
+        ])
+    }
+
+    func testCandidatosDeBundleIgnoramBasesAusentes() {
+        let urls = ProviderVisual.resourceBundleCandidates(
+            mainResourceURL: nil, mainBundleURL: nil,
+            finderResourceURL: nil, finderBundleURL: nil
+        )
+        XCTAssertEqual(urls, [])
+    }
 }

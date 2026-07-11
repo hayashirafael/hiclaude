@@ -10,10 +10,15 @@ mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
 cp .build/release/HiClaude "$APP/Contents/MacOS/HiClaude"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
+# O bundle de recursos (SVGs dos providers) é obrigatório: sem ele o app
+# instalado perde os ícones, e um empacotamento silencioso sem o bundle já
+# passou despercebido numa release. Falhar alto aqui.
 RESOURCE_BUNDLE=".build/release/HiClaude_HiClaude.bundle"
-if [[ -d "$RESOURCE_BUNDLE" ]]; then
-    cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
-fi
+cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
+[[ -d "$APP/Contents/Resources/HiClaude_HiClaude.bundle" ]] || {
+    echo "erro: $RESOURCE_BUNDLE ausente — resource bundle não foi empacotado" >&2
+    exit 1
+}
 
 # Ícone: a partir de um único master 1024x1024 (assets/AppIcon.png), gera todos
 # os tamanhos que o macOS exige e compila o .icns. macOS não arredonda sozinho —
