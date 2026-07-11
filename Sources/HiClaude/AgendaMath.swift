@@ -45,4 +45,14 @@ enum AgendaMath {
         }
         return best
     }
+
+    /// Cadeia de janelas: âncora + 0/5/10/15h, módulo 24h, ordenada.
+    static func chainTimes(anchor: Int) -> [Int] {
+        (0..<4).map { (anchor + $0 * 300) % 1440 }.sorted()
+    }
+
+    /// Forma canônica de uma lista de horários: sem duplicatas, ascendente.
+    static func normalized(_ times: [Int]) -> [Int] {
+        Array(Set(times)).sorted()
+    }
 }

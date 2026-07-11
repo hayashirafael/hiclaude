@@ -53,4 +53,21 @@ final class AgendaMathTests: XCTestCase {
         XCTAssertNil(AgendaMath.lastMissedOccurrence(times: [480, 780], weekdays: Set(1...7),
                                                      between: since, and: now, calendar: cal))
     }
+
+    // MARK: - chainTimes / normalized
+
+    func testChainTimesCruzaAMeiaNoite() {
+        // Âncora 09:00 → 09:00, 14:00, 19:00 e 00:00 (24:00 vira meia-noite).
+        XCTAssertEqual(AgendaMath.chainTimes(anchor: 9 * 60), [0, 540, 840, 1140])
+    }
+
+    func testChainTimesAncoraNoturna() {
+        // Âncora 21:00 → 21:00, 02:00, 07:00, 12:00.
+        XCTAssertEqual(AgendaMath.chainTimes(anchor: 21 * 60), [120, 420, 720, 1260])
+    }
+
+    func testNormalizedOrdenaESemDuplicatas() {
+        XCTAssertEqual(AgendaMath.normalized([780, 540, 540]), [540, 780])
+        XCTAssertEqual(AgendaMath.normalized([]), [])
+    }
 }
