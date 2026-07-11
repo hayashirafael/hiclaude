@@ -149,6 +149,9 @@ struct L10n {
     var repetition: String { text(en: "Repetition", pt: "Repetição") }
     var time: String { text(en: "Time", pt: "Horário") }
     var addTime: String { text(en: "Add time", pt: "Adicionar horário") }
+    var generateChain: String { text(en: "Generate every 5h…", pt: "Gerar a cada 5h…") }
+    var chainAnchor: String { text(en: "Starting at", pt: "A partir de") }
+    var generate: String { text(en: "Generate", pt: "Gerar") }
     var days: String { text(en: "Days", pt: "Dias") }
     var type: String { text(en: "Type", pt: "Tipo") }
     var messageSection: String { text(en: "Message", pt: "Mensagem") }

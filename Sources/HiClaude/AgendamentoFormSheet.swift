@@ -81,7 +81,7 @@ struct AgendamentoFormSheet: View {
             sectionHeader(strings.scheduleSection)
             repetitionPicker
             if repetition == .fixed {
-                timesEditor
+                TimeChipsEditor(times: $times, strings: strings)
                 weekdaysEditor
             } else {
                 Text(strings.fixedContinuousDescription)
@@ -154,43 +154,6 @@ struct AgendamentoFormSheet: View {
         .pickerStyle(.segmented)
     }
 
-    private var timesEditor: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(times.indices, id: \.self) { idx in
-                HStack {
-                    DatePicker(strings.time, selection: timeBinding(idx),
-                               displayedComponents: .hourAndMinute)
-                    if times.count > 1 {
-                        Button { times.remove(at: idx) } label: {
-                            Image(systemName: "minus.circle")
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            Button {
-                times.append((times.max() ?? 9 * 60) + 60)
-            } label: {
-                Label(strings.addTime, systemImage: "plus.circle")
-            }
-            .buttonStyle(.plain)
-            .font(.caption)
-        }
-    }
-
-    private func timeBinding(_ idx: Int) -> Binding<Date> {
-        Binding(
-            get: {
-                let m = times[idx]
-                return Calendar.current.date(bySettingHour: m / 60, minute: m % 60,
-                                             second: 0, of: Date()) ?? Date()
-            },
-            set: { date in
-                let p = Calendar.current.dateComponents([.hour, .minute], from: date)
-                times[idx] = (p.hour ?? 0) * 60 + (p.minute ?? 0)
-            })
-    }
-
     private var weekdaysEditor: some View {
         HStack(spacing: 4) {
             Text(strings.days).font(.caption)
@@ -224,7 +187,7 @@ struct AgendamentoFormSheet: View {
         guard let t = editing else { return }
         name = t.name ?? ""
         repetition = t.repetition
-        times = t.times.isEmpty ? [9 * 60] : t.times
+        times = AgendaMath.normalized(t.times.isEmpty ? [9 * 60] : t.times)
         weekdays = t.weekdays.isEmpty ? Set(1...7) : t.weekdays
         enabled = t.enabled
         let msg = t.resolvedCommand
@@ -269,7 +232,7 @@ struct AgendamentoFormSheet: View {
                                  name: trimmedName.isEmpty ? nil : trimmedName,
                                  command: command,
                                  repetition: repetition,
-                                 times: repetition == .fixed ? times.sorted() : [],
+                                 times: repetition == .fixed ? times : [],
                                  weekdays: repetition == .fixed ? weekdays : [])
         task.enabled = enabled
         return task
