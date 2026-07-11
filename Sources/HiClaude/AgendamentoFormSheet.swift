@@ -83,6 +83,14 @@ struct AgendamentoFormSheet: View {
             if repetition == .fixed {
                 TimeChipsEditor(times: $times, strings: strings)
                 weekdaysEditor
+                dayPresetsRow
+                if overlapWarning {
+                    Label(strings.overlappingWindows, systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                if let preview = nextFirePreview {
+                    Text(preview).font(.caption).foregroundStyle(.secondary)
+                }
             } else {
                 Text(strings.fixedContinuousDescription)
                     .font(.caption).foregroundStyle(.secondary)
@@ -171,8 +179,40 @@ struct AgendamentoFormSheet: View {
             set: { on in if on { weekdays.insert(day) } else { weekdays.remove(day) } })
     }
 
+    /// Atalhos com o mesmo vocabulário do resumo de dias da lista.
+    private var dayPresetsRow: some View {
+        HStack(spacing: 12) {
+            dayPresetButton(Set(1...7))
+            dayPresetButton([2, 3, 4, 5, 6])
+            dayPresetButton([1, 7])
+        }
+        .font(.caption)
+    }
+
+    private func dayPresetButton(_ preset: Set<Int>) -> some View {
+        Button(strings.daysSummary(preset)) { weekdays = preset }
+            .buttonStyle(.link)
+            .disabled(weekdays == preset)
+    }
+
     private var continuousConflict: Bool {
         state.hasContinuousConflict(draftTask())
+    }
+
+    /// Aviso não bloqueante: dois horários dentro da mesma janela de 5h.
+    /// Só para Claude/Codex — shell não abre janela.
+    private var overlapWarning: Bool {
+        guard kind != .shell, repetition == .fixed,
+              let gap = AgendaMath.minCircularGap(times) else { return false }
+        return gap < 300
+    }
+
+    private var nextFirePreview: String? {
+        guard repetition == .fixed,
+              let next = AgendaMath.nextOccurrence(times: times, weekdays: weekdays,
+                                                   after: Date(), calendar: .current)
+        else { return nil }
+        return strings.nextAt(Fmt.weekdayTime(next, language: state.language))
     }
 
     private var isValid: Bool {

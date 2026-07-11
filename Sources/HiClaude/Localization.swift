@@ -146,6 +146,9 @@ struct L10n {
     var continuousConflictTitle: String {
         text(en: "Continuous schedule conflict", pt: "Conflito de agendamento contínuo")
     }
+    var overlappingWindows: String {
+        text(en: "Times fall within the same 5h window", pt: "Horários caem na mesma janela de 5h")
+    }
     var repetition: String { text(en: "Repetition", pt: "Repetição") }
     var time: String { text(en: "Time", pt: "Horário") }
     var addTime: String { text(en: "Add time", pt: "Adicionar horário") }
