@@ -55,4 +55,14 @@ enum AgendaMath {
     static func normalized(_ times: [Int]) -> [Int] {
         Array(Set(times)).sorted()
     }
+
+    /// Menor intervalo circular (minutos) entre horários distintos do dia —
+    /// 23:00 e 01:00 distam 120, não 1320. nil com menos de dois distintos.
+    static func minCircularGap(_ times: [Int]) -> Int? {
+        let sorted = normalized(times)
+        guard sorted.count >= 2 else { return nil }
+        var gaps = zip(sorted.dropFirst(), sorted).map(-)
+        gaps.append(sorted[0] + 1440 - sorted[sorted.count - 1])
+        return gaps.min()
+    }
 }

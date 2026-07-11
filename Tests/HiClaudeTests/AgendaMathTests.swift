@@ -70,4 +70,22 @@ final class AgendaMathTests: XCTestCase {
         XCTAssertEqual(AgendaMath.normalized([780, 540, 540]), [540, 780])
         XCTAssertEqual(AgendaMath.normalized([]), [])
     }
+
+    // MARK: - minCircularGap
+
+    func testMinCircularGapConsideraVoltaDaMeiaNoite() {
+        // 23:00 e 01:00 distam 2h cruzando a meia-noite, não 22h.
+        XCTAssertEqual(AgendaMath.minCircularGap([23 * 60, 1 * 60]), 120)
+    }
+
+    func testMinCircularGapEntreHorariosDoMesmoDia() {
+        // 09:00/14:00/19:00: menor gap é 5h (e a volta 19:00→09:00 são 14h).
+        XCTAssertEqual(AgendaMath.minCircularGap([540, 840, 1140]), 300)
+    }
+
+    func testMinCircularGapNilComMenosDeDoisDistintos() {
+        XCTAssertNil(AgendaMath.minCircularGap([]))
+        XCTAssertNil(AgendaMath.minCircularGap([540]))
+        XCTAssertNil(AgendaMath.minCircularGap([540, 540]))
+    }
 }
