@@ -18,6 +18,16 @@ final class FmtTests: XCTestCase {
         XCTAssertTrue(Fmt.weekdayTime(date, language: .portuguese).lowercased().contains("sex"))
     }
 
+    func testHhmmUsa24hEmAmbosOsIdiomas() {
+        // Consistência com os chips (Fmt.minutes) e weekdayTime, que são 24h:
+        // em inglês o timeStyle .short (locale en_US) virava "8:05 PM",
+        // misturando 12h e 24h na mesma tela.
+        let date = Calendar.current.date(
+            from: DateComponents(year: 2026, month: 7, day: 10, hour: 20, minute: 5))!
+        XCTAssertEqual(Fmt.hhmm(date, language: .english), "20:05")
+        XCTAssertEqual(Fmt.hhmm(date, language: .portuguese), "20:05")
+    }
+
     func testResumoDosDiasRespeitaIdioma() {
         XCTAssertEqual(HorariosView.daysSummary(Set(1...7), language: .english), "every day")
         XCTAssertEqual(HorariosView.daysSummary(Set(1...7), language: .portuguese), "todos os dias")

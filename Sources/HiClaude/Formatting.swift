@@ -13,8 +13,10 @@ enum Fmt {
                 formatter.locale = Locale(identifier: language.localeIdentifier)
                 switch style {
                 case .hhmm:
-                    formatter.dateStyle = .none
-                    formatter.timeStyle = .short
+                    // 24h fixo (como Fmt.minutes e weekdayTime) em vez de
+                    // timeStyle .short, que em en_US virava 12h "8:05 PM" e
+                    // misturava formatos na mesma tela.
+                    formatter.setLocalizedDateFormatFromTemplate("HH:mm")
                 case .dayTime:
                     formatter.dateStyle = .short
                     formatter.timeStyle = .short
