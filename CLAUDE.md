@@ -50,17 +50,32 @@ globally-active message.
   favorite embedded (`command`); legacy renewals become agendamentos
   (`automatic` → `continuous`, `scheduled` → four `fixed` times); the
   `renewals`/`renewAccounts`/`favorites` keys are then removed. Raw string keys
-  (`"renewAccounts"`/`"lastEvent"`) are intentional there.
+  (`"renewAccounts"`/`"lastEvent"`) are intentional there. Pause is per account:
+  `pausedAccounts: Set<String>` (standardized paths, persisted) replaces the old
+  global `paused` flag; a one-way migration turns a legacy global pause-on into
+  a pause for every account with an enabled agendamento. `windowEnds: [URL:
+  Date]` (not persisted) holds the detected 5h-window end per scheduled
+  account, published by `AppEnvironment.refreshWindowEnds()`. `accountFilter:
+  URL?` is the deep-link the menu panel sets to scope the Tasks/History tabs
+  to one account (`taskMatchesFilter`/`matchesFilter`), with a clear-filter
+  chip in both.
 - `AppEnvironment.swift` — composition root; wires both engines ↔ controller,
   observes sleep/wake and `$tasks` (single `reconfigureSchedules`: continuous
   agendamentos feed `RenewalEngine`, fixed ones `TaskScheduler`).
+  `refreshWindowEnds()` queries the `SessionDetector` for every scheduled
+  account and publishes `AppState.windowEnds`; called when the menu panel
+  opens, no timer of its own.
 - `RenewalEngine.swift` — accounts with a continuous agendamento; per-account
   timers armed at the detected window end, 120s dedupe, `pendingRetry` for
   dispatches discarded by the controller's `isRunning` guard.
 - `SessionDetector.swift` — active window end from transcripts.
 - `FireController.swift` — orchestrates one dispatch: only continuous renewal
   skips when a window is already active; fixed/manual runs always execute.
-  Records to history and applies the global `isRunning` guard.
+  Records to history and applies the global `isRunning` guard. A paused
+  account (`AppState.isPaused`) silently discards Claude/Codex dispatches
+  (shell commands still run) without recording history; returns `true` so
+  engines don't retry via `pendingRetry` — resuming only picks up the next
+  scheduled event, never a catch-up for what was skipped while paused.
 - `Provider.swift` — the claude/codex axis: folder-content detection,
   transcripts subpath, env var, CLI binary name, display name.
 - `CommandRunner.swift` — subprocess: `claude -p --model … --effort …
@@ -92,12 +107,26 @@ globally-active message.
   A second launch
   (dev binary or packaged .app) alerts and exits before `AppEnvironment`
   exists (two instances double-fire and clobber each other's history).
-- UI: `MenuContent.swift` (per-account status menu + next-task line),
-  `SettingsView.swift` (sidebar: Contas · Horários · Histórico · Geral →
+- UI: `MenuBarLabel.swift` (just the bar glyph — filled while any account has
+  an active window, `!` on error, faded when every scheduled account is
+  paused; optional remaining-time text) + `MenuPanel.swift` (the
+  `MenuBarExtra` content, `.menuBarExtraStyle(.window)`: one card per
+  scheduled account — provider icon with a green/gray/orange status dot,
+  time remaining until window end or "—", a "name · HH:mm" next-event line —
+  with per-card hover actions (pause/resume the account, jump to its tasks,
+  jump to its history) and a header (missing-CLI warning, Quit) + footer
+  (Tasks · History · Settings); pure card logic (`scheduledAccounts`,
+  `nextEvent`, `eventName`) lives in `MenuPanelLogic.swift`, testable without
+  UI. Replaces the old native menu (`MenuContent.swift`). `SettingsView.swift`
+  (sidebar: Contas · Tarefas · Histórico · Geral — the `horarios`
+  case/rawValue is unchanged for persistence, only its displayed title
+  changed from "Horários" to "Tarefas"/"Tasks") →
   `ContasView` (informative: provider/folder/active-schedule count),
-  `HorariosView` (the unified agendamento list) + `AgendamentoFormSheet`
+  `HorariosView` (the unified agendamento list, filterable by
+  `AppState.accountFilter`) + `AgendamentoFormSheet`
   (fixed times as chips via `TimeChipsEditor`, 5h chain generator, day
-  presets, next-fire preview), `HistoryTab`, `GeneralTab`).
+  presets, next-fire preview), `HistoryTab` (also filterable by
+  `accountFilter`), `GeneralTab`).
 
 ## Commands
 

@@ -33,7 +33,8 @@ Code transcripts, making no network calls of its own.
 - **History** — recent dispatches with status and expandable response (full
   error detail on failures)
 - **Language** — English by default, with a Portuguese option in Settings
-- Global **Pause/Resume** and optional **Launch at Login**
+- Per-account **Pause/Resume** (from the menu panel) and optional **Launch at
+  Login**
 
 ## Requirements
 
@@ -77,26 +78,34 @@ open build/HiYashi.app
 
 ## Usage
 
-HiYashi lives in the menu bar (no Dock icon). The icon is filled while a
-window is active, shows `!` on error, and fades when paused; optionally it
-also shows the time until the next window expires.
+HiYashi lives in the menu bar (no Dock icon). The icon is filled while any
+account has an active window, shows `!` on error, and fades when every
+scheduled account is paused; optionally it also shows the time until the
+soonest window expires.
 
-The menu lists each account with an active schedule — its next dispatch
-time and last result; a line for the next task (if any); plus
-**Pause/Resume**, **Settings…** and **Quit**.
+Clicking the icon opens a panel with a card per account that has an active
+schedule: provider icon with a status dot (green = window active, gray =
+waiting, orange = paused), time remaining in the 5-hour window (or "—"), and
+a "name · time" line for its next event. Hover a card to pause/resume that
+account, or jump straight to its tasks or its history. The footer has
+**Tasks**, **History** and **Settings…**; the header shows a warning if a
+CLI is missing, plus **Quit**.
 
 **Settings** is a sidebar window with four sections:
 
 - **Accounts** — informative: for each account, the logged-in identity /
   alias, provider with its icon, local folder, and how many active schedules target it.
   Add or remove accounts here
-- **Schedules** — the single list of schedules. Each has a name, a type
+- **Tasks** — the single list of schedules. Each has a name, a type
   (Claude / Codex / shell command) with its own config, an account, and a
   repetition — **Continuous** (a 5-hour-window renewal, max one per account)
   or **Fixed times** (times × weekdays). One form creates or edits any of them;
-  new schedules start with an empty command field
+  new schedules start with an empty command field. Jumping in from an account
+  card in the menu panel filters this list to that account, with a chip to
+  clear the filter
 - **History** — recent dispatches as cards with status, provider icon, model,
-  account alias/email, command, response and error details
+  account alias/email, command, response and error details; filterable by
+  account the same way as Tasks
 - **General** — Launch at Login, time remaining in the menu bar, Language
   (English or Portuguese), and the app version
 

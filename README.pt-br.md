@@ -34,7 +34,8 @@ transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
 - **Histórico** — disparos recentes com status e resposta expansível (detalhe
   completo do erro nas falhas)
 - **Idioma** — inglês por padrão, com opção para português nas Configurações
-- **Pausar/Retomar** global e **Iniciar com o Mac** opcional
+- **Pausar/Retomar** por conta (a partir do painel do menu) e **Iniciar com o
+  Mac** opcional
 
 ## Requisitos
 
@@ -78,25 +79,34 @@ open build/HiYashi.app
 ## Uso
 
 O HiYashi vive na menu bar (sem ícone no Dock). O ícone fica preenchido
-enquanto há uma janela ativa, mostra `!` em erro e esmaece quando pausado;
-opcionalmente mostra também o tempo até a próxima janela vencer.
+enquanto alguma conta tem janela ativa, mostra `!` em erro e esmaece quando
+todas as contas agendadas estão pausadas; opcionalmente mostra também o tempo
+até a próxima janela vencer entre elas.
 
-O menu lista cada conta com um agendamento ativo — o horário do próximo
-disparo e o resultado do último; uma linha da próxima tarefa (se houver);
-além de **Pausar/Retomar**, **Configurações…** e **Sair**.
+Clicar no ícone abre um painel com um card por conta que tem agendamento
+ativo: ícone do provedor com uma bolinha de status (verde = janela ativa,
+cinza = aguardando, laranja = pausada), tempo restante na janela de 5h (ou
+"—") e uma linha "nome · horário" com o próximo evento. Passar o mouse sobre
+um card permite pausar/retomar aquela conta, ou ir direto para as tarefas ou
+o histórico dela. O rodapé tem **Tarefas**, **Histórico** e
+**Configurações…**; o cabeçalho mostra um aviso se algum CLI estiver
+faltando, além de **Sair**.
 
 **Configurações** é uma janela em sidebar com quatro seções:
 
 - **Contas** — informativa: por conta, a identidade logada / apelido, o
   provedor com seu ícone, a pasta local e quantos agendamentos ativos miram a conta.
   Adicione ou remova contas aqui
-- **Horários** — a lista única de agendamentos. Cada um tem nome, um tipo
+- **Tarefas** — a lista única de agendamentos. Cada um tem nome, um tipo
   (Claude / Codex / comando shell) com sua config, uma conta e uma repetição —
   **Contínua** (uma renovação da janela de 5h, no máximo uma por conta) ou
   **Horários fixos** (horários × dias da semana). Um único formulário cria ou
-  edita qualquer um deles; novos agendamentos começam com o campo de comando vazio
+  edita qualquer um deles; novos agendamentos começam com o campo de comando
+  vazio. Entrar por um card de conta no painel do menu filtra essa lista para
+  a conta, com um chip para limpar o filtro
 - **Histórico** — disparos recentes em cards com status, ícone do provedor,
-  modelo, apelido/e-mail da conta, comando, resposta e detalhes de erro
+  modelo, apelido/e-mail da conta, comando, resposta e detalhes de erro;
+  filtrável por conta do mesmo jeito que Tarefas
 - **Geral** — Iniciar com o Mac, tempo restante na menu bar, Idioma (inglês
   ou português) e a versão do app
 
