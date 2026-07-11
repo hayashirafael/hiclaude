@@ -33,6 +33,7 @@ struct AgendamentoFormSheet: View {
     @State private var codexModel = ""
     @State private var codexReasoning: Message.CodexReasoning = .low
     @State private var outputMode: OutputMode = Self.initialOutputMode
+    @State private var notifyOnSuccess = false
     @State private var account: String? = nil
     @State private var workingDir = ""
     @State private var repetition: ScheduledTask.Repetition = .fixed
@@ -72,6 +73,10 @@ struct AgendamentoFormSheet: View {
                         .toggleStyle(.checkbox)
                 }
                 Toggle(strings.showResponse, isOn: outputModeBinding(.response))
+                    .toggleStyle(.checkbox)
+                // Independente do modo de saída acima: notifica só em sucesso;
+                // com "Mostrar resposta" ligado, a notificação de resposta vence.
+                Toggle(strings.notifyOnSuccess, isOn: $notifyOnSuccess)
                     .toggleStyle(.checkbox)
             }
             .font(.caption)
@@ -239,6 +244,7 @@ struct AgendamentoFormSheet: View {
         codexModel = msg.codexModel ?? ""
         codexReasoning = msg.codexReasoning ?? .low
         outputMode = Self.outputMode(for: msg)
+        notifyOnSuccess = msg.notifyOnSuccess ?? false
         account = msg.configDir
         workingDir = msg.workingDir ?? ""
     }
@@ -264,6 +270,7 @@ struct AgendamentoFormSheet: View {
             workingDir: kind != .shell && !workingDir.isEmpty ? workingDir : nil,
             showResponse: outputMode == .response ? true : nil,
             runInTerminal: kind != .shell && outputMode != .terminal ? false : nil,
+            notifyOnSuccess: notifyOnSuccess ? true : nil,
             codexModel: kind == .codex && !codexModel.trimmingCharacters(in: .whitespaces).isEmpty
                 ? codexModel.trimmingCharacters(in: .whitespaces) : nil,
             codexReasoning: kind == .codex && codexReasoning != .low ? codexReasoning : nil)
