@@ -69,6 +69,7 @@ struct Message: Codable, Identifiable {
     var uid: UUID? = nil
     var showResponse: Bool? = nil
     var runInTerminal: Bool? = nil
+    var notifyOnSuccess: Bool? = nil
     var codexModel: String? = nil
     var codexReasoning: CodexReasoning? = nil
 
@@ -80,11 +81,12 @@ struct Message: Codable, Identifiable {
         let safeModeValue = safeMode.map(String.init) ?? ""
         let showResponseValue = showResponse.map(String.init) ?? ""
         let runInTerminalValue = runInTerminal.map(String.init) ?? ""
+        let notifyOnSuccessValue = notifyOnSuccess.map(String.init) ?? ""
         let reasoningValue = codexReasoning?.rawValue ?? ""
         let values = [
             kind.rawValue, text, modelValue, effortValue, safeModeValue,
             configDir ?? "", workingDir ?? "", showResponseValue,
-            runInTerminalValue, codexModel ?? "", reasoningValue
+            runInTerminalValue, notifyOnSuccessValue, codexModel ?? "", reasoningValue
         ]
         return values.joined(separator: "\u{1}")
     }
@@ -97,6 +99,7 @@ extension Message: Equatable {
             && lhs.configDir == rhs.configDir && lhs.workingDir == rhs.workingDir
             && lhs.showResponse == rhs.showResponse
             && lhs.runInTerminal == rhs.runInTerminal
+            && lhs.notifyOnSuccess == rhs.notifyOnSuccess
             && lhs.codexModel == rhs.codexModel && lhs.codexReasoning == rhs.codexReasoning
     }
 }
@@ -109,6 +112,7 @@ extension Message {
     var resolvedEffort: Effort { effort ?? Self.defaultEffort }
     var resolvedSafeMode: Bool { safeMode ?? Self.defaultSafeMode }
     var resolvedShowResponse: Bool { showResponse ?? false }
+    var resolvedNotifyOnSuccess: Bool { notifyOnSuccess ?? false }
     var resolvedRunInTerminal: Bool {
         switch kind {
         case .claude, .codex: return runInTerminal ?? true

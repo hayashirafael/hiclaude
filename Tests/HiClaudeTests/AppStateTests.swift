@@ -230,6 +230,22 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(msg.resolvedShowResponse)
     }
 
+    func testNotifyOnSuccessLegadoNilEDefaultFalse() throws {
+        let legacyJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
+        let msg = try JSONDecoder().decode(Message.self, from: legacyJSON)
+        XCTAssertNil(msg.notifyOnSuccess)
+        XCTAssertFalse(msg.resolvedNotifyOnSuccess)
+    }
+
+    func testIgualdadeConsideraNotifyOnSuccess() throws {
+        let sem = Message(text: "x", kind: .claude)
+        let com = Message(text: "x", kind: .claude, notifyOnSuccess: true)
+        XCTAssertNotEqual(sem, com)
+        let data = try JSONEncoder().encode(com)
+        let decoded = try JSONDecoder().decode(Message.self, from: data)
+        XCTAssertEqual(decoded, com)
+    }
+
     func testRunInTerminalLegadoNilEDefaultTrueParaClaudeECodex() throws {
         let claudeJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
         let codexJSON = #"{"text":"1+1","kind":"codex"}"#.data(using: .utf8)!
