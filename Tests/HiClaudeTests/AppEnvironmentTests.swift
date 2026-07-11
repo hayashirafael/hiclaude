@@ -113,4 +113,24 @@ final class AppEnvironmentTests: XCTestCase {
 
         XCTAssertNotEqual(state.uiHeartbeat, antes)
     }
+
+    func testRefreshWindowEndsPublicaFimDeJanelaPorContaAgendada() async {
+        let defaults = UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
+        let state = AppState(defaults: defaults)
+        var task = ScheduledTask(uid: UUID(), command: AppState.defaultMessage)
+        task.repetition = .fixed // sem times: nenhum timer arma
+        state.tasks = [task]
+        let detector = MockDetector()
+        let end = Date().addingTimeInterval(3600)
+        detector.end = end
+        let env = AppEnvironment(state: state, taskScheduler: TaskScheduler(),
+                                 detector: detector, probeCLIs: false)
+        await env.refreshWindowEnds()
+        XCTAssertEqual(state.windowEnds[AppState.defaultConfigDir.standardizedFileURL], end)
+
+        // Janela que sumiu (nil) sai do dicionário no próximo refresh.
+        detector.end = nil
+        await env.refreshWindowEnds()
+        XCTAssertTrue(state.windowEnds.isEmpty)
+    }
 }

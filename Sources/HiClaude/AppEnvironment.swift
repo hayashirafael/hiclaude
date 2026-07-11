@@ -11,7 +11,7 @@ final class AppEnvironment: ObservableObject {
     /// Observabilidade: log de decisões e mudanças de estado deste ambiente.
     private let log = Logger(subsystem: "dev.hiclaude", category: "env")
     private let controller: FireController
-    private let detector: SessionDetector
+    private let detector: SessionDetecting
     private let renewalEngine: RenewalEngine
     private let taskScheduler: TaskScheduler
     private var observers: [NSObjectProtocol] = []
@@ -24,11 +24,12 @@ final class AppEnvironment: ObservableObject {
     /// `probeCLIs: false` pula a sonda de launch (spawna login shell).
     init(state: AppState? = nil,
          taskScheduler: TaskScheduler? = nil,
+         detector: SessionDetecting = SessionDetector(),
          terminalLauncher: TerminalLaunching = TerminalLauncher(),
          probeCLIs: Bool = true) {
         let state = state ?? AppState()
         let taskScheduler = taskScheduler ?? TaskScheduler()
-        let detector = SessionDetector()
+        let detector = detector
         self.state = state
         self.detector = detector
         self.controller = FireController(state: state, detector: detector,
@@ -154,6 +155,22 @@ final class AppEnvironment: ObservableObject {
         // (early-return com timer já armado): sem isso o menu não reconstrói e
         // os horários calculados com `Date()` ficam congelados.
         state.pulseUI()
+    }
+
+    /// Consulta o detector para cada conta agendada e publica o fim de janela.
+    /// Chamado quando o painel do menu abre — sem timer próprio.
+    func refreshWindowEnds() async {
+        let accounts = MenuPanelLogic.scheduledAccounts(
+            tasks: state.tasks,
+            accountDir: { [state] in state.accountDir(for: $0) },
+            label: { [state] in state.label(for: $0) })
+        var result: [URL: Date] = [:]
+        for dir in accounts {
+            if let end = await detector.activeWindowEnd(account: dir), end > Date() {
+                result[dir.standardizedFileURL] = end
+            }
+        }
+        state.windowEnds = result
     }
 
     private func handleWake() {

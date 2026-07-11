@@ -434,6 +434,10 @@ final class AppState: ObservableObject {
     /// Próximas renovações por conta (espelho do RenewalEngine, para o menu e Geral).
     @Published var nextRenewals: [URL: Date] = [:]
 
+    /// Fim da janela de 5h por conta agendada — alimentado pelo AppEnvironment
+    /// quando o painel abre (não persistido; os cards derivam o "restante").
+    @Published var windowEnds: [URL: Date] = [:]
+
     /// Conta efetiva de uma mensagem: o override se for diretório válido, senão
     /// a conta padrão embutida do provider da mensagem (~/.claude ou ~/.codex).
     /// Nunca aponta para conta fantasma.
