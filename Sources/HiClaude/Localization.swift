@@ -26,7 +26,7 @@ struct L10n {
 
     var settingsTitle: String { text(en: "Settings", pt: "Configurações") }
     var accounts: String { text(en: "Accounts", pt: "Contas") }
-    var schedules: String { text(en: "Schedules", pt: "Horários") }
+    var schedules: String { text(en: "Tasks", pt: "Tarefas") }
     var history: String { text(en: "History", pt: "Histórico") }
     /// Chip de filtro por conta (deep-link do painel) nas abas Tarefas/Histórico.
     func filteredBy(_ label: String) -> String {
@@ -107,8 +107,8 @@ struct L10n {
              pt: "Remover da lista (não apaga nada do disco; desabilita os agendamentos da conta)")
     }
     var accountsFooter: String {
-        text(en: "Choose a config folder for a Claude Code or Codex account. The name is free; the type is inferred from its contents. Schedules are created in Schedules.",
-             pt: "Aponte a pasta de config de uma conta (Claude Code ou Codex) — o nome é livre; o tipo é inferido pelo conteúdo. Agendamentos são criados na aba Horários.")
+        text(en: "Choose a config folder for a Claude Code or Codex account. The name is free; the type is inferred from its contents. Schedules are created in Tasks.",
+             pt: "Aponte a pasta de config de uma conta (Claude Code ou Codex) — o nome é livre; o tipo é inferido pelo conteúdo. Agendamentos são criados na aba Tarefas.")
     }
     var invalidFolderTitle: String { text(en: "Invalid folder", pt: "Pasta inválida") }
     var invalidFolderMessage: String {

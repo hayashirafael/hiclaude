@@ -9,7 +9,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     var icon: String {
         switch self {
         case .contas: return "person.crop.circle"
-        case .horarios: return "calendar.badge.clock"
+        case .horarios: return "checklist"
         case .historico: return "clock.arrow.circlepath"
         case .geral: return "gearshape"
         }
