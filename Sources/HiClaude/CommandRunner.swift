@@ -158,7 +158,12 @@ struct CommandRunner: CommandRunning {
             outBuffer.append(rest)
         }
         guard process.terminationStatus == 0 else { return nil }
+        // A última linha não vazia: um profile de login ruidoso pode ecoar no
+        // stdout antes da saída do `command -v`, e o caminho real vem por último.
         let path = outBuffer.trimmedString()
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .last { !$0.isEmpty } ?? ""
         return path.isEmpty ? nil : URL(fileURLWithPath: path)
     }
 

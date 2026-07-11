@@ -349,4 +349,52 @@ final class TaskSchedulerTests: XCTestCase {
         XCTAssertTrue(fired.isEmpty)
         XCTAssertEqual(scheduler.nextFires[t.uid], date(2026, 7, 10, 12, 44))
     }
+
+    func testRetryPendenteReDisparaQuandoGuardLiberaESemRefireDepois() async {
+        // Um disparo descartado pelo guard do controller (onFire=false) fica em
+        // pendingRetry; a próxima chamada re-tenta a MESMA ocorrência. Quando o
+        // guard libera, dispara — e depois disso a ocorrência não re-dispara
+        // (encadeia a próxima e o dedupe segura wakes extras).
+        let clock = MutableClock(date(2026, 7, 9, 7, 0))
+        let scheduler = TaskScheduler(clock: clock, calendar: cal)
+        var permite = false
+        var count = 0
+        scheduler.onFire = { _ in count += 1; return permite }
+        let t = task(times: [480]) // 08:00
+        await scheduler.configure(tasks: [t], paused: false)
+
+        clock.now = date(2026, 7, 9, 9, 0)   // dormiu através das 08:00
+        await scheduler.handleWake()          // catch-up dispara, guard nega → pendingRetry
+        XCTAssertEqual(count, 1)
+
+        permite = true
+        await scheduler.handleWake()          // consome o pendingRetry → re-dispara
+        XCTAssertEqual(count, 2)
+        XCTAssertEqual(scheduler.nextFires[t.uid], date(2026, 7, 10, 8, 0)) // encadeou
+
+        await scheduler.handleWake()          // 08:00 já disparado → sem refire
+        XCTAssertEqual(count, 2)
+    }
+
+    func testDesabilitarTarefaEstancaRetryPendente() async {
+        // Retry pendente + tarefa desabilitada: o disparo fantasma da ocorrência
+        // que o usuário desabilitou não pode acontecer, mesmo com o guard já
+        // liberado.
+        let clock = MutableClock(date(2026, 7, 9, 7, 0))
+        let scheduler = TaskScheduler(clock: clock, calendar: cal)
+        var permite = false
+        var count = 0
+        scheduler.onFire = { _ in count += 1; return permite }
+        let t = task(times: [480])
+        await scheduler.configure(tasks: [t], paused: false)
+        clock.now = date(2026, 7, 9, 9, 0)
+        await scheduler.handleWake()          // pendingRetry setado (guard negou)
+        XCTAssertEqual(count, 1)
+
+        permite = true
+        let desabilitada = ScheduledTask(uid: t.uid, times: [480], weekdays: Set(1...7), enabled: false)
+        await scheduler.configure(tasks: [desabilitada], paused: false)
+        await scheduler.handleWake()
+        XCTAssertEqual(count, 1, "tarefa desabilitada não pode disparar o retry pendente")
+    }
 }

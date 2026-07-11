@@ -55,6 +55,36 @@ final class MockTerminalLauncher: TerminalLaunching {
     }
 }
 
+/// Runner que suspende dentro de `run()` até `resume()` — permite iniciar um
+/// segundo disparo enquanto o primeiro ainda está em andamento, para exercitar
+/// o guard `isRunning` do FireController.
+final class SuspendingRunner: CommandRunning {
+    var result: Result<String, RunnerError> = .success("")
+    private(set) var calls = 0
+    /// Quando true, `run()` fica suspenso até `resume()`; o teste desliga para
+    /// os disparos posteriores não pendurarem.
+    var suspend = true
+    private var gate: CheckedContinuation<Void, Never>?
+    private var entryWaiter: CheckedContinuation<Void, Never>?
+    private var entered = false
+
+    func run(_ message: Message) async -> Result<String, RunnerError> {
+        calls += 1
+        entered = true
+        entryWaiter?.resume(); entryWaiter = nil
+        if suspend { await withCheckedContinuation { self.gate = $0 } }
+        return result
+    }
+
+    /// Aguarda `run()` ter entrado (o disparo passou o guard e está executando).
+    func waitUntilRunning() async {
+        if entered { return }
+        await withCheckedContinuation { self.entryWaiter = $0 }
+    }
+
+    func resume() { gate?.resume(); gate = nil }
+}
+
 @MainActor
 final class FireControllerTests: XCTestCase {
     var state: AppState!
@@ -81,6 +111,36 @@ final class FireControllerTests: XCTestCase {
         XCTAssertEqual(state.lastEvent, state.makeEvent(
             date: now, result: .skipped(activeUntil: end),
             message: AppState.defaultMessage, origin: .renewal))
+    }
+
+    func testFireConcorrenteEhDescartadoPeloGuardEDepoisLibera() async {
+        // Regressão do "silenciador invisível": um segundo disparo enquanto o
+        // primeiro está em andamento é descartado (retorna false, não chama o
+        // runner) — e depois que o primeiro termina o guard libera, então um
+        // novo disparo volta a executar.
+        let gate = SuspendingRunner()
+        let controller = FireController(state: state, detector: detector, runner: gate,
+                                        notifier: notifier, clock: FakeClock(now: now))
+        // 1º disparo: entra em run() e fica suspenso.
+        async let primeiro = controller.fire(message: AppState.defaultMessage, origin: .scheduled)
+        await gate.waitUntilRunning()
+
+        // 2º disparo enquanto o 1º roda: guard isRunning descarta.
+        let segundo = await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
+        XCTAssertFalse(segundo, "segundo disparo deveria ser descartado pelo guard")
+        XCTAssertEqual(gate.calls, 1, "o runner não pode ter sido chamado pelo 2º disparo")
+
+        // Libera o 1º; os próximos não suspendem mais.
+        gate.suspend = false
+        gate.resume()
+        let resultadoPrimeiro = await primeiro
+        XCTAssertTrue(resultadoPrimeiro)
+        XCTAssertEqual(gate.calls, 1)
+
+        // 3º disparo após o 1º terminar: isRunning liberado → executa.
+        let terceiro = await controller.fire(message: AppState.defaultMessage, origin: .scheduled)
+        XCTAssertTrue(terceiro)
+        XCTAssertEqual(gate.calls, 2, "após liberar o guard, um novo disparo deve chamar o runner")
     }
 
     func testSucessoRegistraEventoNoHistorico() async {

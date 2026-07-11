@@ -322,6 +322,16 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertEqual(result?.path, alvo)
     }
 
+    /// Regressao: um `~/.zprofile` ruidoso ecoa no stdout ANTES da saida do
+    /// `command -v`. Usar o stdout inteiro como caminho devolve algo invalido;
+    /// o caminho verdadeiro esta na ULTIMA linha nao vazia.
+    func testLocateViaShellUsaUltimaLinhaDoStdout() {
+        let alvo = "/tmp/fake-cli-\(UUID().uuidString)/claude"
+        let shell = makeScript("echo 'nvm: using node v20'; printf '%s\\n' '\(alvo)'; exit 0")
+        let result = CommandRunner.locateViaShell(shell: shell, cliName: "claude", timeout: 5)
+        XCTAssertEqual(result?.path, alvo)
+    }
+
     private func makeExecutable(_ script: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("fake-\(UUID().uuidString)")
