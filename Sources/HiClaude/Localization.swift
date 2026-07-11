@@ -131,6 +131,46 @@ struct L10n {
         text(en: "Continuous renews the account's 5h window 24/7 and skips redundant renewals while it is active; fixed times always run on the selected times and days.",
              pt: "Contínuo renova a janela de 5h da conta 24/7 e pula renovações redundantes enquanto ela está ativa; horários fixos sempre disparam nos horários e dias marcados.")
     }
+    // Barra da tela Horários: filtros, ordenação e resumo.
+    var filter: String { text(en: "Filter", pt: "Filtrar") }
+    var allAccountsOption: String { text(en: "All", pt: "Todas") }
+    var allOption: String { text(en: "All", pt: "Todos") }
+    var statusLabel: String { "Status" }
+    var activeOption: String { text(en: "Active", pt: "Ativos") }
+    var inactiveOption: String { text(en: "Disabled", pt: "Desativados") }
+    var clearFilters: String { text(en: "Clear filters", pt: "Limpar filtros") }
+    var sortMenu: String { text(en: "Sort", pt: "Ordenar") }
+    var sortDefault: String { text(en: "Default", pt: "Padrão") }
+    var sortByNextFire: String { text(en: "Next run", pt: "Próximo disparo") }
+    var sortByName: String { text(en: "Name", pt: "Nome") }
+    var noFilterMatches: String {
+        text(en: "No schedules match the filters",
+             pt: "Nenhum agendamento corresponde aos filtros")
+    }
+    var runNow: String { text(en: "Run now", pt: "Executar agora") }
+    var edit: String { text(en: "Edit", pt: "Editar") }
+    var delete: String { text(en: "Delete", pt: "Excluir") }
+
+    /// "5 schedules · 3 active" / "5 agendamentos · 3 ativos".
+    func scheduleSummary(total: Int, active: Int) -> String {
+        let totalPart = total == 1
+            ? text(en: "1 schedule", pt: "1 agendamento")
+            : text(en: "\(total) schedules", pt: "\(total) agendamentos")
+        let activePart = text(en: "\(active) active", pt: "\(active) ativos")
+        return "\(totalPart) · \(activePart)"
+    }
+
+    /// "next: Sat 17:14" / "próximo: sáb 17:14" — já recebe a data formatada.
+    func summaryNext(_ time: String) -> String {
+        text(en: "next: \(time)", pt: "próximo: \(time)")
+    }
+
+    /// "2 visible" / "2 visíveis" quando algum filtro está ativo.
+    func visibleCount(_ count: Int) -> String {
+        count == 1
+            ? text(en: "1 visible", pt: "1 visível")
+            : text(en: "\(count) visible", pt: "\(count) visíveis")
+    }
     var fixedTimes: String { text(en: "Fixed times", pt: "Horários fixos") }
     var continuousWindow: String { text(en: "Continuous (5h window)", pt: "Contínua (janela de 5h)") }
     var continuous: String { text(en: "continuous", pt: "contínua") }
