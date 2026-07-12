@@ -48,45 +48,6 @@ final class MenuPanelLogicTests: XCTestCase {
                        String(repeating: "x", count: 30) + "…")
     }
 
-    // MARK: - nextEvent
-
-    func testEventoMaisProximoEntreContinuoEFixo() {
-        let cont = task(repetition: .continuous)
-        let fixo = task(name: "teste", repetition: .fixed)
-        let event = MenuPanelLogic.nextEvent(
-            for: contaA, tasks: [cont, fixo],
-            nextRenewals: [contaA: now.addingTimeInterval(7200)],
-            nextTaskFires: [fixo.uid: now.addingTimeInterval(3600)],
-            accountDir: { _ in self.contaA }, now: now,
-            renewalFallbackName: "renovação")
-        XCTAssertEqual(event?.name, "teste")
-        XCTAssertEqual(event?.date, now.addingTimeInterval(3600))
-    }
-
-    func testIgnoraDatasPassadasETarefasDeOutraConta() {
-        let fixoPassado = task(name: "velho", repetition: .fixed)
-        let outraConta = task(name: "alheio", repetition: .fixed)
-        let dirs = [fixoPassado.uid: contaA, outraConta.uid: contaB]
-        let event = MenuPanelLogic.nextEvent(
-            for: contaA, tasks: [fixoPassado, outraConta],
-            nextRenewals: [:],
-            nextTaskFires: [fixoPassado.uid: now.addingTimeInterval(-60),
-                            outraConta.uid: now.addingTimeInterval(60)],
-            accountDir: { dirs[$0.uid] }, now: now,
-            renewalFallbackName: "renovação")
-        XCTAssertNil(event)
-    }
-
-    func testTarefaDesabilitadaNaoConta() {
-        let t = task(name: "off", repetition: .fixed, enabled: false)
-        let event = MenuPanelLogic.nextEvent(
-            for: contaA, tasks: [t], nextRenewals: [:],
-            nextTaskFires: [t.uid: now.addingTimeInterval(60)],
-            accountDir: { _ in self.contaA }, now: now,
-            renewalFallbackName: "renovação")
-        XCTAssertNil(event)
-    }
-
     // MARK: - upcomingEvents
 
     func testUpcomingOrdenaPorDataEntreContasETipos() {

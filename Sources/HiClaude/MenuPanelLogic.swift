@@ -23,26 +23,6 @@ enum MenuPanelLogic {
         return text.count > 30 ? String(text.prefix(30)) + "…" : text
     }
 
-    /// Próximo evento da conta: o disparo futuro mais próximo entre o
-    /// contínuo (nextRenewals) e os fixos (nextTaskFires) que a miram.
-    static func nextEvent(for account: URL, tasks: [ScheduledTask],
-                          nextRenewals: [URL: Date], nextTaskFires: [UUID: Date],
-                          accountDir: (ScheduledTask) -> URL?, now: Date,
-                          renewalFallbackName: String) -> (name: String, date: Date)? {
-        var candidates: [(name: String, date: Date)] = []
-        for task in tasks where task.enabled && accountDir(task) == account {
-            let date: Date?
-            switch task.repetition {
-            case .continuous: date = nextRenewals[account]
-            case .fixed: date = nextTaskFires[task.uid]
-            }
-            if let date, date > now {
-                candidates.append((eventName(task, renewalFallbackName: renewalFallbackName), date))
-            }
-        }
-        return candidates.min { $0.date < $1.date }
-    }
-
     /// Um disparo futuro no painel: a tarefa, a conta que ela mira, o nome de
     /// exibição e a data do próximo disparo.
     struct UpcomingEvent: Equatable {
