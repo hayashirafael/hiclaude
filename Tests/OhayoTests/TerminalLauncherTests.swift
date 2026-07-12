@@ -259,4 +259,21 @@ final class TerminalLauncherTests: XCTestCase {
         let script = TerminalLauncher.appleScript(forTerminalScript: #"echo "oi"; printf '\\'"#)
         XCTAssertTrue(script.contains(#"do script "echo \"oi\"; printf '\\\\'"#))
     }
+
+    func testSpecClaudeComSkillPrefixaPromptEOmiteSafeMode() throws {
+        var msg = Message(text: "bom dia", kind: .claude)
+        msg.skill = "superpowers:brainstorming"
+        let spec = try XCTUnwrap(TerminalLauncher.spec(
+            for: msg, claudeBinary: URL(fileURLWithPath: "/tmp/claude")))
+        XCTAssertTrue(spec.terminalScript.contains("'/superpowers:brainstorming bom dia'"))
+        XCTAssertFalse(spec.terminalScript.contains("--safe-mode"))
+    }
+
+    func testSpecCodexComSkillPrefixaCifrao() throws {
+        var msg = Message(text: "oi", kind: .codex)
+        msg.skill = "gmud"
+        let spec = try XCTUnwrap(TerminalLauncher.spec(
+            for: msg, codexBinary: URL(fileURLWithPath: "/tmp/codex")))
+        XCTAssertTrue(spec.terminalScript.contains("'$gmud oi'"))
+    }
 }

@@ -112,6 +112,11 @@ faltando, além de **Sair**.
   edita qualquer um deles; novos agendamentos começam com o campo de comando
   vazio. Entrar por uma tarefa no painel do menu filtra essa lista para a
   conta, com um chip para limpar o filtro
+- **Skill (opcional):** em tarefas Claude/Codex, escolha uma skill instalada na
+  conta alvo (pasta `skills/`; no Claude, também as de plugins, como
+  `plugin:skill`). O disparo a prefixa ao prompt (`/skill mensagem` no Claude,
+  `$skill mensagem` no Codex). Selecionar uma skill desliga o modo seguro:
+  `--safe-mode` pularia as skills
 - **Histórico** — disparos recentes em cards com status, ícone do provedor,
   modelo, apelido/e-mail da conta, comando, resposta e detalhes de erro;
   filtrável por conta do mesmo jeito que Tarefas
@@ -143,12 +148,15 @@ primeira mensagem).
 Um disparo Claude executa:
 
 ```
-claude -p --model <modelo> --effort <esforço> [--safe-mode] "<texto>"
+claude -p --model <modelo> --effort <esforço> [--safe-mode] "<prompt>"
 ```
 
 com `CLAUDE_CONFIG_DIR` fixado na conta alvo quando o agendamento está em modo
-batch. Por padrão, Claude/Codex abrem no Terminal.app sem `-p` / `exec`, usando
-o mesmo prompt e ambiente para deixar a sessão interativa aberta; um horário
+batch. Se o agendamento tem skill, o prompt é prefixado antes do disparo
+(`/skill mensagem` no Claude, `$skill mensagem` no Codex), e o modo seguro é
+forçado para desligado porque `--safe-mode` pularia as skills. Por padrão,
+Claude/Codex abrem no Terminal.app sem `-p` / `exec`, usando o mesmo prompt e
+ambiente para deixar a sessão interativa aberta; um horário
 fixo interativo abre no horário agendado mesmo quando a conta já tem janela
 ativa. Sem diretório de trabalho definido, as sessões interativas abrem em
 `~/Library/Application Support/Ohayo/workspace` (nunca no home, cujo trust o
@@ -162,7 +170,7 @@ Os padrões —
 Haiku, esforço baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e o comando
 `1+1` — fazem dele o ping mais barato possível que abre a janela. Um disparo
 Codex em batch executa `codex exec [--model <modelo>] --sandbox read-only [-c
-model_reasoning_effort=<esforço>] "<texto>"` com `CODEX_HOME` fixado no lugar,
+model_reasoning_effort=<esforço>] "<prompt>"` com `CODEX_HOME` fixado no lugar,
 e tem seu próprio padrão mínimo `1+1` embutido. Quando você deixa o modelo (ou
 o raciocínio) do Codex em branco, o Ohayo omite a flag para o default da
 própria conta (`config.toml`) valer — o único valor garantidamente aceito pelo

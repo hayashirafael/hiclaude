@@ -111,6 +111,11 @@ missing, plus **Quit**.
   new schedules start with an empty command field. Jumping in from a task in
   the menu panel filters this list to that account, with a chip to clear the
   filter
+- **Skill (optional):** for Claude/Codex tasks, pick a skill installed in the
+  target account (`skills/` folder; for Claude, plugin skills too, as
+  `plugin:skill`). The dispatch prefixes it to the prompt (`/skill message` for
+  Claude, `$skill message` for Codex). Selecting a skill turns safe mode off:
+  `--safe-mode` would skip skills
 - **History** — recent dispatches as cards with status, provider icon, model,
   account alias/email, command, response and error details; filterable by
   account the same way as Tasks
@@ -142,12 +147,15 @@ after the first message).
 A Claude dispatch runs:
 
 ```
-claude -p --model <model> --effort <effort> [--safe-mode] "<text>"
+claude -p --model <model> --effort <effort> [--safe-mode] "<prompt>"
 ```
 
 with `CLAUDE_CONFIG_DIR` pinned to the target account when the schedule is in
-batch mode. By default, Claude/Codex open in Terminal.app without `-p` / `exec`,
-using the same prompt and environment so the interactive session stays open;
+batch mode. If the schedule has a skill, the prompt is prefixed before dispatch
+(`/skill message` for Claude, `$skill message` for Codex), and safe mode is
+forced off because `--safe-mode` would skip skills. By default, Claude/Codex
+open in Terminal.app without `-p` / `exec`, using the same prompt and
+environment so the interactive session stays open;
 a fixed-time interactive schedule opens at its scheduled time even if the
 account already has an active window. When no working directory is set,
 interactive sessions open in
@@ -161,7 +169,7 @@ launch shows a notice and quits (two instances would double-fire schedules).
 The defaults — Haiku, low effort, `--safe-mode` (skips CLAUDE.md/skills/MCP) and
 the command `1+1` — make it the cheapest possible ping that opens the window. A
 batch Codex dispatch runs `codex exec [--model <model>] --sandbox read-only [-c
-model_reasoning_effort=<effort>] "<text>"` with `CODEX_HOME` pinned instead,
+model_reasoning_effort=<effort>] "<prompt>"` with `CODEX_HOME` pinned instead,
 and has its own minimal built-in `1+1` default. When you leave the Codex model
 (or reasoning) unset, Ohayo omits the flag so the account's own
 `config.toml` default is used — the only value guaranteed to be accepted by the

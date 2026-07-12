@@ -263,6 +263,14 @@ struct L10n {
     var model: String { text(en: "Model", pt: "Modelo") }
     var effort: String { text(en: "Effort", pt: "Esforço") }
     var safeMode: String { text(en: "Safe mode", pt: "Modo seguro") }
+    var skillLabel: String { text(en: "Skill", pt: "Skill") }
+    var noSkill: String { text(en: "None", pt: "Nenhuma") }
+    var skillNotFound: String {
+        text(en: "Skill not found in this account", pt: "Skill não encontrada nesta conta")
+    }
+    var skillDisablesSafeMode: String {
+        text(en: "Skills require safe mode off", pt: "Skills exigem o modo seguro desligado")
+    }
     var reasoning: String { text(en: "Reasoning", pt: "Raciocínio") }
     var account: String { text(en: "Account", pt: "Conta") }
     var globalDefault: String { text(en: "Default (global)", pt: "Padrão (global)") }

@@ -34,6 +34,11 @@ globally-active message.
   `AppState.defaultMessage`); Codex has its own minimal default
   (`AppState.defaultCodexMessage`, uid `…0002`). Codex with no explicit model
   omits `--model` (and reasoning) so the account's `config.toml` default wins.
+  A Message can carry an optional account skill (`skill: String?`), detected by
+  `SkillCatalog` (personal + plugin skills for Claude, `skills/` only for
+  Codex) and prefixed at dispatch via `resolvedPromptText` (`/skill …` for
+  Claude, `$skill …` for Codex); with a skill present, `resolvedSafeMode` is
+  `false` because safe-mode would skip the skill.
 - **Provider** — `claude` or `codex`, the axis that differentiates account
   discovery, window detection and dispatch (`Provider.swift`). Detected by
   folder *content*, not name (`Provider.detect(at:)`): `.claude.json` →
@@ -70,10 +75,11 @@ globally-active message.
 - `Provider.swift` — the claude/codex axis: folder-content detection,
   transcripts subpath, env var, CLI binary name, display name.
 - `CommandRunner.swift` — subprocess: `claude -p --model … --effort …
-  [--safe-mode] "<text>"`, `codex exec [--model …] --sandbox read-only …
-  [-c model_reasoning_effort=…] "<text>"` (model/reasoning flags omitted when
+  [--safe-mode] "<prompt>"`, `codex exec [--model …] --sandbox read-only …
+  [-c model_reasoning_effort=…] "<prompt>"` (model/reasoning flags omitted when
   unset → account default), or login-shell command; pins
-  `CLAUDE_CONFIG_DIR`/`CODEX_HOME` per dispatch; 60s timeout.
+  `CLAUDE_CONFIG_DIR`/`CODEX_HOME` per dispatch; 60s timeout; the prompt comes
+  from `resolvedPromptText` (skill prefixed when present).
 - `TerminalLauncher.swift` — disparo interativo (`message.resolvedRunInTerminal`):
   abre uma sessão no Terminal.app via AppleScript rodando um `.sh` temporário
   (auto-`rm`); fixa `CLAUDE_CONFIG_DIR`/`CODEX_HOME`, faz `cd` para o working dir
@@ -82,7 +88,8 @@ globally-active message.
   conta para o `claude` não-supervisionado nunca travar em prompt:
   `hasTrustDialogAccepted` + `hasClaudeMdExternalIncludesApproved`/`…WarningShown`
   (não há flag/env do CLI que auto-aprove imports externos de CLAUDE.md mantendo o
-  CLAUDE.md ativo). Só Claude; Codex nunca toca no `.claude.json`.
+  CLAUDE.md ativo). Usa o mesmo `resolvedPromptText` do batch; só Claude toca no
+  `.claude.json`, Codex nunca.
 - `AgendaMath.swift` — pure functions for the fixed cycle (times × weekdays):
   `nextOccurrence`, `lastMissedOccurrence` (single catch-up on wake), and
   `date(bySettingMinutes:ofDay:calendar:)`.

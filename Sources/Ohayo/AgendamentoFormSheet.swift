@@ -35,11 +35,97 @@ struct AgendamentoFormSheet: View {
     @State private var outputMode: OutputMode = Self.initialOutputMode
     @State private var notifyOnSuccess = false
     @State private var account: String? = nil
+    @State private var skill: String? = nil
+    @State private var availableSkills: [SkillRef] = []
     @State private var workingDir = ""
     @State private var repetition: ScheduledTask.Repetition = .fixed
     @State private var times: [Int] = [9 * 60]
     @State private var weekdays: Set<Int> = Set(1...7)
     @State private var enabled = true
+
+    /// Todo o estado restaurável de um agendamento existente (ou os defaults
+    /// de "novo agendamento"). Extraído como struct pura para o `init` poder
+    /// semear os `@State` de uma vez só — ver comentário no `init` sobre por
+    /// que isso é essencial para não disparar `onChange(of: kind)` à toa.
+    struct RestoredState {
+        var name = ""
+        var text = AgendamentoFormSheet.initialCommandText
+        var kind: Message.Kind = .claude
+        var model = Message.defaultModel
+        var effort = Message.defaultEffort
+        var safeMode = Message.defaultSafeMode
+        var codexModel = ""
+        var codexReasoning: Message.CodexReasoning = .low
+        var outputMode = AgendamentoFormSheet.initialOutputMode
+        var notifyOnSuccess = false
+        var account: String?
+        var skill: String?
+        var workingDir = ""
+        var repetition: ScheduledTask.Repetition = .fixed
+        var times: [Int] = [9 * 60]
+        var weekdays: Set<Int> = Set(1...7)
+        var enabled = true
+    }
+
+    /// Resolve o estado inicial do formulário a partir da task em edição
+    /// (nil = "adicionar", usa os defaults). Função pura, testável sem
+    /// instanciar a view.
+    static func restoredState(for task: ScheduledTask?) -> RestoredState {
+        var restored = RestoredState()
+        guard let t = task else { return restored }
+        restored.name = t.name ?? ""
+        restored.repetition = t.repetition
+        restored.times = AgendaMath.normalized(t.times.isEmpty ? [9 * 60] : t.times)
+        restored.weekdays = t.weekdays.isEmpty ? Set(1...7) : t.weekdays
+        restored.enabled = t.enabled
+        let msg = t.resolvedCommand
+        restored.text = msg.text
+        restored.kind = msg.kind
+        restored.model = msg.resolvedModel
+        restored.effort = msg.resolvedEffort
+        restored.safeMode = msg.resolvedSafeMode
+        restored.codexModel = msg.codexModel ?? ""
+        restored.codexReasoning = msg.codexReasoning ?? .low
+        restored.outputMode = outputMode(for: msg)
+        restored.notifyOnSuccess = msg.notifyOnSuccess ?? false
+        restored.account = msg.configDir
+        restored.skill = msg.skill
+        restored.workingDir = msg.workingDir ?? ""
+        return restored
+    }
+
+    init(state: AppState, editing: ScheduledTask?, onDone: @escaping () -> Void) {
+        self._state = ObservedObject(wrappedValue: state)
+        self.editing = editing
+        self.onDone = onDone
+        // Semeia os @State diretamente a partir da task em edição (em vez de
+        // nascer com os defaults e corrigir depois em `onAppear`/`load()`).
+        // Isso é o que evita o bug crítico de perda de dado: se `kind`
+        // nascesse `.claude` e só virasse `.codex` depois de montada a view,
+        // o `.onChange(of: kind)` disparava na renderização seguinte — mesmo
+        // sem o usuário ter trocado o tipo — e sua lógica de "troca de tipo"
+        // zerava a `skill` da task carregada. Inicializando aqui, `kind` já
+        // nasce `.codex` (quando for o caso) e o `onChange` nunca vê uma
+        // transição: não há disparo espúrio para suprimir.
+        let restored = Self.restoredState(for: editing)
+        _name = State(initialValue: restored.name)
+        _text = State(initialValue: restored.text)
+        _kind = State(initialValue: restored.kind)
+        _model = State(initialValue: restored.model)
+        _effort = State(initialValue: restored.effort)
+        _safeMode = State(initialValue: restored.safeMode)
+        _codexModel = State(initialValue: restored.codexModel)
+        _codexReasoning = State(initialValue: restored.codexReasoning)
+        _outputMode = State(initialValue: restored.outputMode)
+        _notifyOnSuccess = State(initialValue: restored.notifyOnSuccess)
+        _account = State(initialValue: restored.account)
+        _skill = State(initialValue: restored.skill)
+        _workingDir = State(initialValue: restored.workingDir)
+        _repetition = State(initialValue: restored.repetition)
+        _times = State(initialValue: restored.times)
+        _weekdays = State(initialValue: restored.weekdays)
+        _enabled = State(initialValue: restored.enabled)
+    }
 
     private var strings: L10n { state.strings }
 
@@ -53,14 +139,18 @@ struct AgendamentoFormSheet: View {
             TextField(strings.messageOrCommand, text: $text)
             if kind == .claude {
                 ClaudeConfigForm(model: $model, effort: $effort, safeMode: $safeMode,
-                                 configDir: $account, workingDir: $workingDir,
+                                 configDir: $account, skill: $skill,
+                                 availableSkills: availableSkills,
+                                 workingDir: $workingDir,
                                  accounts: state.accounts(for: .claude),
                                  accountLabel: { state.label(for: $0) },
                                  strings: strings)
             }
             if kind == .codex {
                 CodexConfigForm(model: $codexModel, reasoning: $codexReasoning,
-                                configDir: $account, workingDir: $workingDir,
+                                configDir: $account, skill: $skill,
+                                availableSkills: availableSkills,
+                                workingDir: $workingDir,
                                 accounts: state.accounts(for: .codex),
                                 accountLabel: { state.label(for: $0) },
                                 strings: strings)
@@ -122,11 +212,25 @@ struct AgendamentoFormSheet: View {
         }
         .padding(20)
         .frame(width: 420)
-        .onAppear(perform: load)
+        .onAppear {
+            // O estado (kind/account/skill/…) já nasceu correto no `init`;
+            // aqui só o efeito colateral de revarrer o disco é necessário.
+            refreshSkills()
+        }
         // Conta é por provider; trocar o Tipo sem limpar conta incompatível
         // persistiria um configDir do provider errado. Shell não mira conta e
         // não pode ser contínuo.
         .onChange(of: kind) { newKind in
+            // Troca de tipo: revarre e limpa skill que não existe no novo
+            // provider (mesmo padrão da conta incompatível). Troca só de
+            // conta mantém a skill, com aviso no form.
+            defer {
+                refreshSkills()
+                if let current = skill,
+                   !availableSkills.contains(where: { $0.name == current }) {
+                    skill = nil
+                }
+            }
             if newKind == .shell {
                 account = nil
                 if outputMode == .terminal { outputMode = .none }
@@ -141,6 +245,12 @@ struct AgendamentoFormSheet: View {
             case .shell: valid = false
             }
             if !valid { account = nil }
+        }
+        .onChange(of: account) { _ in refreshSkills() }
+        .onChange(of: skill) { newSkill in
+            // Skill exige safe-mode desligado; limpar a skill não religa
+            // sozinho (o usuário reabilita o toggle se quiser).
+            if newSkill?.isEmpty == false { safeMode = false }
         }
     }
 
@@ -248,25 +358,18 @@ struct AgendamentoFormSheet: View {
         return nil
     }
 
-    private func load() {
-        guard let t = editing else { return }
-        name = t.name ?? ""
-        repetition = t.repetition
-        times = AgendaMath.normalized(t.times.isEmpty ? [9 * 60] : t.times)
-        weekdays = t.weekdays.isEmpty ? Set(1...7) : t.weekdays
-        enabled = t.enabled
-        let msg = t.resolvedCommand
-        text = msg.text
-        kind = msg.kind
-        model = msg.resolvedModel
-        effort = msg.resolvedEffort
-        safeMode = msg.resolvedSafeMode
-        codexModel = msg.codexModel ?? ""
-        codexReasoning = msg.codexReasoning ?? .low
-        outputMode = Self.outputMode(for: msg)
-        notifyOnSuccess = msg.notifyOnSuccess ?? false
-        account = msg.configDir
-        workingDir = msg.workingDir ?? ""
+    /// Recalcula as skills da conta alvo (abrir o sheet / trocar conta /
+    /// trocar tipo). Conta nil = default global do provider — o mesmo
+    /// diretório que o dispatch resolveria.
+    private func refreshSkills() {
+        guard kind != .shell else {
+            availableSkills = []
+            return
+        }
+        let provider: Provider = kind == .codex ? .codex : .claude
+        let dir = account.map { URL(fileURLWithPath: $0) }
+            ?? (provider == .codex ? AppState.defaultCodexConfigDir : AppState.defaultConfigDir)
+        availableSkills = SkillCatalog.skills(for: provider, at: dir)
     }
 
     /// Monta o agendamento normalizando defaults para nil.
@@ -293,7 +396,8 @@ struct AgendamentoFormSheet: View {
             notifyOnSuccess: notifyOnSuccess ? true : nil,
             codexModel: kind == .codex && !codexModel.trimmingCharacters(in: .whitespaces).isEmpty
                 ? codexModel.trimmingCharacters(in: .whitespaces) : nil,
-            codexReasoning: kind == .codex && codexReasoning != .low ? codexReasoning : nil)
+            codexReasoning: kind == .codex && codexReasoning != .low ? codexReasoning : nil,
+            skill: kind != .shell && skill?.isEmpty == false ? skill : nil)
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         var task = ScheduledTask(uid: editing?.uid ?? UUID(),
                                  name: trimmedName.isEmpty ? nil : trimmedName,
