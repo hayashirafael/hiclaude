@@ -2,12 +2,14 @@ import Foundation
 
 protocol SessionDetecting {
     /// `account` é a pasta da conta (`~/.claude`, `~/.codex`…); o detector
-    /// deriva a subpasta de transcripts e a regra de bloco pelo provider.
+    /// deriva a subpasta de transcripts pelo provider.
     func activeWindowEnd(account: URL) async -> Date?
 }
 
 /// Reconstrói a janela de 5h do plano Claude lendo passivamente os transcripts
-/// JSONL do Claude Code (mesma técnica do `ccusage blocks`). Nunca executa o CLI.
+/// JSONL do Claude Code (estilo similar ao `ccusage blocks`, mas sem arredondamento
+/// para hora cheia — a janela começa no horário exato da primeira mensagem).
+/// Nunca executa o CLI.
 struct SessionDetector: SessionDetecting {
     var clock: Clock = SystemClock()
 
