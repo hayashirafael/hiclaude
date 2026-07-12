@@ -177,6 +177,11 @@ final class AppState: ObservableObject {
         didSet { defaults.set(showRemainingInBar, forKey: Keys.showRemainingInBar) }
     }
 
+    /// Quantos próximos disparos o painel do menu mostra (1–5, padrão 1).
+    @Published var panelUpcomingCount: Int {
+        didSet { defaults.set(panelUpcomingCount, forKey: Keys.panelUpcomingCount) }
+    }
+
     @Published var language: AppLanguage {
         didSet { defaults.set(language.rawValue, forKey: Keys.language) }
     }
@@ -471,6 +476,7 @@ final class AppState: ObservableObject {
         static let history = "history"
         static let favorites = "favorites"
         static let showRemainingInBar = "showRemainingInBar"
+        static let panelUpcomingCount = "panelUpcomingCount"
         static let aliases = "aliases"
         static let renewals = "renewals"
         static let registeredAccounts = "registeredAccounts"
@@ -497,6 +503,8 @@ final class AppState: ObservableObject {
             self.history = []
         }
         self.showRemainingInBar = defaults.bool(forKey: Keys.showRemainingInBar)
+        let storedUpcoming = defaults.integer(forKey: Keys.panelUpcomingCount)
+        self.panelUpcomingCount = storedUpcoming == 0 ? 1 : min(max(storedUpcoming, 1), 5)
         if let rawLanguage = defaults.string(forKey: Keys.language),
            let language = AppLanguage(rawValue: rawLanguage) {
             self.language = language
