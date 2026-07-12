@@ -2,12 +2,14 @@ import Foundation
 
 protocol SessionDetecting {
     /// `account` é a pasta da conta (`~/.claude`, `~/.codex`…); o detector
-    /// deriva a subpasta de transcripts e a regra de bloco pelo provider.
+    /// deriva a subpasta de transcripts pelo provider.
     func activeWindowEnd(account: URL) async -> Date?
 }
 
 /// Reconstrói a janela de 5h do plano Claude lendo passivamente os transcripts
-/// JSONL do Claude Code (mesma técnica do `ccusage blocks`). Nunca executa o CLI.
+/// JSONL do Claude Code (estilo similar ao `ccusage blocks`, mas sem arredondamento
+/// para hora cheia — a janela começa no horário exato da primeira mensagem).
+/// Nunca executa o CLI.
 struct SessionDetector: SessionDetecting {
     var clock: Clock = SystemClock()
 
@@ -19,7 +21,6 @@ struct SessionDetector: SessionDetecting {
     func activeWindowEnd(account: URL) async -> Date? {
         let provider = Provider.detect(at: account) ?? .claude
         let transcriptsDir = account.appendingPathComponent(provider.transcriptsSubpath)
-        let roundsToHour = provider.roundsBlockStartToHour
         var lookback: TimeInterval = Self.scanInterval
         let maxLookback: TimeInterval = 7 * 24 * 3600
         while true {
@@ -34,31 +35,25 @@ struct SessionDetector: SessionDetecting {
                 lookback = min(lookback * 2, maxLookback)
                 continue
             }
-            return Self.activeBlockEnd(timestamps: timestamps, now: clock.now,
-                                       roundsToHour: roundsToHour)
+            return Self.activeBlockEnd(timestamps: timestamps, now: clock.now)
         }
     }
 
     // MARK: - Núcleo puro (testável)
 
-    /// Blocos de 5h: início = primeira mensagem (arredondada para a hora cheia
-    /// quando `roundsToHour` — regra do Claude); mensagem após o fim do bloco
-    /// corrente abre bloco novo.
-    static func activeBlockEnd(timestamps: [Date], now: Date, roundsToHour: Bool = true) -> Date? {
+    /// Blocos de 5h: início = timestamp exato da primeira mensagem (regra real
+    /// da API — o /usage reseta exatamente 5h depois; não há arredondamento
+    /// para hora cheia); mensagem após o fim do bloco corrente abre bloco novo.
+    static func activeBlockEnd(timestamps: [Date], now: Date) -> Date? {
         var blockEnd: Date?
         for t in timestamps.sorted() {
             guard t <= now else { break }
             if blockEnd == nil || t >= blockEnd! {
-                let start = roundsToHour ? floorToHour(t) : t
-                blockEnd = start.addingTimeInterval(blockDuration)
+                blockEnd = t.addingTimeInterval(blockDuration)
             }
         }
         guard let end = blockEnd, now < end else { return nil }
         return end
-    }
-
-    static func floorToHour(_ date: Date) -> Date {
-        Date(timeIntervalSince1970: (date.timeIntervalSince1970 / 3600).rounded(.down) * 3600)
     }
 
     /// Extrai o timestamp por busca de substring — sem decodificar o JSON inteiro.

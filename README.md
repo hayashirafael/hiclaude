@@ -120,8 +120,9 @@ To manage continuous renewals, Ohayo streams the account's local transcripts
 (`<account>/projects/**.jsonl` for Claude, `sessions/**.jsonl` for Codex, line
 by line, ordered by `mtime`) and reconstructs the current 5-hour window. If one
 is active, only a redundant continuous renewal is skipped; fixed-time schedules
-always run. A Claude window starts at the top of the hour of its first message
-(mirroring how the plan counts it); a Codex window starts at the exact time.
+always run. A window starts at the exact time of its first message and lasts
+5 hours (matching how the plan counts it — `/usage` resets exactly 5 hours
+after the first message).
 
 A Claude dispatch runs:
 

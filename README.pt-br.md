@@ -121,9 +121,9 @@ Para gerenciar as renovações contínuas, o Ohayo lê os transcripts locais da
 conta (`<conta>/projects/**.jsonl` no Claude, `sessions/**.jsonl` no Codex,
 streaming linha a linha, por `mtime`) e reconstrói a janela de 5h corrente. Se
 houver uma ativa, somente uma renovação contínua redundante é pulada; horários
-fixos sempre executam. A janela do Claude começa na hora cheia da primeira
-mensagem (espelhando como o plano contabiliza); a do Codex começa no horário
-exato.
+fixos sempre executam. A janela começa no horário exato da primeira mensagem
+e dura 5h (como o plano contabiliza — o `/usage` reseta exatamente 5h após a
+primeira mensagem).
 
 Um disparo Claude executa:
 
