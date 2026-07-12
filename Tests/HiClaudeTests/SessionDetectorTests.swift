@@ -19,7 +19,7 @@ final class SessionDetectorTests: XCTestCase {
     func testMensagemRecenteAbreJanelaDe5h() {
         let msg = hoursAgo(1)
         let end = SessionDetector.activeBlockEnd(timestamps: [msg], now: now)
-        XCTAssertEqual(end, SessionDetector.floorToHour(msg).addingTimeInterval(5 * 3600))
+        XCTAssertEqual(end, msg.addingTimeInterval(5 * 3600))
     }
 
     func testMensagemAntigaNaoConta() {
@@ -30,10 +30,10 @@ final class SessionDetectorTests: XCTestCase {
         // Atividade contínua: bloco 1 começa há ~9h e expira; bloco 2 começa
         // na primeira mensagem após o fim do bloco 1.
         let b1first = hoursAgo(9)
-        let b1end = SessionDetector.floorToHour(b1first).addingTimeInterval(5 * 3600)
+        let b1end = b1first.addingTimeInterval(5 * 3600)
         let b2first = b1end.addingTimeInterval(600) // 10min após o fim do bloco 1
         let end = SessionDetector.activeBlockEnd(timestamps: [b1first, hoursAgo(7), b2first, hoursAgo(1)], now: now)
-        XCTAssertEqual(end, SessionDetector.floorToHour(b2first).addingTimeInterval(5 * 3600))
+        XCTAssertEqual(end, b2first.addingTimeInterval(5 * 3600))
     }
 
     // Parsing de linha JSONL
@@ -93,7 +93,11 @@ final class SessionDetectorTests: XCTestCase {
         let proj = conta.appendingPathComponent("projects/proj-a")
         try fm.createDirectory(at: proj, withIntermediateDirectories: true)
 
-        let agora = Date()
+        // Sem fração de segundo: o formatter abaixo grava/lê só a resolução do
+        // segundo (trunca ao escrever), e a regra exata agora compara
+        // timestamps sem a tolerância da hora cheia — sem este truncamento
+        // aqui, "agora" (com fração) nunca bateria com o valor lido do disco.
+        let agora = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
         let iso = ISO8601DateFormatter()
         var todas: [Date] = []
         var linhas = ""
@@ -183,15 +187,14 @@ final class SessionDetectorTests: XCTestCase {
         XCTAssertNotNil(end)
     }
 
-    func testJanelaCodexNaoArredondaParaHoraCheia() {
-        // 10:25 → bloco Claude começaria às 10:00 (fim 15:00);
-        // bloco Codex começa às 10:25 (fim 15:25).
-        let t = date("2026-07-09T10:25:00Z")
-        let now = date("2026-07-09T11:00:00Z")
-        let fimClaude = SessionDetector.activeBlockEnd(timestamps: [t], now: now, roundsToHour: true)
-        let fimCodex = SessionDetector.activeBlockEnd(timestamps: [t], now: now, roundsToHour: false)
-        XCTAssertEqual(fimClaude, date("2026-07-09T15:00:00Z"))
-        XCTAssertEqual(fimCodex, date("2026-07-09T15:25:00Z"))
+    func testJanelaComecaNaPrimeiraMensagemExata() {
+        // Caso real (2026-07-12, conta claude2): primeira mensagem 19:57:15Z →
+        // a janela reseta exatamente 5h depois (00:57:15Z). A heurística antiga
+        // (hora cheia, técnica ccusage) daria 00:00Z — dessincronizado do /usage.
+        let t = date("2026-07-12T19:57:15Z")
+        let now = date("2026-07-12T20:01:00Z")
+        let end = SessionDetector.activeBlockEnd(timestamps: [t], now: now)
+        XCTAssertEqual(end, date("2026-07-13T00:57:15Z"))
     }
 
     func testContaCodexLeSessionsJsonl() async throws {

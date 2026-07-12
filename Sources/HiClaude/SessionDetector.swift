@@ -19,7 +19,6 @@ struct SessionDetector: SessionDetecting {
     func activeWindowEnd(account: URL) async -> Date? {
         let provider = Provider.detect(at: account) ?? .claude
         let transcriptsDir = account.appendingPathComponent(provider.transcriptsSubpath)
-        let roundsToHour = provider.roundsBlockStartToHour
         var lookback: TimeInterval = Self.scanInterval
         let maxLookback: TimeInterval = 7 * 24 * 3600
         while true {
@@ -34,31 +33,25 @@ struct SessionDetector: SessionDetecting {
                 lookback = min(lookback * 2, maxLookback)
                 continue
             }
-            return Self.activeBlockEnd(timestamps: timestamps, now: clock.now,
-                                       roundsToHour: roundsToHour)
+            return Self.activeBlockEnd(timestamps: timestamps, now: clock.now)
         }
     }
 
     // MARK: - Núcleo puro (testável)
 
-    /// Blocos de 5h: início = primeira mensagem (arredondada para a hora cheia
-    /// quando `roundsToHour` — regra do Claude); mensagem após o fim do bloco
-    /// corrente abre bloco novo.
-    static func activeBlockEnd(timestamps: [Date], now: Date, roundsToHour: Bool = true) -> Date? {
+    /// Blocos de 5h: início = timestamp exato da primeira mensagem (regra real
+    /// da API — o /usage reseta exatamente 5h depois; não há arredondamento
+    /// para hora cheia); mensagem após o fim do bloco corrente abre bloco novo.
+    static func activeBlockEnd(timestamps: [Date], now: Date) -> Date? {
         var blockEnd: Date?
         for t in timestamps.sorted() {
             guard t <= now else { break }
             if blockEnd == nil || t >= blockEnd! {
-                let start = roundsToHour ? floorToHour(t) : t
-                blockEnd = start.addingTimeInterval(blockDuration)
+                blockEnd = t.addingTimeInterval(blockDuration)
             }
         }
         guard let end = blockEnd, now < end else { return nil }
         return end
-    }
-
-    static func floorToHour(_ date: Date) -> Date {
-        Date(timeIntervalSince1970: (date.timeIntervalSince1970 / 3600).rounded(.down) * 3600)
     }
 
     /// Extrai o timestamp por busca de substring — sem decodificar o JSON inteiro.

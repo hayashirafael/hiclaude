@@ -37,10 +37,6 @@ enum Provider: String, Codable, CaseIterable {
         }
     }
 
-    /// Claude arredonda o início do bloco de 5h para a hora cheia (técnica
-    /// ccusage); a janela do ChatGPT/Codex é rolante a partir da 1ª mensagem.
-    var roundsBlockStartToHour: Bool { self == .claude }
-
     /// Variável de ambiente que fixa a conta no subprocesso.
     var envKey: String {
         switch self {

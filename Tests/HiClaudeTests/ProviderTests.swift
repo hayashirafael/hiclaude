@@ -36,8 +36,6 @@ final class ProviderTests: XCTestCase {
     func testAtributosPorProvider() {
         XCTAssertEqual(Provider.claude.transcriptsSubpath, "projects")
         XCTAssertEqual(Provider.codex.transcriptsSubpath, "sessions")
-        XCTAssertTrue(Provider.claude.roundsBlockStartToHour)
-        XCTAssertFalse(Provider.codex.roundsBlockStartToHour)
         XCTAssertEqual(Provider.claude.envKey, "CLAUDE_CONFIG_DIR")
         XCTAssertEqual(Provider.codex.envKey, "CODEX_HOME")
         XCTAssertEqual(Provider.codex.displayName, "Codex")
