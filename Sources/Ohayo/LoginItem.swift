@@ -1,22 +1,47 @@
 import Foundation
 import ServiceManagement
 
-/// SMAppService exige app bundleado; em `swift run` o toggle fica oculto.
-enum LoginItem {
-    static var isSupported: Bool { Bundle.main.bundleIdentifier != nil }
+protocol LoginItemManaging {
+    var isSupported: Bool { get }
+    var isEnabled: Bool { get }
+    func setEnabled(_ enabled: Bool)
+}
 
-    static var isEnabled: Bool { SMAppService.mainApp.status == .enabled }
+struct SystemLoginItemManager: LoginItemManaging {
+    var isSupported: Bool { Bundle.main.bundleIdentifier != nil }
+    var isEnabled: Bool { SMAppService.mainApp.status == .enabled }
 
-    static func setEnabled(_ enabled: Bool) {
+    func setEnabled(_ enabled: Bool) {
         guard isSupported else { return }
         do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
+            enabled ? try SMAppService.mainApp.register() : try SMAppService.mainApp.unregister()
         } catch {
             NSLog("Ohayo LoginItem: \(error)")
         }
     }
+}
+
+struct ClosureLoginItemManager: LoginItemManaging {
+    let isSupported: Bool
+    let getEnabled: () -> Bool
+    let setEnabledAction: (Bool) -> Void
+
+    init(isSupported: Bool, getEnabled: @escaping () -> Bool,
+         setEnabled: @escaping (Bool) -> Void) {
+        self.isSupported = isSupported
+        self.getEnabled = getEnabled
+        self.setEnabledAction = setEnabled
+    }
+
+    var isEnabled: Bool { getEnabled() }
+    func setEnabled(_ enabled: Bool) { setEnabledAction(enabled) }
+}
+
+/// Compatibility facade until settings and the guide receive injected managers.
+enum LoginItem {
+    private static let manager = SystemLoginItemManager()
+
+    static var isSupported: Bool { manager.isSupported }
+    static var isEnabled: Bool { manager.isEnabled }
+    static func setEnabled(_ enabled: Bool) { manager.setEnabled(enabled) }
 }

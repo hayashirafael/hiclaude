@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import ServiceManagement
 import UserNotifications
@@ -42,5 +43,42 @@ struct SystemNotificationPermissionClient: NotificationPermissionClient {
         case .authorized, .provisional, .ephemeral: return .allowed
         @unknown default: return .failed("unknown notification authorization status")
         }
+    }
+}
+
+enum TerminalAutomationError: Error, Equatable {
+    case appleEventNotPermitted
+    case executionFailed(String)
+}
+
+protocol TerminalAutomationClient {
+    func test() async -> PermissionAccessStatus
+}
+
+struct SystemTerminalAutomationClient: TerminalAutomationClient {
+    static let probeScript = "tell application \"Terminal\" to get name"
+    var runner: (String) -> Result<Void, TerminalAutomationError> = Self.run
+
+    func test() async -> PermissionAccessStatus {
+        switch runner(Self.probeScript) {
+        case .success: return .allowed
+        case .failure(.appleEventNotPermitted): return .denied
+        case .failure(.executionFailed(let message)): return .failed(message)
+        }
+    }
+
+    private static func run(_ source: String) -> Result<Void, TerminalAutomationError> {
+        var details: NSDictionary?
+        guard let script = NSAppleScript(source: source) else {
+            return .failure(.executionFailed("failed to create AppleScript"))
+        }
+        script.executeAndReturnError(&details)
+        if let details {
+            let number = details[NSAppleScript.errorNumber] as? Int
+            if number == -1743 { return .failure(.appleEventNotPermitted) }
+            let message = details[NSAppleScript.errorMessage] as? String ?? details.description
+            return .failure(.executionFailed(message))
+        }
+        return .success(())
     }
 }
