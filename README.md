@@ -118,6 +118,17 @@ missing, plus **Quit**.
   upcoming fires the menu panel shows (1–5), Language (English or
   Portuguese), and the app version
 
+### First-run permissions
+
+The packaged app opens a non-blocking setup guide once. You can allow
+notifications, test the Terminal automation used for interactive sessions, and
+optionally enable Launch at Login. Closing the guide does not disable the app;
+reopen it from **Settings → General → Permissions…**.
+
+If notifications or Terminal automation were denied, change them in **System
+Settings → Notifications → Ohayo** or **System Settings → Privacy & Security →
+Automation**, then reopen the guide to refresh or test the integration.
+
 ## How it works
 
 To manage continuous renewals, Ohayo streams the account's local transcripts
