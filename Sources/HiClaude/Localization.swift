@@ -51,6 +51,7 @@ struct L10n {
     var languageLabel: String { text(en: "Language", pt: "Idioma") }
     var launchAtLogin: String { text(en: "Launch at Login", pt: "Iniciar com o Mac") }
     var remainingInMenuBar: String { text(en: "Remaining time in menu bar", pt: "Tempo restante na barra") }
+    var panelUpcomingCountLabel: String { text(en: "Upcoming fires in panel", pt: "Próximos disparos no painel") }
     var version: String { text(en: "Version", pt: "Versão") }
     var remainingInMenuBarFooter: String {
         text(en: "The menu bar time shows the first account renewal window to expire.",

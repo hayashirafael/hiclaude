@@ -13,6 +13,15 @@ struct GeneralTab: View {
                         set: { LoginItem.setEnabled($0) }))
                 }
                 Toggle(strings.remainingInMenuBar, isOn: $state.showRemainingInBar)
+                Stepper(value: $state.panelUpcomingCount, in: 1...5) {
+                    HStack {
+                        Text(strings.panelUpcomingCountLabel)
+                        Spacer()
+                        Text("\(state.panelUpcomingCount)")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
                 Picker(strings.languageLabel, selection: $state.language) {
                     ForEach(AppLanguage.allCases) { language in
                         Text(language.pickerTitle).tag(language)
