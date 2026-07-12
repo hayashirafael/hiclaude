@@ -4,18 +4,18 @@ cd "$(dirname "$0")/.."
 
 swift build -c release
 
-APP="build/HiYashi.app"
+APP="build/Ohayo.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
-cp .build/release/HiClaude "$APP/Contents/MacOS/HiClaude"
+cp .build/release/Ohayo "$APP/Contents/MacOS/Ohayo"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
 # O bundle de recursos (SVGs dos providers) é obrigatório: sem ele o app
 # instalado perde os ícones, e um empacotamento silencioso sem o bundle já
 # passou despercebido numa release. Falhar alto aqui.
-RESOURCE_BUNDLE=".build/release/HiClaude_HiClaude.bundle"
+RESOURCE_BUNDLE=".build/release/Ohayo_Ohayo.bundle"
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
-[[ -d "$APP/Contents/Resources/HiClaude_HiClaude.bundle" ]] || {
+[[ -d "$APP/Contents/Resources/Ohayo_Ohayo.bundle" ]] || {
     echo "erro: $RESOURCE_BUNDLE ausente — resource bundle não foi empacotado" >&2
     exit 1
 }
