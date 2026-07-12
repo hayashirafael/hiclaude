@@ -43,16 +43,16 @@ final class ProviderVisualTests: XCTestCase {
 
     func testCandidatosDeBundleCobremAppEmpacotadoDevETestes() {
         let urls = ProviderVisual.resourceBundleCandidates(
-            mainResourceURL: URL(fileURLWithPath: "/Apps/HiYashi.app/Contents/Resources"),
-            mainBundleURL: URL(fileURLWithPath: "/Apps/HiYashi.app"),
+            mainResourceURL: URL(fileURLWithPath: "/Apps/Ohayo.app/Contents/Resources"),
+            mainBundleURL: URL(fileURLWithPath: "/Apps/Ohayo.app"),
             finderResourceURL: URL(fileURLWithPath: "/repo/.build/debug/Testes.xctest/Contents/Resources"),
             finderBundleURL: URL(fileURLWithPath: "/repo/.build/debug/Testes.xctest")
         )
         XCTAssertEqual(urls.map(\.path), [
-            "/Apps/HiYashi.app/Contents/Resources/HiClaude_HiClaude.bundle",
-            "/Apps/HiYashi.app/HiClaude_HiClaude.bundle",
-            "/repo/.build/debug/Testes.xctest/Contents/Resources/HiClaude_HiClaude.bundle",
-            "/repo/.build/debug/HiClaude_HiClaude.bundle",
+            "/Apps/Ohayo.app/Contents/Resources/Ohayo_Ohayo.bundle",
+            "/Apps/Ohayo.app/Ohayo_Ohayo.bundle",
+            "/repo/.build/debug/Testes.xctest/Contents/Resources/Ohayo_Ohayo.bundle",
+            "/repo/.build/debug/Ohayo_Ohayo.bundle",
         ])
     }
 

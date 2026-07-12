@@ -15,7 +15,7 @@ enum ProviderVisual {
     /// Settings no app distribuído via Homebrew (o make-app.sh coloca o
     /// bundle em Contents/Resources). Este resolvedor cobre os layouts reais
     /// e degrada para `nil` (ícone de fallback) em vez de derrubar o app.
-    nonisolated static let resourceBundleName = "HiClaude_HiClaude.bundle"
+    nonisolated static let resourceBundleName = "Ohayo_Ohayo.bundle"
 
     nonisolated static func resourceBundleCandidates(
         mainResourceURL: URL?,
