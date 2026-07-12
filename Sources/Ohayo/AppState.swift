@@ -104,9 +104,7 @@ final class AppState: ObservableObject {
         if let path = event.accountPath, !path.isEmpty {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
-        guard let legacyName = event.account else { return nil }
-        let matches = discoverAccounts().filter { $0.lastPathComponent == legacyName }
-        return matches.count == 1 ? matches[0] : nil
+        return nil
     }
 
     /// Momento em que o app esteve vivo pela última vez ANTES deste launch;
@@ -304,34 +302,11 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Scan legado por convenção: `~/.claude*` com subpasta `projects`,
-    /// excluindo o default. Usado só na migração para `registeredAccounts`.
-    static func legacyConventionScan(home: URL) -> [String] {
-        let fm = FileManager.default
-        let defaultPath = home.appendingPathComponent(".claude").standardizedFileURL.path
-        var result: [String] = []
-        if let names = try? fm.contentsOfDirectory(atPath: home.path) {
-            for name in names.sorted() where name.hasPrefix(".claude") {
-                let dir = home.appendingPathComponent(name)
-                var isDir: ObjCBool = false
-                let projects = dir.appendingPathComponent("projects")
-                if fm.fileExists(atPath: projects.path, isDirectory: &isDir), isDir.boolValue,
-                   dir.standardizedFileURL.path != defaultPath {
-                    result.append(dir.standardizedFileURL.path)
-                }
-            }
-        }
-        return result
-    }
-
     /// Apelido opcional por conta (chave = path padronizado). Independente da
     /// renovação estar ligada.
     @Published var aliases: [String: String] {
         didSet { defaults.set(aliases, forKey: Keys.aliases) }
     }
-
-    /// Âncora padrão do modo Programada legado — só a migração usa.
-    private static let defaultAnchorMinutes = 9 * 60
 
     /// Conta que um agendamento mira: o configDir do comando (se a pasta ainda
     /// existe), senão a conta padrão do provider. nil para shell (não mira
@@ -466,13 +441,10 @@ final class AppState: ObservableObject {
 
     private let defaults: UserDefaults
     private enum Keys {
-        static let paused = "paused" // legado — só a migração lê/remove
         static let pausedAccounts = "pausedAccounts"
         static let history = "history"
-        static let favorites = "favorites"
         static let showRemainingInBar = "showRemainingInBar"
         static let aliases = "aliases"
-        static let renewals = "renewals"
         static let registeredAccounts = "registeredAccounts"
         static let tasks = "tasks"
         static let language = "language"
@@ -488,11 +460,8 @@ final class AppState: ObservableObject {
            let decoded = try? JSONDecoder().decode([FailableDecodable<FireEvent>].self, from: data) {
             // Decode lossy (como `tasks`): um evento corrompido some, o resto do
             // histórico sobrevive — em vez de o array inteiro lançar e o app
-            // cair no fallback do `lastEvent` legado, perdendo tudo.
+            // perder tudo.
             self.history = decoded.compactMap(\.value)
-        } else if let data = defaults.data(forKey: "lastEvent"),
-                  let event = try? JSONDecoder().decode(FireEvent.self, from: data) {
-            self.history = [event] // migração da versão antiga
         } else {
             self.history = []
         }
@@ -503,7 +472,6 @@ final class AppState: ObservableObject {
         } else {
             self.language = .english
         }
-        let legacyFavorites = Self.loadLegacyFavorites(defaults)
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         var loadedTasks: [ScheduledTask] = []
         if let data = defaults.data(forKey: Keys.tasks),
@@ -514,126 +482,12 @@ final class AppState: ObservableObject {
             // mutação persistir [] por cima do blob antigo.
             loadedTasks = decoded.compactMap(\.value)
         }
-        // Migração de mão única para agendamentos unificados: embute o
-        // favorito nas tarefas legadas e converte renovações em agendamentos.
-        var migrou = false
-        for i in loadedTasks.indices where loadedTasks[i].command == nil {
-            loadedTasks[i].command = Self.embeddedCommand(
-                uid: loadedTasks[i].commandUID, favorites: legacyFavorites)
-            loadedTasks[i].commandUID = nil
-            migrou = true
-        }
-        let legacyRenewals = Self.loadRenewals(defaults)
-        if !legacyRenewals.isEmpty {
-            for (path, renewal) in legacyRenewals.sorted(by: { $0.key < $1.key }) {
-                loadedTasks.append(Self.migratedRenewalTask(
-                    path: path, renewal: renewal, favorites: legacyFavorites))
-            }
-            migrou = true
-        }
         self.tasks = loadedTasks
-        if migrou {
-            defaults.set(try? JSONEncoder().encode(loadedTasks), forKey: Keys.tasks)
-        }
-        // Legado removido só DEPOIS de persistir o resultado migrado (acima):
-        // um crash entre migrar e persistir apagaria o legado sem ter salvo a
-        // migração, perdendo renovações/favoritos irreversivelmente.
-        if defaults.object(forKey: Keys.renewals) != nil
-            || defaults.object(forKey: "renewAccounts") != nil {
-            defaults.removeObject(forKey: Keys.renewals)
-            defaults.removeObject(forKey: "renewAccounts")
-        }
-        if migrou, defaults.object(forKey: Keys.favorites) != nil {
-            defaults.removeObject(forKey: Keys.favorites)
-        }
         if let stored = defaults.array(forKey: Keys.registeredAccounts) as? [String] {
             self.registeredAccounts = stored
         } else {
-            // Migração única: quem atualizou vindo do scan por convenção mantém as
-            // contas extras (ex.: ~/.claude2) sem precisar recadastrar.
-            self.registeredAccounts = Self.legacyConventionScan(home: home)
+            self.registeredAccounts = []
             defaults.set(self.registeredAccounts, forKey: Keys.registeredAccounts)
         }
-        // Migração one-way do pause global: true vira pause de cada conta
-        // agendada. Atribuição dentro do init não dispara didSet — persistir
-        // explicitamente.
-        if defaults.object(forKey: Keys.paused) != nil {
-            if defaults.bool(forKey: Keys.paused) {
-                pausedAccounts = Set(tasks.filter { $0.enabled }
-                    .compactMap { accountDir(for: $0)?.standardizedFileURL.path })
-                defaults.set(Array(pausedAccounts), forKey: Keys.pausedAccounts)
-            }
-            defaults.removeObject(forKey: Keys.paused)
-        }
-    }
-
-    /// LEGADO: decodifica os favoritos persistidos pela versão com biblioteca
-    /// de comandos — só a migração do init lê, para embutir nos agendamentos.
-    private static func loadLegacyFavorites(_ defaults: UserDefaults) -> [Message] {
-        if let data = defaults.data(forKey: Keys.favorites),
-           let decoded = try? JSONDecoder().decode([Message].self, from: data) {
-            return decoded
-        }
-        if let legacy = defaults.array(forKey: Keys.favorites) as? [String] {
-            return legacy.map { Message(text: $0, kind: .claude) }
-        }
-        return []
-    }
-
-    /// Decodifica renovações; se ausente, migra do formato legado
-    /// `renewAccounts: [String]` (todas como Automática).
-    private static func loadRenewals(_ defaults: UserDefaults) -> [String: AccountRenewal] {
-        if let data = defaults.data(forKey: Keys.renewals),
-           let decoded = try? JSONDecoder().decode([String: AccountRenewal].self, from: data) {
-            return decoded
-        }
-        if let legacy = defaults.array(forKey: "renewAccounts") as? [String] {
-            var result: [String: AccountRenewal] = [:]
-            for path in legacy { result[path] = AccountRenewal(mode: .automatic) }
-            return result
-        }
-        return [:]
-    }
-
-    /// Cópia embutida do favorito referenciado (ou hi padrão). uid zerado:
-    /// o prompt passa a pertencer ao agendamento, não à biblioteca.
-    private static func embeddedCommand(uid: UUID?, favorites: [Message]) -> Message {
-        var msg: Message
-        if let uid, uid == defaultCodexMessage.uid {
-            msg = defaultCodexMessage
-        } else if let uid, let fav = favorites.first(where: { $0.uid == uid }) {
-            msg = fav
-        } else {
-            msg = defaultMessage
-        }
-        msg.uid = nil
-        return msg
-    }
-
-    /// Renovação legada → agendamento: Automática vira contínua; Programada
-    /// vira horários fixos com as 4 janelas do ciclo ancorado (âncora +
-    /// 0/5/10/15h), todos os dias.
-    private static func migratedRenewalTask(path: String, renewal: AccountRenewal,
-                                            favorites: [Message]) -> ScheduledTask {
-        let provider = Provider.detect(at: URL(fileURLWithPath: path)) ?? .claude
-        var command: Message
-        if let uid = renewal.messageUID, let fav = favorites.first(where: { $0.uid == uid }) {
-            command = fav
-        } else {
-            command = defaultHi(for: provider)
-        }
-        command.uid = nil
-        command.configDir = path
-        var task = ScheduledTask(uid: UUID(), command: command)
-        switch renewal.mode {
-        case .automatic:
-            task.repetition = .continuous
-        case .scheduled:
-            let anchor = renewal.anchorMinutes ?? defaultAnchorMinutes
-            task.repetition = .fixed
-            task.times = (0..<4).map { (anchor + $0 * 300) % 1440 }.sorted()
-            task.weekdays = Set(1...7)
-        }
-        return task
     }
 }

@@ -5,18 +5,9 @@ import XCTest
 final class AppStateTests: XCTestCase {
     func freshDefaults() -> UserDefaults {
         let d = UserDefaults(suiteName: "ohayo-test-\(UUID().uuidString)")!
-        // Sem isso, o AppState migra o scan legado da máquina real (dev pode
-        // ter ~/.claude2, ~/.claude3 de verdade) e os testes ficam
-        // dependentes do ambiente. Pré-semear vazio pula a migração.
+        // Mantém os testes independentes das contas reais da máquina.
         d.set([String](), forKey: "registeredAccounts")
         return d
-    }
-
-    /// `UserDefaults` isolado, mas SEM pré-semear `registeredAccounts` — usado
-    /// só pelo teste que exercita a migração do scan legado no `init`, com um
-    /// `home` fake injetado (nunca a home real da máquina).
-    func rawDefaultsSemMigracao() -> UserDefaults {
-        UserDefaults(suiteName: "ohayo-test-\(UUID().uuidString)")!
     }
 
     /// Cria uma pasta de conta fake com a assinatura pedida.
@@ -57,20 +48,6 @@ final class AppStateTests: XCTestCase {
         let data = try JSONEncoder().encode(event)
         let decoded = try JSONDecoder().decode(FireEvent.self, from: data)
         XCTAssertEqual(decoded, event)
-    }
-
-    /// Histórico persistido por versões SEM o caso `missed` continua
-    /// decodificando — o Codable sintetizado decodifica por chave presente.
-    func testHistoricoLegadoDecodificaComCasoMissedNoEnum() throws {
-        let legado = """
-        [{"date":773190000,"result":{"success":{}}},
-         {"date":773190060,"result":{"skipped":{"activeUntil":773200000}}},
-         {"date":773190120,"result":{"failure":{"message":"exit 1"}}}]
-        """.data(using: .utf8)!
-        let eventos = try JSONDecoder().decode([FireEvent].self, from: legado)
-        XCTAssertEqual(eventos.count, 3)
-        XCTAssertEqual(eventos[0].result, .success)
-        XCTAssertEqual(eventos[2].result, .failure(message: "exit 1"))
     }
 
     // MARK: - Heartbeat e ocorrências perdidas com o app fechado
@@ -179,11 +156,9 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(decoded, msg)
     }
 
-    /// JSON antigo (sem as chaves de config) decodifica com campos nil e os
-    /// `resolved*` caem nos defaults (Haiku/low/safe).
-    func testMessageAntigoDecodificaComDefaults() throws {
-        let legacyJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
-        let msg = try JSONDecoder().decode(Message.self, from: legacyJSON)
+    func testMessageComCamposOpcionaisAusentesUsaDefaultsResolvidos() throws {
+        let json = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
+        let msg = try JSONDecoder().decode(Message.self, from: json)
         XCTAssertNil(msg.model)
         XCTAssertNil(msg.effort)
         XCTAssertNil(msg.safeMode)
@@ -223,16 +198,16 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(a, b)
     }
 
-    func testShowResponseLegadoNilEDefaultFalse() throws {
-        let legacyJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
-        let msg = try JSONDecoder().decode(Message.self, from: legacyJSON)
+    func testShowResponseAusenteEDefaultFalse() throws {
+        let json = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
+        let msg = try JSONDecoder().decode(Message.self, from: json)
         XCTAssertNil(msg.showResponse)
         XCTAssertFalse(msg.resolvedShowResponse)
     }
 
-    func testNotifyOnSuccessLegadoNilEDefaultFalse() throws {
-        let legacyJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
-        let msg = try JSONDecoder().decode(Message.self, from: legacyJSON)
+    func testNotifyOnSuccessAusenteEDefaultFalse() throws {
+        let json = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
+        let msg = try JSONDecoder().decode(Message.self, from: json)
         XCTAssertNil(msg.notifyOnSuccess)
         XCTAssertFalse(msg.resolvedNotifyOnSuccess)
     }
@@ -246,7 +221,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(decoded, com)
     }
 
-    func testRunInTerminalLegadoNilEDefaultTrueParaClaudeECodex() throws {
+    func testRunInTerminalAusenteEDefaultTrueParaClaudeECodex() throws {
         let claudeJSON = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
         let codexJSON = #"{"text":"1+1","kind":"codex"}"#.data(using: .utf8)!
         let claude = try JSONDecoder().decode(Message.self, from: claudeJSON)
@@ -307,33 +282,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(b.history, a.history)
     }
 
-    func testHistoricoManualLegadoContinuaDecodificando() {
-        let defaults = freshDefaults()
-        let event = FireEvent(date: Date(timeIntervalSince1970: 2), result: .success,
-                              messageText: "legado", origin: .manual)
-        defaults.set(try? JSONEncoder().encode([event]), forKey: "history")
-        XCTAssertEqual(AppState(defaults: defaults).history, [event])
-    }
-
-    /// Migração: o lastEvent persistido pela versão antiga vira o primeiro histórico.
-    func testMigraLastEventLegadoParaHistorico() {
-        let defaults = freshDefaults()
-        let event = FireEvent(date: Date(timeIntervalSince1970: 1_783_000_000), result: .success)
-        defaults.set(try? JSONEncoder().encode(event), forKey: "lastEvent")
-        let state = AppState(defaults: defaults)
-        XCTAssertEqual(state.history, [event])
-        XCTAssertEqual(state.lastEvent, event)
-    }
-
-    /// Evento sem os campos novos (JSON legado) decodifica com nil.
-    func testFireEventLegadoDecodificaComCamposNil() throws {
-        let data = try JSONEncoder().encode(FireEvent(date: Date(timeIntervalSince1970: 1), result: .success))
-        let decoded = try JSONDecoder().decode(FireEvent.self, from: data)
-        XCTAssertNil(decoded.messageText)
-        XCTAssertNil(decoded.origin)
-        XCTAssertNil(decoded.response)
-    }
-
     func testApelidoPersisteEDefineRotulo() {
         let defaults = freshDefaults()
         let dir = URL(fileURLWithPath: "/tmp/.claude9")
@@ -353,16 +301,6 @@ final class AppStateTests: XCTestCase {
         _ = b
     }
 
-    /// Migração legada: `renewAccounts [String]` vira agendamentos contínuos.
-    func testMigraRenewAccountsParaAgendamentosContinuos() {
-        let defaults = freshDefaults()
-        defaults.set(["/tmp/.claude", "/tmp/.claude2"], forKey: "renewAccounts")
-        let state = AppState(defaults: defaults)
-        XCTAssertEqual(state.tasks.count, 2)
-        XCTAssertTrue(state.tasks.allSatisfy { $0.repetition == .continuous })
-        XCTAssertNil(defaults.object(forKey: "renewAccounts"), "chave legada removida")
-    }
-
     func testMensagemCodexSemModeloFicaNilEFazRoundTrip() throws {
         // Sem escolha explícita, modelo/reasoning ficam nil (o Codex herda o
         // default da conta em vez de o app forçar um modelo).
@@ -372,14 +310,6 @@ final class AppStateTests: XCTestCase {
         let data = try JSONEncoder().encode(msg)
         let decoded = try JSONDecoder().decode(Message.self, from: data)
         XCTAssertEqual(decoded, msg)
-    }
-
-    func testMensagemLegadaSemCamposCodexDecodifica() throws {
-        // JSON antigo (sem codexModel/codexReasoning) precisa decodificar.
-        let json = #"{"text":"1+1","kind":"claude"}"#.data(using: .utf8)!
-        let decoded = try JSONDecoder().decode(Message.self, from: json)
-        XCTAssertEqual(decoded.kind, .claude)
-        XCTAssertNil(decoded.codexModel)
     }
 
     func testHiPadraoPorProvider() {
@@ -431,23 +361,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(state.tasks[0].enabled)
     }
 
-    func testLegacyScanEncontraContasExtrasPorConvencao() throws {
-        // Migração única: ~/.claude* com projects/, excluindo o default ~/.claude.
-        let home = FileManager.default.temporaryDirectory
-            .appendingPathComponent("home-\(UUID().uuidString)")
-        let fm = FileManager.default
-        try fm.createDirectory(at: home.appendingPathComponent(".claude/projects"),
-                               withIntermediateDirectories: true)
-        try fm.createDirectory(at: home.appendingPathComponent(".claude2/projects"),
-                               withIntermediateDirectories: true)
-        try fm.createDirectory(at: home.appendingPathComponent(".claude-vazio"),
-                               withIntermediateDirectories: true) // sem projects → fora
-        defer { try? fm.removeItem(at: home) }
-
-        let found = AppState.legacyConventionScan(home: home)
-        XCTAssertEqual(found, [home.appendingPathComponent(".claude2").standardizedFileURL.path])
-    }
-
     func testProviderForFallbackClaudeParaPastaSemAssinatura() {
         let state = AppState(defaults: freshDefaults())
         // ~/.claude recém-instalado pode não ter assinatura ainda → .claude.
@@ -458,40 +371,6 @@ final class AppStateTests: XCTestCase {
         let state = AppState(defaults: freshDefaults())
         let msgCodex = Message(text: "1+1", kind: .codex) // sem configDir
         XCTAssertEqual(state.effectiveConfigDir(for: msgCodex), AppState.defaultCodexConfigDir)
-    }
-
-    /// Fim a fim: quando `registeredAccounts` está ausente no UserDefaults, o
-    /// `init` roda o scan legado sobre a `home` injetada (nunca a real),
-    /// popula `registeredAccounts` com as contas extras (excluindo o
-    /// `.claude` default) e persiste — uma segunda instância sobre o mesmo
-    /// `UserDefaults` não repete o scan.
-    func testInitMigraScanLegadoDeHomeInjetadaEPersiste() throws {
-        let fm = FileManager.default
-        let home = fm.temporaryDirectory.appendingPathComponent("home-init-\(UUID().uuidString)")
-        try fm.createDirectory(at: home.appendingPathComponent(".claude/projects"),
-                               withIntermediateDirectories: true) // default → excluído do scan
-        try fm.createDirectory(at: home.appendingPathComponent(".claude2/projects"),
-                               withIntermediateDirectories: true) // extra → deve migrar
-        defer { try? fm.removeItem(at: home) }
-
-        let defaults = rawDefaultsSemMigracao()
-        XCTAssertNil(defaults.array(forKey: "registeredAccounts"),
-                     "pré-condição: chave ausente para exercitar o ramo de migração")
-
-        let extra = home.appendingPathComponent(".claude2").standardizedFileURL.path
-        let state = AppState(defaults: defaults, home: home)
-        XCTAssertEqual(state.registeredAccounts, [extra])
-
-        // Persistiu no UserDefaults (não só em memória).
-        let persisted = defaults.array(forKey: "registeredAccounts") as? [String]
-        XCTAssertEqual(persisted, [extra])
-
-        // Segunda instância sobre o mesmo defaults não repete o scan: mesmo
-        // adicionando uma `.claude3` na home, a chave já presente é respeitada.
-        try fm.createDirectory(at: home.appendingPathComponent(".claude3/projects"),
-                               withIntermediateDirectories: true)
-        let state2 = AppState(defaults: defaults, home: home)
-        XCTAssertEqual(state2.registeredAccounts, [extra])
     }
 
     /// As contas padrão (~/.claude, ~/.codex) nunca são cadastradas — são
@@ -524,86 +403,14 @@ final class AppStateTests: XCTestCase {
 
     func testNextTaskEntryEscolheAMenorData() {
         let state = AppState(defaults: freshDefaults())
-        let t1 = ScheduledTask(uid: UUID(), name: "a", commandUID: nil,
+        let t1 = ScheduledTask(uid: UUID(), name: "a", command: nil,
                                times: [480], weekdays: [2], enabled: true)
-        let t2 = ScheduledTask(uid: UUID(), name: "b", commandUID: nil,
+        let t2 = ScheduledTask(uid: UUID(), name: "b", command: nil,
                                times: [600], weekdays: [2], enabled: true)
         state.tasks = [t1, t2]
         state.nextTaskFires = [t1.uid: Date().addingTimeInterval(7200),
                                t2.uid: Date().addingTimeInterval(3600)]
         XCTAssertEqual(state.nextTaskEntry?.task.uid, t2.uid)
-    }
-
-    // MARK: - Migração para agendamentos unificados
-
-    func testMigraTarefaLegadaEmbutindoOFavorito() throws {
-        let d = freshDefaults()
-        let favUID = UUID()
-        let fav = Message(text: "olá mundo", kind: .claude, model: .opus, uid: favUID)
-        d.set(try JSONEncoder().encode([fav]), forKey: "favorites")
-        // Tarefa no formato legado: commandUID, sem command/repetition.
-        let legadoJSON = """
-        [{"uid":"\(UUID().uuidString)","commandUID":"\(favUID.uuidString)",
-          "times":[480],"weekdays":[2],"enabled":true}]
-        """
-        d.set(legadoJSON.data(using: .utf8)!, forKey: "tasks")
-
-        let state = AppState(defaults: d)
-        XCTAssertEqual(state.tasks.count, 1)
-        XCTAssertEqual(state.tasks[0].resolvedCommand.text, "olá mundo")
-        XCTAssertEqual(state.tasks[0].resolvedCommand.model, .opus)
-        XCTAssertNil(state.tasks[0].resolvedCommand.uid, "cópia embutida não pertence à biblioteca")
-        XCTAssertEqual(state.tasks[0].repetition, .fixed)
-        XCTAssertNil(d.object(forKey: "favorites"), "biblioteca removida após embutir")
-    }
-
-    func testMigraTarefaLegadaSemComandoParaHiPadrao() throws {
-        let d = freshDefaults()
-        let legadoJSON = """
-        [{"uid":"\(UUID().uuidString)","times":[600],"weekdays":[1,7],"enabled":false}]
-        """
-        d.set(legadoJSON.data(using: .utf8)!, forKey: "tasks")
-        let state = AppState(defaults: d)
-        XCTAssertEqual(state.tasks[0].resolvedCommand.text, "1+1")
-        XCTAssertEqual(state.tasks[0].resolvedCommand.kind, .claude)
-        XCTAssertFalse(state.tasks[0].enabled)
-    }
-
-    func testMigraRenovacaoAutomaticaParaAgendamentoContinuo() throws {
-        let d = freshDefaults()
-        let conta = try makeAccountDir(signature: ".claude.json")
-        d.set(try JSONEncoder().encode([conta.path: AccountRenewal(mode: .automatic)]),
-              forKey: "renewals")
-        let state = AppState(defaults: d)
-        XCTAssertEqual(state.tasks.count, 1)
-        XCTAssertEqual(state.tasks[0].repetition, .continuous)
-        XCTAssertEqual(state.tasks[0].resolvedCommand.configDir, conta.path)
-        XCTAssertEqual(state.tasks[0].resolvedCommand.kind, .claude)
-        XCTAssertTrue(state.tasks[0].enabled)
-        XCTAssertNil(d.object(forKey: "renewals"), "chave legada removida")
-    }
-
-    func testMigraRenovacaoProgramadaParaQuatroHorariosFixos() throws {
-        let d = freshDefaults()
-        let conta = try makeAccountDir(signature: ".claude.json")
-        var renewal = AccountRenewal(mode: .scheduled)
-        renewal.anchorMinutes = 9 * 60 + 15 // 09:15
-        d.set(try JSONEncoder().encode([conta.path: renewal]), forKey: "renewals")
-        let state = AppState(defaults: d)
-        XCTAssertEqual(state.tasks[0].repetition, .fixed)
-        // 09:15 + 0/5/10/15h, mod 24h, ordenado: 00:15, 09:15, 14:15, 19:15.
-        XCTAssertEqual(state.tasks[0].times, [15, 555, 855, 1155])
-        XCTAssertEqual(state.tasks[0].weekdays, Set(1...7))
-    }
-
-    func testMigracaoRodaUmaVezSo() throws {
-        let d = freshDefaults()
-        let conta = try makeAccountDir(signature: ".claude.json")
-        d.set(try JSONEncoder().encode([conta.path: AccountRenewal(mode: .automatic)]),
-              forKey: "renewals")
-        _ = AppState(defaults: d)
-        let state2 = AppState(defaults: d)
-        XCTAssertEqual(state2.tasks.count, 1, "segunda inicialização não duplica")
     }
 
     // MARK: - accountDir / activeScheduleCount
@@ -819,27 +626,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(state.isPaused(dir))
     }
 
-    func testMigracaoPausedGlobalTruePausaContasAgendadas() {
-        let defaults = freshDefaults()
-        defaults.set(true, forKey: "paused")
-        var task = ScheduledTask(uid: UUID(), command: AppState.defaultMessage)
-        task.repetition = .continuous
-        defaults.set(try? JSONEncoder().encode([task]), forKey: "tasks")
-        let migrated = AppState(defaults: defaults)
-        XCTAssertTrue(migrated.isPaused(AppState.defaultConfigDir))
-        XCTAssertNil(defaults.object(forKey: "paused")) // key legada removida
-        // Persistiu: um reload mantém a conta pausada.
-        XCTAssertTrue(AppState(defaults: defaults).isPaused(AppState.defaultConfigDir))
-    }
-
-    func testMigracaoPausedGlobalFalseSoRemoveAKey() {
-        let defaults = freshDefaults()
-        defaults.set(false, forKey: "paused")
-        let migrated = AppState(defaults: defaults)
-        XCTAssertTrue(migrated.pausedAccounts.isEmpty)
-        XCTAssertNil(defaults.object(forKey: "paused"))
-    }
-
     func testAllScheduledAccountsPaused() {
         let defaults = freshDefaults()
         let state = AppState(defaults: defaults)
@@ -865,13 +651,6 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(state.matchesFilter(event))
         state.accountFilter = AppState.defaultCodexConfigDir
         XCTAssertFalse(state.matchesFilter(event))
-    }
-
-    func testMatchesFilterLegadoPorNomeDaPasta() {
-        let state = AppState(defaults: freshDefaults())
-        let event = FireEvent(date: Date(), result: .success, account: ".claude")
-        state.accountFilter = AppState.defaultConfigDir
-        XCTAssertTrue(state.matchesFilter(event)) // sem accountPath, casa pelo nome
     }
 
     func testTaskMatchesFilter() {

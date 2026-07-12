@@ -21,7 +21,7 @@ final class TaskSchedulerTests: XCTestCase {
 
     private func task(times: [Int], weekdays: Set<Int> = Set(1...7),
                       enabled: Bool = true) -> ScheduledTask {
-        ScheduledTask(uid: UUID(), name: nil, commandUID: nil,
+        ScheduledTask(uid: UUID(), name: nil, command: nil,
                       times: times, weekdays: weekdays, enabled: enabled)
     }
 
@@ -86,13 +86,13 @@ final class TaskSchedulerTests: XCTestCase {
         var fired: [UUID] = []
         scheduler.onFire = { fired.append($0.uid); return true }
         let uid = UUID()
-        let original = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let original = ScheduledTask(uid: uid, name: nil, command: nil,
                                      times: [480], weekdays: Set(1...7), enabled: true) // 08:00
         await scheduler.configure(tasks: [original], paused: false)
         XCTAssertEqual(scheduler.nextFires[uid], date(2026, 7, 9, 8, 0))
 
         // Usuário edita para 09:00 enquanto ainda armado para 08:00.
-        let edited = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let edited = ScheduledTask(uid: uid, name: nil, command: nil,
                                    times: [540], weekdays: Set(1...7), enabled: true) // 09:00
         await scheduler.configure(tasks: [edited], paused: false)
         XCTAssertEqual(scheduler.nextFires[uid], date(2026, 7, 9, 9, 0))
@@ -112,13 +112,13 @@ final class TaskSchedulerTests: XCTestCase {
         var fired: [UUID] = []
         scheduler.onFire = { fired.append($0.uid); return true }
         let uid = UUID()
-        let original = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let original = ScheduledTask(uid: uid, name: nil, command: nil,
                                      times: [1320], weekdays: Set(1...7), enabled: true) // 22:00
         await scheduler.configure(tasks: [original], paused: false)
 
         clock.now = date(2026, 7, 9, 7, 31)
         // Edita para 07:15 — já ficou "no passado" no exato momento da edição.
-        let edited = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let edited = ScheduledTask(uid: uid, name: nil, command: nil,
                                    times: [435], weekdays: Set(1...7), enabled: true) // 07:15
         await scheduler.configure(tasks: [edited], paused: false)
         XCTAssertTrue(fired.isEmpty) // edição não é catch-up retroativo
@@ -137,12 +137,12 @@ final class TaskSchedulerTests: XCTestCase {
         var fired: [UUID] = []
         scheduler.onFire = { fired.append($0.uid); return true }
         let uid = UUID()
-        let original = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let original = ScheduledTask(uid: uid, name: nil, command: nil,
                                      times: [480], weekdays: Set(1...7), enabled: true) // 08:00
         await scheduler.configure(tasks: [original], paused: false)
 
         // Usuário edita às 07:00 para disparar 07:01 (60s no futuro).
-        let edited = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let edited = ScheduledTask(uid: uid, name: nil, command: nil,
                                    times: [421], weekdays: Set(1...7), enabled: true) // 07:01
         await scheduler.configure(tasks: [edited], paused: false)
         XCTAssertEqual(scheduler.nextFires[uid], date(2026, 7, 9, 7, 1))
@@ -162,7 +162,7 @@ final class TaskSchedulerTests: XCTestCase {
         var fired: [UUID] = []
         scheduler.onFire = { fired.append($0.uid); return true }
         let uid = UUID()
-        let original = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let original = ScheduledTask(uid: uid, name: nil, command: nil,
                                      times: [360], weekdays: Set(1...7), enabled: true) // 06:00
         await scheduler.configure(tasks: [original], paused: false)
 
@@ -172,7 +172,7 @@ final class TaskSchedulerTests: XCTestCase {
 
         clock.now = date(2026, 7, 9, 7, 0)
         // Edita para 06:30 — horário entre o último disparo real e agora.
-        let edited = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let edited = ScheduledTask(uid: uid, name: nil, command: nil,
                                    times: [390], weekdays: Set(1...7), enabled: true) // 06:30
         await scheduler.configure(tasks: [edited], paused: false)
         XCTAssertEqual(fired, [uid]) // sem catch-up retroativo do 06:30
@@ -273,12 +273,12 @@ final class TaskSchedulerTests: XCTestCase {
         var fired: [UUID] = []
         scheduler.onFire = { fired.append($0.uid); return true }
         let uid = UUID()
-        let original = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let original = ScheduledTask(uid: uid, name: nil, command: nil,
                                      times: [480], weekdays: Set(1...7), enabled: true) // 08:00
         await scheduler.configure(tasks: [original], paused: false)
 
         clock.now = date(2026, 7, 9, 12, 44, 20)
-        let edited = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let edited = ScheduledTask(uid: uid, name: nil, command: nil,
                                    times: [764], weekdays: Set(1...7), enabled: true) // 12:44
         await scheduler.configure(tasks: [edited], paused: false)
 
@@ -292,12 +292,12 @@ final class TaskSchedulerTests: XCTestCase {
         var fired: [UUID] = []
         scheduler.onFire = { fired.append($0.uid); return true }
         let uid = UUID()
-        let disabled = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let disabled = ScheduledTask(uid: uid, name: nil, command: nil,
                                      times: [764], weekdays: Set(1...7), enabled: false) // 12:44
         await scheduler.configure(tasks: [disabled], paused: false)
 
         clock.now = date(2026, 7, 9, 12, 44, 20)
-        let enabled = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let enabled = ScheduledTask(uid: uid, name: nil, command: nil,
                                     times: [764], weekdays: Set(1...7), enabled: true)
         await scheduler.configure(tasks: [enabled], paused: false)
 
@@ -313,7 +313,7 @@ final class TaskSchedulerTests: XCTestCase {
         var count = 0
         scheduler.onFire = { _ in count += 1; return true }
         let uid = UUID()
-        let t = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let t = ScheduledTask(uid: uid, name: nil, command: nil,
                               times: [764], weekdays: Set(1...7), enabled: true) // 12:44
         await scheduler.configure(tasks: [t], paused: false)
 
@@ -322,7 +322,7 @@ final class TaskSchedulerTests: XCTestCase {
         XCTAssertEqual(count, 1)
 
         // Desabilita e reabilita ainda dentro do minuto 12:44.
-        let disabled = ScheduledTask(uid: uid, name: nil, commandUID: nil,
+        let disabled = ScheduledTask(uid: uid, name: nil, command: nil,
                                      times: [764], weekdays: Set(1...7), enabled: false)
         await scheduler.configure(tasks: [disabled], paused: false)
         clock.now = date(2026, 7, 9, 12, 44, 30)

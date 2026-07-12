@@ -7,10 +7,7 @@ enum FireResult: Codable, Equatable {
     case missed(occurrence: Date)
 }
 
-enum FireOrigin: String, Codable {
-    // Compatibilidade com históricos persistidos por versões anteriores.
-    case scheduled, manual, renewal, agenda
-}
+enum FireOrigin: String, Codable { case scheduled, manual, renewal, agenda }
 
 struct FireEvent: Codable, Equatable {
     let date: Date
@@ -19,7 +16,6 @@ struct FireEvent: Codable, Equatable {
     var account: String? = nil
     var origin: FireOrigin? = nil
     var response: String? = nil
-    // Metadados opcionais preservam o decode de históricos anteriores.
     var accountPath: String? = nil
     var provider: Provider? = nil
     var modelName: String? = nil
@@ -121,20 +117,11 @@ extension Message {
     }
 }
 
-/// Formato legado, usado somente pela migração do AppState.
-struct AccountRenewal: Codable, Equatable {
-    enum Mode: String, Codable { case automatic, scheduled }
-    var mode: Mode = .automatic
-    var anchorMinutes: Int? = nil
-    var messageUID: UUID? = nil
-}
-
 struct ScheduledTask: Identifiable, Equatable {
     enum Repetition: String, Codable { case continuous, fixed }
 
     var uid: UUID
     var name: String? = nil
-    var commandUID: UUID? = nil
     var command: Message? = nil
     var repetition: Repetition = .fixed
     var times: [Int] = []
@@ -158,14 +145,13 @@ struct FailableDecodable<T: Decodable>: Decodable {
 
 extension ScheduledTask: Codable {
     private enum CodingKeys: String, CodingKey {
-        case uid, name, commandUID, command, repetition, times, weekdays, enabled
+        case uid, name, command, repetition, times, weekdays, enabled
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         uid = try c.decode(UUID.self, forKey: .uid)
         name = try c.decodeIfPresent(String.self, forKey: .name)
-        commandUID = try c.decodeIfPresent(UUID.self, forKey: .commandUID)
         command = try c.decodeIfPresent(Message.self, forKey: .command)
         repetition = try c.decodeIfPresent(Repetition.self, forKey: .repetition) ?? .fixed
         times = try c.decodeIfPresent([Int].self, forKey: .times) ?? []
