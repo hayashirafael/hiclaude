@@ -2,15 +2,17 @@ import SwiftUI
 
 struct GeneralTab: View {
     @ObservedObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
+    private let loginItem: LoginItemManaging = SystemLoginItemManager()
     private var strings: L10n { state.strings }
 
     var body: some View {
         Form {
             Section {
-                if LoginItem.isSupported {
+                if loginItem.isSupported {
                     Toggle(strings.launchAtLogin, isOn: Binding(
-                        get: { LoginItem.isEnabled },
-                        set: { LoginItem.setEnabled($0) }))
+                        get: { loginItem.isEnabled },
+                        set: { loginItem.setEnabled($0) }))
                 }
                 Toggle(strings.remainingInMenuBar, isOn: $state.showRemainingInBar)
                 Stepper(value: $state.panelUpcomingCount, in: 1...5) {
@@ -36,6 +38,11 @@ struct GeneralTab: View {
                     Text(AppVersion.current)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                }
+                Button {
+                    openWindow(id: "permissions")
+                } label: {
+                    Label(strings.permissionsSettingsButton, systemImage: "checklist")
                 }
             }
         }

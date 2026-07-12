@@ -31,11 +31,22 @@ struct OhayoApp: App {
             MenuPanel(state: env.state, env: env)
         } label: {
             MenuBarLabel(state: env.state)
+                .background {
+                    StartupCoordinatorView(
+                        state: env.state,
+                        isBundled: Bundle.main.bundleIdentifier != nil
+                    )
+                }
         }
         .menuBarExtraStyle(.window)
 
         Window(env.state.strings.settingsTitle, id: "schedule") {
             SettingsView(state: env.state, env: env)
+        }
+        .windowResizability(.contentSize)
+
+        Window(env.state.strings.permissionGuideTitle, id: "permissions") {
+            PermissionSetupView(state: env.state)
         }
         .windowResizability(.contentSize)
     }

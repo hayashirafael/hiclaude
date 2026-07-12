@@ -63,4 +63,81 @@ final class PermissionSetupTests: XCTestCase {
         manager.setEnabled(true)
         XCTAssertTrue(manager.isEnabled)
     }
+
+    @MainActor
+    func testModelRefreshDoesNotRequestPermissions() async {
+        let notifications = NotificationFake(.notConfigured)
+        let terminal = TerminalFake(.allowed)
+        let login = ClosureLoginItemManager(
+            isSupported: true, getEnabled: { false }, setEnabled: { _ in })
+        let model = PermissionSetupModel(
+            notifications: notifications, terminal: terminal, loginItem: login)
+
+        await model.refresh()
+
+        XCTAssertEqual(model.notificationStatus, .notConfigured)
+        XCTAssertEqual(model.terminalStatus, .notConfigured)
+        let requestCount = await notifications.requestCount
+        let testCount = await terminal.testCount
+        XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(testCount, 0)
+    }
+
+    @MainActor
+    func testNotificationActionRequestsAndRefreshesStatus() async {
+        let notifications = NotificationFake(.notConfigured)
+        let model = PermissionSetupModel(
+            notifications: notifications,
+            terminal: TerminalFake(.notConfigured),
+            loginItem: ClosureLoginItemManager(
+                isSupported: false, getEnabled: { false }, setEnabled: { _ in }))
+
+        await model.requestNotifications()
+
+        XCTAssertEqual(model.notificationStatus, .allowed)
+        let requestCount = await notifications.requestCount
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    @MainActor
+    func testTerminalActionOnlyRunsWhenExplicitlyCalled() async {
+        let terminal = TerminalFake(.denied)
+        let model = PermissionSetupModel(
+            notifications: NotificationFake(.notConfigured),
+            terminal: terminal,
+            loginItem: ClosureLoginItemManager(
+                isSupported: false, getEnabled: { false }, setEnabled: { _ in }))
+
+        let initialTestCount = await terminal.testCount
+        XCTAssertEqual(initialTestCount, 0)
+        await model.testTerminal()
+
+        XCTAssertEqual(model.terminalStatus, .denied)
+        let testCount = await terminal.testCount
+        XCTAssertEqual(testCount, 1)
+    }
+}
+
+private actor NotificationFake: NotificationPermissionClient {
+    var current: PermissionAccessStatus
+    private(set) var requestCount = 0
+
+    init(_ current: PermissionAccessStatus) { self.current = current }
+    func status() async -> PermissionAccessStatus { current }
+    func request() async -> PermissionAccessStatus {
+        requestCount += 1
+        current = .allowed
+        return current
+    }
+}
+
+private actor TerminalFake: TerminalAutomationClient {
+    let result: PermissionAccessStatus
+    private(set) var testCount = 0
+
+    init(_ result: PermissionAccessStatus) { self.result = result }
+    func test() async -> PermissionAccessStatus {
+        testCount += 1
+        return result
+    }
 }

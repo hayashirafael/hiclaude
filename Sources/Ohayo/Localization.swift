@@ -53,9 +53,42 @@ struct L10n {
     var remainingInMenuBar: String { text(en: "Remaining time in menu bar", pt: "Tempo restante na barra") }
     var panelUpcomingCountLabel: String { text(en: "Upcoming fires in panel", pt: "Próximos disparos no painel") }
     var version: String { text(en: "Version", pt: "Versão") }
+    var permissionGuideTitle: String { text(en: "Set Up Ohayo", pt: "Configurar o Ohayo") }
+    var permissionGuideIntro: String {
+        text(en: "Choose which system integrations you want to configure now.",
+             pt: "Escolha quais integrações do sistema deseja configurar agora.")
+    }
+    var notificationsPermissionTitle: String { text(en: "Notifications", pt: "Notificações") }
+    var notificationsPermissionBody: String {
+        text(en: "Receive run results and failure alerts.",
+             pt: "Receba resultados de execuções e alertas de falha.")
+    }
+    var allowNotifications: String { text(en: "Allow Notifications", pt: "Permitir notificações") }
+    var terminalAutomationTitle: String { text(en: "Terminal Automation", pt: "Automação do Terminal") }
+    var terminalAutomationBody: String {
+        text(en: "Allow Ohayo to open the interactive sessions you start.",
+             pt: "Permita que o Ohayo abra as sessões interativas que você iniciar.")
+    }
+    var testTerminal: String { text(en: "Test Terminal", pt: "Testar Terminal") }
+    var configureLater: String { text(en: "Configure Later", pt: "Configurar depois") }
+    var permissionsSettingsButton: String { text(en: "Permissions…", pt: "Permissões…") }
+    var optional: String { text(en: "Optional", pt: "Opcional") }
+    var permissionNotConfigured: String { text(en: "Not configured", pt: "Não configurado") }
+    var permissionAllowed: String { text(en: "Allowed", pt: "Permitido") }
+    var permissionDenied: String { text(en: "Denied", pt: "Negado") }
+    var permissionFailed: String { text(en: "Unavailable", pt: "Indisponível") }
     var remainingInMenuBarFooter: String {
         text(en: "The menu bar time shows the first account renewal window to expire.",
              pt: "O tempo na barra mostra a janela que vence primeiro entre as contas em renovação.")
+    }
+
+    func permissionStatus(_ status: PermissionAccessStatus) -> String {
+        switch status {
+        case .notConfigured: return permissionNotConfigured
+        case .allowed: return permissionAllowed
+        case .denied: return permissionDenied
+        case .failed: return permissionFailed
+        }
     }
 
     func settingsSectionTitle(_ section: SettingsSection) -> String {

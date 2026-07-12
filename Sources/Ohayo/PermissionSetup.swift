@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import ServiceManagement
 import UserNotifications
@@ -80,5 +81,45 @@ struct SystemTerminalAutomationClient: TerminalAutomationClient {
             return .failure(.executionFailed(message))
         }
         return .success(())
+    }
+}
+
+@MainActor
+final class PermissionSetupModel: ObservableObject {
+    @Published private(set) var notificationStatus: PermissionAccessStatus = .notConfigured
+    @Published private(set) var terminalStatus: PermissionAccessStatus = .notConfigured
+    @Published private(set) var loginItemEnabled: Bool
+    let loginItemSupported: Bool
+
+    private let notifications: NotificationPermissionClient
+    private let terminal: TerminalAutomationClient
+    private let loginItem: LoginItemManaging
+
+    init(notifications: NotificationPermissionClient = SystemNotificationPermissionClient(),
+         terminal: TerminalAutomationClient = SystemTerminalAutomationClient(),
+         loginItem: LoginItemManaging = SystemLoginItemManager()) {
+        self.notifications = notifications
+        self.terminal = terminal
+        self.loginItem = loginItem
+        self.loginItemSupported = loginItem.isSupported
+        self.loginItemEnabled = loginItem.isEnabled
+    }
+
+    func refresh() async {
+        notificationStatus = await notifications.status()
+        loginItemEnabled = loginItem.isEnabled
+    }
+
+    func requestNotifications() async {
+        notificationStatus = await notifications.request()
+    }
+
+    func testTerminal() async {
+        terminalStatus = await terminal.test()
+    }
+
+    func setLoginItemEnabled(_ enabled: Bool) {
+        loginItem.setEnabled(enabled)
+        loginItemEnabled = loginItem.isEnabled
     }
 }
