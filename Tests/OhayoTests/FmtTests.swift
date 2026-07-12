@@ -34,4 +34,16 @@ final class FmtTests: XCTestCase {
         XCTAssertEqual(HorariosView.daysSummary([2, 3, 4, 5, 6], language: .english), "Mon to Fri")
         XCTAssertEqual(HorariosView.daysSummary([2, 3, 4, 5, 6], language: .portuguese), "seg a sex")
     }
+
+    func testEventTimeHojeSoHoraOutroDiaComDiaDaSemana() {
+        let cal = Calendar.current
+        let now = cal.date(from: DateComponents(year: 2026, month: 7, day: 10, hour: 9, minute: 0))!
+        let hoje = cal.date(from: DateComponents(year: 2026, month: 7, day: 10, hour: 21, minute: 0))!
+        let amanha = cal.date(from: DateComponents(year: 2026, month: 7, day: 11, hour: 21, minute: 0))!
+        XCTAssertEqual(Fmt.eventTime(hoje, now: now, calendar: cal, language: .portuguese), "21:00")
+        // 2026-07-11 é sábado: precisa vir com o dia da semana, não só a hora.
+        let label = Fmt.eventTime(amanha, now: now, calendar: cal, language: .portuguese)
+        XCTAssertTrue(label.lowercased().contains("sáb"), label)
+        XCTAssertTrue(label.contains("21:00"), label)
+    }
 }

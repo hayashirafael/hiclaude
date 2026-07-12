@@ -81,6 +81,21 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(s2.previousAliveAt, t)
     }
 
+    func testPanelUpcomingCountPadrao1PersisteEClampaNaLeitura() {
+        let d = freshDefaults()
+        let s1 = AppState(defaults: d)
+        XCTAssertEqual(s1.panelUpcomingCount, 1) // padrão
+
+        s1.panelUpcomingCount = 3
+        let s2 = AppState(defaults: d)
+        XCTAssertEqual(s2.panelUpcomingCount, 3) // persistiu
+
+        d.set(99, forKey: "panelUpcomingCount")
+        XCTAssertEqual(AppState(defaults: d).panelUpcomingCount, 5) // clamp alto
+        d.set(-2, forKey: "panelUpcomingCount")
+        XCTAssertEqual(AppState(defaults: d).panelUpcomingCount, 1) // clamp baixo
+    }
+
     func testRecordEventAvancaHeartbeat() {
         let d = freshDefaults()
         let s1 = AppState(defaults: d)

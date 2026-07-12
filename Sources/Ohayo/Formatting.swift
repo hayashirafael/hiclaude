@@ -53,6 +53,15 @@ enum Fmt {
         formatter(language: language, style: .weekdayTime).string(from: date)
     }
 
+    /// Horário de um disparo no painel: só "21:00" quando é hoje;
+    /// "sáb 21:00" quando cai em outro dia, para não parecer iminente.
+    static func eventTime(_ date: Date, now: Date, calendar: Calendar = .current,
+                          language: AppLanguage = .english) -> String {
+        calendar.isDate(date, inSameDayAs: now)
+            ? hhmm(date, language: language)
+            : weekdayTime(date, language: language)
+    }
+
     /// Minutos desde a meia-noite → "08:00".
     static func minutes(_ minutes: Int) -> String {
         String(format: "%02d:%02d", minutes / 60, minutes % 60)

@@ -1,8 +1,9 @@
 import SwiftUI
 import AppKit
 
-/// Seção Contas: informativa — identidade, provedor, pasta local e quantos
-/// agendamentos ativos miram cada conta. Renovação e comandos moram em Horários.
+/// Seção Contas: identidade, provedor, pasta local, quantos agendamentos
+/// ativos miram cada conta e o pausar/retomar por conta. Renovação e comandos
+/// moram em Horários.
 struct ContasView: View {
     @ObservedObject var state: AppState
     @State private var editingAlias: URL? = nil
@@ -94,6 +95,20 @@ struct ContasView: View {
                 }
             }
             Spacer()
+            if state.isPaused(dir) {
+                Text(strings.pausedBadge)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 5))
+            }
+            Button {
+                state.setPaused(dir, !state.isPaused(dir))
+            } label: {
+                Image(systemName: state.isPaused(dir) ? "play.fill" : "pause.fill")
+            }
+            .buttonStyle(.plain)
+            .help(state.isPaused(dir) ? strings.resumeAccount : strings.pauseAccount)
             Button {
                 if editingAlias == dir { commitAlias(dir) }
                 else { editingAlias = dir; aliasDraft = state.alias(for: dir) ?? "" }

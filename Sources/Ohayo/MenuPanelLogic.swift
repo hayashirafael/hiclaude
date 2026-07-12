@@ -23,23 +23,51 @@ enum MenuPanelLogic {
         return text.count > 30 ? String(text.prefix(30)) + "…" : text
     }
 
-    /// Próximo evento da conta: o disparo futuro mais próximo entre o
-    /// contínuo (nextRenewals) e os fixos (nextTaskFires) que a miram.
-    static func nextEvent(for account: URL, tasks: [ScheduledTask],
-                          nextRenewals: [URL: Date], nextTaskFires: [UUID: Date],
-                          accountDir: (ScheduledTask) -> URL?, now: Date,
-                          renewalFallbackName: String) -> (name: String, date: Date)? {
-        var candidates: [(name: String, date: Date)] = []
-        for task in tasks where task.enabled && accountDir(task) == account {
+    /// Um disparo futuro no painel: a tarefa, a conta que ela mira, o nome de
+    /// exibição e a data do próximo disparo.
+    struct UpcomingEvent: Equatable {
+        let taskUID: UUID
+        let account: URL
+        let name: String
+        let date: Date
+    }
+
+    /// Próximos disparos entre todas as contas, ordenados por data, limitados
+    /// a `limit`. Pula contas pausadas (o FireController descartaria o
+    /// disparo) e datas passadas. A mesma conta pode aparecer mais de uma vez.
+    static func upcomingEvents(tasks: [ScheduledTask],
+                               nextRenewals: [URL: Date], nextTaskFires: [UUID: Date],
+                               isPaused: (URL) -> Bool,
+                               accountDir: (ScheduledTask) -> URL?, now: Date,
+                               limit: Int, renewalFallbackName: String) -> [UpcomingEvent] {
+        var events: [UpcomingEvent] = []
+        for task in tasks where task.enabled {
+            guard let account = accountDir(task), !isPaused(account) else { continue }
             let date: Date?
             switch task.repetition {
             case .continuous: date = nextRenewals[account]
             case .fixed: date = nextTaskFires[task.uid]
             }
             if let date, date > now {
-                candidates.append((eventName(task, renewalFallbackName: renewalFallbackName), date))
+                events.append(UpcomingEvent(
+                    taskUID: task.uid, account: account,
+                    name: eventName(task, renewalFallbackName: renewalFallbackName),
+                    date: date))
             }
         }
-        return candidates.min { $0.date < $1.date }
+        return Array(events.sorted { $0.date < $1.date }.prefix(max(0, limit)))
+    }
+
+    /// O que o painel mostra quando não há disparo futuro a exibir.
+    enum PanelEmptyState { case noSchedules, allPaused, waiting }
+
+    /// Sem agendamento habilitado → noSchedules; todas as contas agendadas
+    /// pausadas → allPaused; senão está aguardando janela/data (waiting).
+    static func emptyState(tasks: [ScheduledTask],
+                           accountDir: (ScheduledTask) -> URL?,
+                           isPaused: (URL) -> Bool) -> PanelEmptyState {
+        let accounts = Set(tasks.filter { $0.enabled }.compactMap { accountDir($0) })
+        if accounts.isEmpty { return .noSchedules }
+        return accounts.allSatisfy(isPaused) ? .allPaused : .waiting
     }
 }

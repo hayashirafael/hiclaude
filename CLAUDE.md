@@ -99,18 +99,26 @@ globally-active message.
 - UI: `MenuBarLabel.swift` (just the bar glyph — filled while any account has
   an active window, `!` on error, faded when every scheduled account is
   paused; optional remaining-time text) + `MenuPanel.swift` (the
-  `MenuBarExtra` content, `.menuBarExtraStyle(.window)`: one card per
-  scheduled account — provider icon with a green/gray/orange status dot,
-  time remaining until window end or "—", a "name · HH:mm" next-event line —
-  with per-card hover actions (pause/resume the account, jump to its tasks,
-  jump to its history) and a header (missing-CLI warning, Quit) + footer
-  (Tasks · History · Settings); pure card logic (`scheduledAccounts`,
-  `nextEvent`, `eventName`) lives in `MenuPanelLogic.swift`, testable without
-  UI. `SettingsView.swift`
+  `MenuBarExtra` content, `.menuBarExtraStyle(.window)`: the next N tasks to
+  fire across all accounts, N = `AppState.panelUpcomingCount` (1–5, default 1,
+  a stepper in Ajustes › Geral), ordered by time — paused accounts are
+  skipped, so the panel only shows what will actually run. The first event is
+  a highlight card, the rest compact rows; each shows provider icon · account
+  label · event name · time. Empty states: `noActiveSchedules` /
+  `allAccountsPaused` / `waitingForWindow`. Clicking a card/row opens
+  Settings › Tasks filtered to that account (the `accountFilter` deep-link);
+  no per-account hover actions, no 5h-window remaining, no status dot anymore.
+  Plus a header (missing-CLI warning, Quit) + footer (Tasks · History ·
+  Settings); pure logic (`upcomingEvents`, `emptyState`, `eventName`, and the
+  retained `scheduledAccounts` — which still feeds
+  `AppEnvironment.refreshWindowEnds` for the bar glyph; `nextEvent` was
+  removed) lives in `MenuPanelLogic.swift`, testable without UI. Replaces the
+  old native menu (`MenuContent.swift`). `SettingsView.swift`
   (sidebar: Contas · Tarefas · Histórico · Geral — the `horarios`
   case/rawValue is unchanged for persistence, only its displayed title
   changed from "Horários" to "Tarefas"/"Tasks") →
-  `ContasView` (informative: provider/folder/active-schedule count),
+  `ContasView` (per-account pause/resume now lives here, alongside
+  provider/folder/active-schedule count),
   `HorariosView` (unified agendamento list: fixed header bar with summary ·
   filters (account/provider/status/type) · sort · new-task button; compact
   rows expand on click; per-row manual "run now" via

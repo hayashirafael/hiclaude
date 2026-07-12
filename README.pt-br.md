@@ -36,8 +36,8 @@ transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
   completo do erro nas falhas); notificações do macOS opcionais em falhas e
   respostas, além de notificações de sucesso opt-in por agendamento
 - **Idioma** — inglês por padrão, com opção para português nas Configurações
-- **Pausar/Retomar** por conta (a partir do painel do menu) e **Iniciar com o
-  Mac** opcional
+- **Pausar/Retomar** por conta, em **Contas**, e **Iniciar com o Mac**
+  opcional
 
 ## Requisitos
 
@@ -88,32 +88,36 @@ enquanto alguma conta tem janela ativa, mostra `!` em erro e esmaece quando
 todas as contas agendadas estão pausadas; opcionalmente mostra também o tempo
 até a próxima janela vencer entre elas.
 
-Clicar no ícone abre um painel com um card por conta que tem agendamento
-ativo: ícone do provedor com uma bolinha de status (verde = janela ativa,
-cinza = aguardando, laranja = pausada), tempo restante na janela de 5h (ou
-"—") e uma linha "nome · horário" com o próximo evento. Passar o mouse sobre
-um card permite pausar/retomar aquela conta, ou ir direto para as tarefas ou
-o histórico dela. O rodapé tem **Tarefas**, **Histórico** e
+Clicar no ícone abre um painel com os próximos disparos entre todas as
+contas — quantos, é configurável em **Geral** (1–5, padrão 1) — ordenados
+por horário; contas pausadas são puladas, então só aparece o que vai
+executar de fato. O primeiro vem em destaque, os demais em linhas compactas:
+ícone do provedor, rótulo da conta, nome do evento e horário. Se não houver
+nada para mostrar, o painel explica o motivo (nenhum agendamento ativo,
+todas as contas pausadas, ou apenas aguardando a próxima janela/horário).
+Clicar num card ou linha abre **Configurações → Tarefas** filtrado para
+aquela conta. O rodapé tem **Tarefas**, **Histórico** e
 **Configurações…**; o cabeçalho mostra um aviso se algum CLI estiver
 faltando, além de **Sair**.
 
 **Configurações** é uma janela em sidebar com quatro seções:
 
-- **Contas** — informativa: por conta, a identidade logada / apelido, o
-  provedor com seu ícone, a pasta local e quantos agendamentos ativos miram a conta.
-  Adicione ou remova contas aqui
+- **Contas** — por conta, a identidade logada / apelido, o provedor com seu
+  ícone, a pasta local, quantos agendamentos ativos miram a conta, e
+  **Pausar/Retomar** por conta. Adicione ou remova contas aqui
 - **Tarefas** — a lista única de agendamentos. Cada um tem nome, um tipo
   (Claude / Codex / comando shell) com sua config, uma conta e uma repetição —
   **Contínua** (uma renovação da janela de 5h, no máximo uma por conta) ou
   **Horários fixos** (horários × dias da semana). Um único formulário cria ou
   edita qualquer um deles; novos agendamentos começam com o campo de comando
-  vazio. Entrar por um card de conta no painel do menu filtra essa lista para
-  a conta, com um chip para limpar o filtro
+  vazio. Entrar por uma tarefa no painel do menu filtra essa lista para a
+  conta, com um chip para limpar o filtro
 - **Histórico** — disparos recentes em cards com status, ícone do provedor,
   modelo, apelido/e-mail da conta, comando, resposta e detalhes de erro;
   filtrável por conta do mesmo jeito que Tarefas
-- **Geral** — Iniciar com o Mac, tempo restante na menu bar, Idioma (inglês
-  ou português) e a versão do app
+- **Geral** — Iniciar com o Mac, tempo restante na menu bar, quantos
+  próximos disparos o painel do menu mostra (1–5), Idioma (inglês ou
+  português) e a versão do app
 
 ## Como funciona
 

@@ -40,6 +40,7 @@ struct L10n {
     var pauseAccount: String { text(en: "Pause account", pt: "Pausar conta") }
     var resumeAccount: String { text(en: "Resume account", pt: "Retomar conta") }
     var pausedBadge: String { text(en: "paused", pt: "pausada") }
+    var allAccountsPaused: String { text(en: "All accounts paused", pt: "Todas as contas pausadas") }
     var accountTasks: String { text(en: "Account tasks", pt: "Tarefas da conta") }
     var accountHistory: String { text(en: "Account history", pt: "Histórico da conta") }
     var add: String { text(en: "Add", pt: "Adicionar") }
@@ -50,6 +51,7 @@ struct L10n {
     var languageLabel: String { text(en: "Language", pt: "Idioma") }
     var launchAtLogin: String { text(en: "Launch at Login", pt: "Iniciar com o Mac") }
     var remainingInMenuBar: String { text(en: "Remaining time in menu bar", pt: "Tempo restante na barra") }
+    var panelUpcomingCountLabel: String { text(en: "Upcoming fires in panel", pt: "Próximos disparos no painel") }
     var version: String { text(en: "Version", pt: "Versão") }
     var remainingInMenuBarFooter: String {
         text(en: "The menu bar time shows the first account renewal window to expire.",

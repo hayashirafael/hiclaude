@@ -35,7 +35,7 @@ Code transcripts, making no network calls of its own.
   error detail on failures); optional macOS notifications on failures and
   responses, plus opt-in success notifications per schedule
 - **Language** — English by default, with a Portuguese option in Settings
-- Per-account **Pause/Resume** (from the menu panel) and optional **Launch at
+- Per-account **Pause/Resume**, in **Accounts**, and optional **Launch at
   Login**
 
 ## Requirements
@@ -88,31 +88,35 @@ account has an active window, shows `!` on error, and fades when every
 scheduled account is paused; optionally it also shows the time until the
 soonest window expires.
 
-Clicking the icon opens a panel with a card per account that has an active
-schedule: provider icon with a status dot (green = window active, gray =
-waiting, orange = paused), time remaining in the 5-hour window (or "—"), and
-a "name · time" line for its next event. Hover a card to pause/resume that
-account, or jump straight to its tasks or its history. The footer has
-**Tasks**, **History** and **Settings…**; the header shows a warning if a
-CLI is missing, plus **Quit**.
+Clicking the icon opens a panel with the next tasks to fire across all
+accounts — how many is configurable in **General** (1–5, default 1) —
+ordered by time; paused accounts are skipped, so it only shows what will
+actually run. The first is a highlight card, the rest compact rows: provider
+icon, account label, event name, and time. If there's nothing to show, the
+panel explains why (no active schedules, every account paused, or just
+waiting for the next window/time). Clicking a card or row opens
+**Settings → Tasks** filtered to that account. The footer has **Tasks**,
+**History** and **Settings…**; the header shows a warning if a CLI is
+missing, plus **Quit**.
 
 **Settings** is a sidebar window with four sections:
 
-- **Accounts** — informative: for each account, the logged-in identity /
-  alias, provider with its icon, local folder, and how many active schedules target it.
-  Add or remove accounts here
+- **Accounts** — for each account, the logged-in identity / alias, provider
+  with its icon, local folder, how many active schedules target it, and
+  per-account **Pause/Resume**. Add or remove accounts here
 - **Tasks** — the single list of schedules. Each has a name, a type
   (Claude / Codex / shell command) with its own config, an account, and a
   repetition — **Continuous** (a 5-hour-window renewal, max one per account)
   or **Fixed times** (times × weekdays). One form creates or edits any of them;
-  new schedules start with an empty command field. Jumping in from an account
-  card in the menu panel filters this list to that account, with a chip to
-  clear the filter
+  new schedules start with an empty command field. Jumping in from a task in
+  the menu panel filters this list to that account, with a chip to clear the
+  filter
 - **History** — recent dispatches as cards with status, provider icon, model,
   account alias/email, command, response and error details; filterable by
   account the same way as Tasks
-- **General** — Launch at Login, time remaining in the menu bar, Language
-  (English or Portuguese), and the app version
+- **General** — Launch at Login, time remaining in the menu bar, how many
+  upcoming fires the menu panel shows (1–5), Language (English or
+  Portuguese), and the app version
 
 ## How it works
 
