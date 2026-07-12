@@ -6,6 +6,8 @@ struct ClaudeConfigForm: View {
     @Binding var effort: Message.Effort
     @Binding var safeMode: Bool
     @Binding var configDir: String?
+    @Binding var skill: String?
+    let availableSkills: [SkillRef]
     @Binding var workingDir: String
     let accounts: [URL]
     let accountLabel: (URL) -> String
@@ -37,13 +39,19 @@ struct ClaudeConfigForm: View {
                 }
                 .labelsHidden()
             }
+            SkillPickerRows(skill: $skill, availableSkills: availableSkills, strings: strings)
             GridRow {
                 ConfigRowLabel("")
                 WorkingDirectoryPicker(workingDir: $workingDir, strings: strings)
             }
             GridRow {
                 ConfigRowLabel("")
-                Toggle(strings.safeMode, isOn: $safeMode).toggleStyle(.checkbox)
+                Toggle(strings.safeMode, isOn: $safeMode)
+                    .toggleStyle(.checkbox)
+                    // Skill exige safe-mode desligado (--safe-mode pularia a
+                    // skill); o sheet zera o toggle ao selecionar uma skill.
+                    .disabled(skill?.isEmpty == false)
+                    .help(skill?.isEmpty == false ? strings.skillDisablesSafeMode : "")
             }
         }
         .font(.caption)
@@ -54,6 +62,8 @@ struct CodexConfigForm: View {
     @Binding var model: String
     @Binding var reasoning: Message.CodexReasoning
     @Binding var configDir: String?
+    @Binding var skill: String?
+    let availableSkills: [SkillRef]
     @Binding var workingDir: String
     let accounts: [URL]
     let accountLabel: (URL) -> String
@@ -82,6 +92,7 @@ struct CodexConfigForm: View {
                 }
                 .labelsHidden()
             }
+            SkillPickerRows(skill: $skill, availableSkills: availableSkills, strings: strings)
             GridRow {
                 ConfigRowLabel("")
                 WorkingDirectoryPicker(workingDir: $workingDir, strings: strings)
@@ -161,5 +172,42 @@ struct WorkingDirectoryPicker: View {
             return URL(fileURLWithPath: expanded)
         }
         return FileManager.default.homeDirectoryForCurrentUser
+    }
+}
+
+/// Linhas do picker de skill compartilhadas pelos forms Claude/Codex:
+/// "Nenhuma" + skills detectadas na conta; uma seleção que não existe mais na
+/// conta vira entrada extra com aviso (salvar/disparar segue permitido).
+struct SkillPickerRows: View {
+    @Binding var skill: String?
+    let availableSkills: [SkillRef]
+    let strings: L10n
+
+    private var missing: Bool {
+        guard let skill, !skill.isEmpty else { return false }
+        return !availableSkills.contains { $0.name == skill }
+    }
+
+    var body: some View {
+        GridRow {
+            ConfigRowLabel(strings.skillLabel)
+            Picker("", selection: $skill) {
+                Text(strings.noSkill).tag(String?.none)
+                ForEach(availableSkills) { ref in
+                    Text(ref.name).tag(String?.some(ref.name))
+                }
+                if missing, let skill {
+                    Text(skill).tag(String?.some(skill))
+                }
+            }
+            .labelsHidden()
+        }
+        if missing {
+            GridRow {
+                ConfigRowLabel("")
+                Label(strings.skillNotFound, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+            }
+        }
     }
 }

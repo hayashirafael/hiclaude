@@ -35,6 +35,8 @@ struct AgendamentoFormSheet: View {
     @State private var outputMode: OutputMode = Self.initialOutputMode
     @State private var notifyOnSuccess = false
     @State private var account: String? = nil
+    @State private var skill: String? = nil
+    @State private var availableSkills: [SkillRef] = []
     @State private var workingDir = ""
     @State private var repetition: ScheduledTask.Repetition = .fixed
     @State private var times: [Int] = [9 * 60]
@@ -53,14 +55,18 @@ struct AgendamentoFormSheet: View {
             TextField(strings.messageOrCommand, text: $text)
             if kind == .claude {
                 ClaudeConfigForm(model: $model, effort: $effort, safeMode: $safeMode,
-                                 configDir: $account, workingDir: $workingDir,
+                                 configDir: $account, skill: $skill,
+                                 availableSkills: availableSkills,
+                                 workingDir: $workingDir,
                                  accounts: state.accounts(for: .claude),
                                  accountLabel: { state.label(for: $0) },
                                  strings: strings)
             }
             if kind == .codex {
                 CodexConfigForm(model: $codexModel, reasoning: $codexReasoning,
-                                configDir: $account, workingDir: $workingDir,
+                                configDir: $account, skill: $skill,
+                                availableSkills: availableSkills,
+                                workingDir: $workingDir,
                                 accounts: state.accounts(for: .codex),
                                 accountLabel: { state.label(for: $0) },
                                 strings: strings)
@@ -122,11 +128,24 @@ struct AgendamentoFormSheet: View {
         }
         .padding(20)
         .frame(width: 420)
-        .onAppear(perform: load)
+        .onAppear {
+            load()
+            refreshSkills()
+        }
         // Conta é por provider; trocar o Tipo sem limpar conta incompatível
         // persistiria um configDir do provider errado. Shell não mira conta e
         // não pode ser contínuo.
         .onChange(of: kind) { newKind in
+            // Troca de tipo: revarre e limpa skill que não existe no novo
+            // provider (mesmo padrão da conta incompatível). Troca só de
+            // conta mantém a skill, com aviso no form.
+            defer {
+                refreshSkills()
+                if let current = skill,
+                   !availableSkills.contains(where: { $0.name == current }) {
+                    skill = nil
+                }
+            }
             if newKind == .shell {
                 account = nil
                 if outputMode == .terminal { outputMode = .none }
@@ -141,6 +160,12 @@ struct AgendamentoFormSheet: View {
             case .shell: valid = false
             }
             if !valid { account = nil }
+        }
+        .onChange(of: account) { _ in refreshSkills() }
+        .onChange(of: skill) { newSkill in
+            // Skill exige safe-mode desligado; limpar a skill não religa
+            // sozinho (o usuário reabilita o toggle se quiser).
+            if newSkill?.isEmpty == false { safeMode = false }
         }
     }
 
@@ -248,6 +273,20 @@ struct AgendamentoFormSheet: View {
         return nil
     }
 
+    /// Recalcula as skills da conta alvo (abrir o sheet / trocar conta /
+    /// trocar tipo). Conta nil = default global do provider — o mesmo
+    /// diretório que o dispatch resolveria.
+    private func refreshSkills() {
+        guard kind != .shell else {
+            availableSkills = []
+            return
+        }
+        let provider: Provider = kind == .codex ? .codex : .claude
+        let dir = account.map { URL(fileURLWithPath: $0) }
+            ?? (provider == .codex ? AppState.defaultCodexConfigDir : AppState.defaultConfigDir)
+        availableSkills = SkillCatalog.skills(for: provider, at: dir)
+    }
+
     private func load() {
         guard let t = editing else { return }
         name = t.name ?? ""
@@ -266,6 +305,7 @@ struct AgendamentoFormSheet: View {
         outputMode = Self.outputMode(for: msg)
         notifyOnSuccess = msg.notifyOnSuccess ?? false
         account = msg.configDir
+        skill = msg.skill
         workingDir = msg.workingDir ?? ""
     }
 
@@ -293,7 +333,8 @@ struct AgendamentoFormSheet: View {
             notifyOnSuccess: notifyOnSuccess ? true : nil,
             codexModel: kind == .codex && !codexModel.trimmingCharacters(in: .whitespaces).isEmpty
                 ? codexModel.trimmingCharacters(in: .whitespaces) : nil,
-            codexReasoning: kind == .codex && codexReasoning != .low ? codexReasoning : nil)
+            codexReasoning: kind == .codex && codexReasoning != .low ? codexReasoning : nil,
+            skill: kind != .shell && skill?.isEmpty == false ? skill : nil)
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         var task = ScheduledTask(uid: editing?.uid ?? UUID(),
                                  name: trimmedName.isEmpty ? nil : trimmedName,
