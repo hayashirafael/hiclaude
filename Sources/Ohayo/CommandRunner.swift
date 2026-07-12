@@ -183,7 +183,7 @@ struct CommandRunner: CommandRunning {
                         "--model", message.resolvedModel.cliValue,
                         "--effort", message.resolvedEffort.rawValue]
             if message.resolvedSafeMode { args.append("--safe-mode") }
-            args.append(message.text)
+            args.append(message.resolvedPromptText)
             process.arguments = args
         case .shell:
             // Comando cru: shell de login para PATH/aliases/pipes/variáveis
@@ -210,7 +210,7 @@ struct CommandRunner: CommandRunning {
             if let reasoning = message.codexReasoning {
                 args += ["-c", "model_reasoning_effort=\"\(reasoning.rawValue)\""]
             }
-            args.append(message.text)
+            args.append(message.resolvedPromptText)
             process.arguments = args
         }
         let home = NSHomeDirectory()

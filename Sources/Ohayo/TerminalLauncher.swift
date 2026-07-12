@@ -73,7 +73,7 @@ struct TerminalLauncher: TerminalLaunching {
             args = ["--model", message.resolvedModel.cliValue,
                     "--effort", message.resolvedEffort.rawValue]
             if message.resolvedSafeMode { args.append("--safe-mode") }
-            args.append(message.text)
+            args.append(message.resolvedPromptText)
         case .codex:
             provider = .codex
             binary = codexBinary ?? CommandRunner.locate(.codex)
@@ -84,7 +84,7 @@ struct TerminalLauncher: TerminalLaunching {
             if let reasoning = message.codexReasoning {
                 args += ["-c", "model_reasoning_effort=\"\(reasoning.rawValue)\""]
             }
-            args.append(message.text)
+            args.append(message.resolvedPromptText)
         case .shell:
             return nil
         }

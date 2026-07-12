@@ -415,6 +415,49 @@ final class CommandRunnerTests: XCTestCase {
         let output = try (await runner.run(Message(text: "1+1", kind: .codex))).get()
         XCTAssertTrue(output.hasSuffix(".codex"))
     }
+
+    /// Skill prefixada no prompt e `--safe-mode` omitido pela guarda —
+    /// com safe-mode o CLI pularia a skill.
+    func testClaudeComSkillPrefixaPromptEOmiteSafeMode() async throws {
+        let argsFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-args-\(UUID().uuidString).txt")
+        let runner = CommandRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
+        )
+        var msg = Message(text: "1+1", kind: .claude)
+        msg.skill = "gmud"
+        let result = await runner.run(msg)
+        XCTAssertEqual(result, .success(""))
+
+        let captured = try String(contentsOf: argsFile, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.isEmpty }
+            .map(String.init)
+        XCTAssertEqual(captured,
+                       ["-p", "--model", "claude-haiku-4-5", "--effort", "low", "/gmud 1+1"])
+    }
+
+    func testCodexComSkillPrefixaPromptComCifrao() async throws {
+        let argsFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-args-\(UUID().uuidString).txt")
+        let runner = CommandRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf '%s\\n' \"$@\" > '\(argsFile.path)'; exit 0")
+        )
+        var msg = Message(text: "oi", kind: .codex)
+        msg.skill = "gmud"
+        let result = await runner.run(msg)
+        XCTAssertEqual(result, .success(""))
+
+        let captured = try String(contentsOf: argsFile, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.isEmpty }
+            .map(String.init)
+        XCTAssertEqual(captured,
+                       ["exec", "--sandbox", "read-only", "--skip-git-repo-check",
+                        "--color", "never", "$gmud oi"])
+    }
 }
 
 extension Result where Success == String, Failure == RunnerError {
