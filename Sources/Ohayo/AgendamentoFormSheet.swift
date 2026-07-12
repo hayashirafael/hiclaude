@@ -43,6 +43,90 @@ struct AgendamentoFormSheet: View {
     @State private var weekdays: Set<Int> = Set(1...7)
     @State private var enabled = true
 
+    /// Todo o estado restaurável de um agendamento existente (ou os defaults
+    /// de "novo agendamento"). Extraído como struct pura para o `init` poder
+    /// semear os `@State` de uma vez só — ver comentário no `init` sobre por
+    /// que isso é essencial para não disparar `onChange(of: kind)` à toa.
+    struct RestoredState {
+        var name = ""
+        var text = AgendamentoFormSheet.initialCommandText
+        var kind: Message.Kind = .claude
+        var model = Message.defaultModel
+        var effort = Message.defaultEffort
+        var safeMode = Message.defaultSafeMode
+        var codexModel = ""
+        var codexReasoning: Message.CodexReasoning = .low
+        var outputMode = AgendamentoFormSheet.initialOutputMode
+        var notifyOnSuccess = false
+        var account: String?
+        var skill: String?
+        var workingDir = ""
+        var repetition: ScheduledTask.Repetition = .fixed
+        var times: [Int] = [9 * 60]
+        var weekdays: Set<Int> = Set(1...7)
+        var enabled = true
+    }
+
+    /// Resolve o estado inicial do formulário a partir da task em edição
+    /// (nil = "adicionar", usa os defaults). Função pura, testável sem
+    /// instanciar a view.
+    static func restoredState(for task: ScheduledTask?) -> RestoredState {
+        var restored = RestoredState()
+        guard let t = task else { return restored }
+        restored.name = t.name ?? ""
+        restored.repetition = t.repetition
+        restored.times = AgendaMath.normalized(t.times.isEmpty ? [9 * 60] : t.times)
+        restored.weekdays = t.weekdays.isEmpty ? Set(1...7) : t.weekdays
+        restored.enabled = t.enabled
+        let msg = t.resolvedCommand
+        restored.text = msg.text
+        restored.kind = msg.kind
+        restored.model = msg.resolvedModel
+        restored.effort = msg.resolvedEffort
+        restored.safeMode = msg.resolvedSafeMode
+        restored.codexModel = msg.codexModel ?? ""
+        restored.codexReasoning = msg.codexReasoning ?? .low
+        restored.outputMode = outputMode(for: msg)
+        restored.notifyOnSuccess = msg.notifyOnSuccess ?? false
+        restored.account = msg.configDir
+        restored.skill = msg.skill
+        restored.workingDir = msg.workingDir ?? ""
+        return restored
+    }
+
+    init(state: AppState, editing: ScheduledTask?, onDone: @escaping () -> Void) {
+        self._state = ObservedObject(wrappedValue: state)
+        self.editing = editing
+        self.onDone = onDone
+        // Semeia os @State diretamente a partir da task em edição (em vez de
+        // nascer com os defaults e corrigir depois em `onAppear`/`load()`).
+        // Isso é o que evita o bug crítico de perda de dado: se `kind`
+        // nascesse `.claude` e só virasse `.codex` depois de montada a view,
+        // o `.onChange(of: kind)` disparava na renderização seguinte — mesmo
+        // sem o usuário ter trocado o tipo — e sua lógica de "troca de tipo"
+        // zerava a `skill` da task carregada. Inicializando aqui, `kind` já
+        // nasce `.codex` (quando for o caso) e o `onChange` nunca vê uma
+        // transição: não há disparo espúrio para suprimir.
+        let restored = Self.restoredState(for: editing)
+        _name = State(initialValue: restored.name)
+        _text = State(initialValue: restored.text)
+        _kind = State(initialValue: restored.kind)
+        _model = State(initialValue: restored.model)
+        _effort = State(initialValue: restored.effort)
+        _safeMode = State(initialValue: restored.safeMode)
+        _codexModel = State(initialValue: restored.codexModel)
+        _codexReasoning = State(initialValue: restored.codexReasoning)
+        _outputMode = State(initialValue: restored.outputMode)
+        _notifyOnSuccess = State(initialValue: restored.notifyOnSuccess)
+        _account = State(initialValue: restored.account)
+        _skill = State(initialValue: restored.skill)
+        _workingDir = State(initialValue: restored.workingDir)
+        _repetition = State(initialValue: restored.repetition)
+        _times = State(initialValue: restored.times)
+        _weekdays = State(initialValue: restored.weekdays)
+        _enabled = State(initialValue: restored.enabled)
+    }
+
     private var strings: L10n { state.strings }
 
     var body: some View {
@@ -129,7 +213,8 @@ struct AgendamentoFormSheet: View {
         .padding(20)
         .frame(width: 420)
         .onAppear {
-            load()
+            // O estado (kind/account/skill/…) já nasceu correto no `init`;
+            // aqui só o efeito colateral de revarrer o disco é necessário.
             refreshSkills()
         }
         // Conta é por provider; trocar o Tipo sem limpar conta incompatível
@@ -285,28 +370,6 @@ struct AgendamentoFormSheet: View {
         let dir = account.map { URL(fileURLWithPath: $0) }
             ?? (provider == .codex ? AppState.defaultCodexConfigDir : AppState.defaultConfigDir)
         availableSkills = SkillCatalog.skills(for: provider, at: dir)
-    }
-
-    private func load() {
-        guard let t = editing else { return }
-        name = t.name ?? ""
-        repetition = t.repetition
-        times = AgendaMath.normalized(t.times.isEmpty ? [9 * 60] : t.times)
-        weekdays = t.weekdays.isEmpty ? Set(1...7) : t.weekdays
-        enabled = t.enabled
-        let msg = t.resolvedCommand
-        text = msg.text
-        kind = msg.kind
-        model = msg.resolvedModel
-        effort = msg.resolvedEffort
-        safeMode = msg.resolvedSafeMode
-        codexModel = msg.codexModel ?? ""
-        codexReasoning = msg.codexReasoning ?? .low
-        outputMode = Self.outputMode(for: msg)
-        notifyOnSuccess = msg.notifyOnSuccess ?? false
-        account = msg.configDir
-        skill = msg.skill
-        workingDir = msg.workingDir ?? ""
     }
 
     /// Monta o agendamento normalizando defaults para nil.
