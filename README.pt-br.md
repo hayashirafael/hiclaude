@@ -1,4 +1,4 @@
-# HiYashi
+# Ohayo
 
 [English](README.md) | **Português**
 
@@ -10,7 +10,7 @@ Claude sempre abertas — por conta, automaticamente. Swift + SwiftUI
 
 Os planos Claude (Pro/Max) abrem uma janela de uso de 5h a partir do primeiro
 prompt. Quem usa pesado quer a janela já aberta na hora de sentar para
-trabalhar — não gastar a primeira hora dela aquecendo. O HiYashi renova cada
+trabalhar — não gastar a primeira hora dela aquecendo. O Ohayo renova cada
 conta sozinho, e a renovação contínua nunca dispara de forma redundante se já
 existe uma janela ativa: ele detecta a janela corrente passivamente pelos
 transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
@@ -19,7 +19,7 @@ transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
 
 - **Agendamentos unificados** — um único conceito para tudo que é agendado.
   Cada agendamento carrega um comando embutido e uma repetição: **Contínua**
-  (encadeia janelas de 5h 24/7 — a antiga renovação automática) ou **Horários
+  (encadeia janelas de 5h 24/7) ou **Horários
   fixos** (horários × dias da semana). Tudo na seção **Horários**
 - **Comandos configuráveis** — um prompt do Claude (modelo, esforço,
   safe-mode, pasta de trabalho), um prompt do Codex (modelo, esforço de
@@ -53,34 +53,37 @@ transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
 
 ```bash
 brew tap hayashirafael/tap
-brew trust --cask hayashirafael/tap/hiclaude
-brew install --cask hiclaude   # depois: brew upgrade --cask hiclaude
+brew trust --cask hayashirafael/tap/ohayo
+brew install --cask ohayo
 ```
+
+O Ohayo deve ser instalado de forma limpa. Remova completamente qualquer
+instalação anterior antes de instalar esta versão.
 
 ### DMG
 
-Baixe o `HiYashi-<versão>.dmg` da [última release](../../releases/latest) e
-arraste o **HiYashi** para **Applications**.
+Baixe o `Ohayo-<versão>.dmg` da [última release](../../releases/latest) e
+arraste o **Ohayo** para **Applications**.
 
-> O HiYashi é assinado ad-hoc, não notarizado. Na primeira abertura o
+> O Ohayo é assinado ad-hoc, não notarizado. Na primeira abertura o
 > Gatekeeper pode bloquear: use **Ajustes do Sistema → Privacidade e
 > Segurança → Abrir Assim Mesmo**, ou remova o quarantine com
-> `xattr -dr com.apple.quarantine /Applications/HiYashi.app`.
+> `xattr -dr com.apple.quarantine /Applications/Ohayo.app`.
 
 ### A partir do código
 
 ```bash
-git clone https://github.com/hayashirafael/hiclaude.git
-cd hiclaude
+git clone https://github.com/hayashirafael/ohayo.git
+cd ohayo
 swift test            # suíte de testes
-./scripts/make-app.sh # build/HiYashi.app (assinado ad-hoc)
-./scripts/make-dmg.sh # build/HiYashi-<versão>.dmg (requer `brew install create-dmg`)
-open build/HiYashi.app
+./scripts/make-app.sh # build/Ohayo.app (assinado ad-hoc)
+./scripts/make-dmg.sh # build/Ohayo-<versão>.dmg (requer `brew install create-dmg`)
+open build/Ohayo.app
 ```
 
 ## Uso
 
-O HiYashi vive na menu bar (sem ícone no Dock). O ícone fica preenchido
+O Ohayo vive na menu bar (sem ícone no Dock). O ícone fica preenchido
 enquanto alguma conta tem janela ativa, mostra `!` em erro e esmaece quando
 todas as contas agendadas estão pausadas; opcionalmente mostra também o tempo
 até a próxima janela vencer entre elas.
@@ -114,7 +117,7 @@ faltando, além de **Sair**.
 
 ## Como funciona
 
-Para gerenciar as renovações contínuas, o HiYashi lê os transcripts locais da
+Para gerenciar as renovações contínuas, o Ohayo lê os transcripts locais da
 conta (`<conta>/projects/**.jsonl` no Claude, `sessions/**.jsonl` no Codex,
 streaming linha a linha, por `mtime`) e reconstrói a janela de 5h corrente. Se
 houver uma ativa, somente uma renovação contínua redundante é pulada; horários
@@ -133,12 +136,12 @@ batch. Por padrão, Claude/Codex abrem no Terminal.app sem `-p` / `exec`, usando
 o mesmo prompt e ambiente para deixar a sessão interativa aberta; um horário
 fixo interativo abre no horário agendado mesmo quando a conta já tem janela
 ativa. Sem diretório de trabalho definido, as sessões interativas abrem em
-`~/Library/Application Support/HiYashi/workspace` (nunca no home, cujo trust o
-Claude Code só mantém por sessão), e o HiYashi pré-confia a pasta no
+`~/Library/Application Support/Ohayo/workspace` (nunca no home, cujo trust o
+Claude Code só mantém por sessão), e o Ohayo pré-confia a pasta no
 `.claude.json` da conta — e pré-aprova os imports externos do `CLAUDE.md` —
 para que nem o prompt "do you trust this folder?" nem o "allow external
 imports?" travem a sessão não-supervisionada.
-Só uma instância do HiYashi roda por vez: uma segunda aberta avisa e encerra
+Só uma instância do Ohayo roda por vez: uma segunda aberta avisa e encerra
 (duas instâncias disparariam os agendamentos em dobro).
 Os padrões —
 Haiku, esforço baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e o comando
@@ -146,7 +149,7 @@ Haiku, esforço baixo, `--safe-mode` (pula CLAUDE.md/skills/MCP) e o comando
 Codex em batch executa `codex exec [--model <modelo>] --sandbox read-only [-c
 model_reasoning_effort=<esforço>] "<texto>"` com `CODEX_HOME` fixado no lugar,
 e tem seu próprio padrão mínimo `1+1` embutido. Quando você deixa o modelo (ou
-o raciocínio) do Codex em branco, o HiYashi omite a flag para o default da
+o raciocínio) do Codex em branco, o Ohayo omite a flag para o default da
 própria conta (`config.toml`) valer — o único valor garantidamente aceito pelo
 plano da conta. Comandos shell rodam pelo seu shell de login.
 
@@ -163,6 +166,3 @@ horários × dias da semana, tanto em batch quanto no modo interativo. No wake,
 horários fixos disparam no máximo uma vez para recuperar a ocorrência mais
 recente que perdeu — um sleep longo nunca gera uma rajada de disparos
 atrasados, e o launch em si nunca reproduz ocorrências perdidas antes dele.
-A antiga renovação *Programada* (âncora diária +
-0/5/10/15h) é apenas um agendamento de horários fixos com quatro horários após
-a migração.

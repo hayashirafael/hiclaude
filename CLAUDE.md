@@ -1,4 +1,4 @@
-# HiYashi Agent Notes
+# Ohayo Agent Notes
 
 ## Overview
 
@@ -21,12 +21,10 @@ globally-active message.
   prompt (`command: Message`), an optional name, an `enabled` toggle, and a
   `repetition`:
   - `continuous` — arms at the end of the detected window and chains 5h windows
-    24/7 (the old *automatic renewal*); driven by `RenewalEngine`, keyed by the
-    account the command targets. Max one continuous agendamento per account
-    (`AppState.hasContinuousConflict`).
+    24/7; driven by `RenewalEngine`, keyed by the account the command targets.
+    Max one continuous agendamento per account (`AppState.hasContinuousConflict`).
   - `fixed` — fixed times × weekdays (`AgendaMath`), driven by `TaskScheduler`,
-    with a single catch-up on wake. The old *scheduled renewal* (anchor +
-    0/5/10/15h) is just four fixed times after migration.
+    with a single catch-up on wake.
   There is no `AppState.renewals` dict and no command library any more.
 - **hi** — the dispatch that opens/renews a window.
 - **Message** — the embedded content of an agendamento: a Claude prompt
@@ -45,20 +43,13 @@ globally-active message.
   (`CLAUDE_CONFIG_DIR`/`CODEX_HOME`) and CLI binary name.
 ## Architecture map
 
-- `AppState.swift` — central observable state, UserDefaults persistence,
-  one-way migrations to unified agendamentos: legacy tasks get their referenced
-  favorite embedded (`command`); legacy renewals become agendamentos
-  (`automatic` → `continuous`, `scheduled` → four `fixed` times); the
-  `renewals`/`renewAccounts`/`favorites` keys are then removed. Raw string keys
-  (`"renewAccounts"`/`"lastEvent"`) are intentional there. Pause is per account:
-  `pausedAccounts: Set<String>` (standardized paths, persisted) replaces the old
-  global `paused` flag; a one-way migration turns a legacy global pause-on into
-  a pause for every account with an enabled agendamento. `windowEnds: [URL:
-  Date]` (not persisted) holds the detected 5h-window end per scheduled
-  account, published by `AppEnvironment.refreshWindowEnds()`. `accountFilter:
-  URL?` is the deep-link the menu panel sets to scope the Tasks/History tabs
-  to one account (`taskMatchesFilter`/`matchesFilter`), with a clear-filter
-  chip in both.
+- `AppState.swift` — central observable state and UserDefaults persistence for
+  unified agendamentos. Pause is per account: `pausedAccounts: Set<String>`
+  (standardized paths, persisted). `windowEnds: [URL: Date]` (not persisted)
+  holds the detected 5h-window end per scheduled account, published by
+  `AppEnvironment.refreshWindowEnds()`. `accountFilter: URL?` is the deep-link
+  the menu panel sets to scope the Tasks/History tabs to one account
+  (`taskMatchesFilter`/`matchesFilter`), with a clear-filter chip in both.
 - `AppEnvironment.swift` — composition root; wires both engines ↔ controller,
   observes sleep/wake and `$tasks` (single `reconfigureSchedules`: continuous
   agendamentos feed `RenewalEngine`, fixed ones `TaskScheduler`).
@@ -86,7 +77,7 @@ globally-active message.
 - `TerminalLauncher.swift` — disparo interativo (`message.resolvedRunInTerminal`):
   abre uma sessão no Terminal.app via AppleScript rodando um `.sh` temporário
   (auto-`rm`); fixa `CLAUDE_CONFIG_DIR`/`CODEX_HOME`, faz `cd` para o working dir
-  (default `~/Library/Application Support/HiYashi/workspace` — nunca o home, cujo
+  (default `~/Library/Application Support/Ohayo/workspace` — nunca o home, cujo
   trust não persiste). `seedTrust` pré-grava `projects[<dir>]` no `.claude.json` da
   conta para o `claude` não-supervisionado nunca travar em prompt:
   `hasTrustDialogAccepted` + `hasClaudeMdExternalIncludesApproved`/`…WarningShown`
@@ -101,12 +92,10 @@ globally-active message.
   fired-occurrence identity (never a wall-clock window — adjacent-minute
   occurrences must both fire); creating/editing a task advances a catch-up
   floor and never counts as a fire.
-- `SingleInstanceLock.swift` — `flock` on the compatibility path
-  `~/Library/Application Support/HiClaude/instance.lock`; keeping the legacy
-  path prevents old HiClaude and current HiYashi builds from running together.
-  A second launch
+- `SingleInstanceLock.swift` — `flock` on
+  `~/Library/Application Support/Ohayo/instance.lock`. A second launch
   (dev binary or packaged .app) alerts and exits before `AppEnvironment`
-  exists (two instances double-fire and clobber each other's history).
+  exists, avoiding duplicate schedules and history clobbering.
 - UI: `MenuBarLabel.swift` (just the bar glyph — filled while any account has
   an active window, `!` on error, faded when every scheduled account is
   paused; optional remaining-time text) + `MenuPanel.swift` (the
@@ -117,7 +106,7 @@ globally-active message.
   jump to its history) and a header (missing-CLI warning, Quit) + footer
   (Tasks · History · Settings); pure card logic (`scheduledAccounts`,
   `nextEvent`, `eventName`) lives in `MenuPanelLogic.swift`, testable without
-  UI. Replaces the old native menu (`MenuContent.swift`). `SettingsView.swift`
+  UI. `SettingsView.swift`
   (sidebar: Contas · Tarefas · Histórico · Geral — the `horarios`
   case/rawValue is unchanged for persistence, only its displayed title
   changed from "Horários" to "Tarefas"/"Tasks") →
@@ -138,19 +127,19 @@ globally-active message.
 swift build                     # must always compile between changes
 swift test                      # full suite
 swift test --filter <Class>     # focused
-swift run HiClaude              # run the menu bar app locally
-./scripts/make-app.sh           # build/HiYashi.app (ad-hoc signed)
-./scripts/make-dmg.sh           # build/HiYashi-<version>.dmg
+swift run Ohayo                 # run the menu bar app locally
+./scripts/make-app.sh           # build/Ohayo.app (ad-hoc signed)
+./scripts/make-dmg.sh           # build/Ohayo-<version>.dmg
 ```
 
 ## Observability
 
-`os_log` no subsystem `dev.hiclaude` (categorias `agenda`/`fire`/`env`) marca só
+`os_log` no subsystem `io.github.hayashirafael.Ohayo` (categorias `agenda`/`fire`/`env`) marca só
 decisões e mudanças de estado — em especial o descarte por `isRunning` no
 `FireController` como `.error` (o "silenciador invisível"). Ao vivo:
 
 ```bash
-log stream --predicate 'subsystem == "dev.hiclaude"' --level debug
+log stream --predicate 'subsystem == "io.github.hayashirafael.Ohayo"' --level debug
 ```
 
 ## Conventions
@@ -189,7 +178,7 @@ If the answer is yes, use the existing release flow:
 3. Commit the changes with the repo-local Git identity.
 4. Create and push a `vX.Y.Z` tag.
 5. Verify the `release` GitHub Actions workflow finishes successfully.
-6. Verify the Homebrew tap cask is updated and `brew upgrade --cask hiclaude`
+6. Verify the Homebrew tap cask is updated and `brew upgrade --cask ohayo`
    can see the new version.
 
 Do not assume that pushing `main` updates users. Homebrew users only receive an
