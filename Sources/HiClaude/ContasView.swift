@@ -1,8 +1,9 @@
 import SwiftUI
 import AppKit
 
-/// Seção Contas: informativa — identidade, provedor, pasta local e quantos
-/// agendamentos ativos miram cada conta. Renovação e comandos moram em Horários.
+/// Seção Contas: identidade, provedor, pasta local, quantos agendamentos
+/// ativos miram cada conta e o pausar/retomar por conta. Renovação e comandos
+/// moram em Horários.
 struct ContasView: View {
     @ObservedObject var state: AppState
     @State private var editingAlias: URL? = nil
