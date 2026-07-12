@@ -68,6 +68,9 @@ struct Message: Codable, Identifiable {
     var notifyOnSuccess: Bool? = nil
     var codexModel: String? = nil
     var codexReasoning: CodexReasoning? = nil
+    /// Skill da conta prefixada ao prompt no disparo (`/skill` no Claude,
+    /// `$skill` no Codex). nil/vazia = sem skill. Só Claude/Codex.
+    var skill: String? = nil
 
     var id: String { uid?.uuidString ?? contentKey }
 
@@ -82,7 +85,8 @@ struct Message: Codable, Identifiable {
         let values = [
             kind.rawValue, text, modelValue, effortValue, safeModeValue,
             configDir ?? "", workingDir ?? "", showResponseValue,
-            runInTerminalValue, notifyOnSuccessValue, codexModel ?? "", reasoningValue
+            runInTerminalValue, notifyOnSuccessValue, codexModel ?? "", reasoningValue,
+            skill ?? ""
         ]
         return values.joined(separator: "\u{1}")
     }
@@ -97,6 +101,7 @@ extension Message: Equatable {
             && lhs.runInTerminal == rhs.runInTerminal
             && lhs.notifyOnSuccess == rhs.notifyOnSuccess
             && lhs.codexModel == rhs.codexModel && lhs.codexReasoning == rhs.codexReasoning
+            && lhs.skill == rhs.skill
     }
 }
 
@@ -106,7 +111,20 @@ extension Message {
     static let defaultSafeMode = true
     var resolvedModel: Model { model ?? Self.defaultModel }
     var resolvedEffort: Effort { effort ?? Self.defaultEffort }
-    var resolvedSafeMode: Bool { safeMode ?? Self.defaultSafeMode }
+    /// Skill efetiva: nil e string vazia contam como "sem skill".
+    var hasSkill: Bool { skill?.isEmpty == false && kind != .shell }
+    var resolvedSafeMode: Bool {
+        // Skill exige safe-mode desligado: `--safe-mode` faz o CLI pular
+        // skills — um estado contraditório persistido não pode gerar disparo
+        // que ignora a skill em silêncio.
+        hasSkill ? false : (safeMode ?? Self.defaultSafeMode)
+    }
+    /// Prompt final enviado ao CLI: skill prefixada na sintaxe nativa do
+    /// provider (`/skill` no Claude, `$skill` no Codex); shell ignora skill.
+    var resolvedPromptText: String {
+        guard hasSkill, let skill else { return text }
+        return kind == .codex ? "$\(skill) \(text)" : "/\(skill) \(text)"
+    }
     var resolvedShowResponse: Bool { showResponse ?? false }
     var resolvedNotifyOnSuccess: Bool { notifyOnSuccess ?? false }
     var resolvedRunInTerminal: Bool {
