@@ -16,11 +16,19 @@ final class SystemNotifier: Notifying {
         deliver(title: title, body: body) // corpo curto por construção
     }
 
+    static func canDeliver(authorizationStatus: UNAuthorizationStatus) -> Bool {
+        switch authorizationStatus {
+        case .authorized, .provisional, .ephemeral: return true
+        case .notDetermined, .denied: return false
+        @unknown default: return false
+        }
+    }
+
     private func deliver(title: String, body: String) {
         guard Bundle.main.bundleIdentifier != nil else { return }
         let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert]) { granted, _ in
-            guard granted else { return }
+        center.getNotificationSettings { settings in
+            guard Self.canDeliver(authorizationStatus: settings.authorizationStatus) else { return }
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body

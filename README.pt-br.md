@@ -119,6 +119,17 @@ faltando, além de **Sair**.
   próximos disparos o painel do menu mostra (1–5), Idioma (inglês ou
   português) e a versão do app
 
+### Permissões na primeira abertura
+
+O app empacotado abre uma única vez um guia não bloqueante. Nele você pode
+permitir notificações, testar a automação do Terminal usada nas sessões
+interativas e, opcionalmente, ativar **Iniciar com o Mac**. Fechar o guia não
+desativa o app; reabra-o em **Ajustes → Geral → Permissões…**.
+
+Se notificações ou automação do Terminal forem negadas, altere-as em **Ajustes
+do Sistema → Notificações → Ohayo** ou **Ajustes do Sistema → Privacidade e
+Segurança → Automação** e reabra o guia para atualizar ou testar a integração.
+
 ## Como funciona
 
 Para gerenciar as renovações contínuas, o Ohayo lê os transcripts locais da

@@ -10,6 +10,14 @@ mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
 cp .build/release/Ohayo "$APP/Contents/MacOS/Ohayo"
 cp scripts/Info.plist "$APP/Contents/Info.plist"
+for localization in scripts/*.lproj; do
+    [[ -d "$localization" ]] || continue
+    cp -R "$localization" "$APP/Contents/Resources/"
+    [[ -f "$APP/Contents/Resources/$(basename "$localization")/InfoPlist.strings" ]] || {
+        echo "erro: strings localizadas ausentes em $localization" >&2
+        exit 1
+    }
+done
 # O bundle de recursos (SVGs dos providers) é obrigatório: sem ele o app
 # instalado perde os ícones, e um empacotamento silencioso sem o bundle já
 # passou despercebido numa release. Falhar alto aqui.
