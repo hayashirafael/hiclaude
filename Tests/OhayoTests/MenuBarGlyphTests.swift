@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 final class MenuBarGlyphTests: XCTestCase {
     // Mesma semântica do símbolo antigo: problema > janela ativa > ocioso.

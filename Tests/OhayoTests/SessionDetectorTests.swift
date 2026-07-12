@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 final class SessionDetectorTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_783_000_000)

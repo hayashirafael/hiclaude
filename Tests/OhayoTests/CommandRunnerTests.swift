@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 final class CommandRunnerTests: XCTestCase {
     /// Cria um script executável que simula o binário `claude`.

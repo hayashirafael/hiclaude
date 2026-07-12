@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 final class ProviderTests: XCTestCase {
     private func makeDir(_ contents: [String] = [], dirs: [String] = []) throws -> URL {

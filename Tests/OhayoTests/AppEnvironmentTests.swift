@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 /// Regressão do bug "um passo atrás": `@Published` publica no willSet, então
 /// o sink de `$tasks` NÃO pode ler `state.tasks` sincronamente — leria a

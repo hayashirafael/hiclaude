@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 final class AppVersionTests: XCTestCase {
     func testBundleVersionHasPrecedence() throws {

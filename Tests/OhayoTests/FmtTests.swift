@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 @MainActor
 final class FmtTests: XCTestCase {

@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 /// Relógio fake para testes determinísticos (compartilhado com RenewalEngineTests).
 final class FakeClock: Clock {

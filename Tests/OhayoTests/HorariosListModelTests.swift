@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import HiClaude
+@testable import Ohayo
 
 /// Lógica pura da tela Horários: filtro, ordenação e resumo.
 final class HorariosListModelTests: XCTestCase {

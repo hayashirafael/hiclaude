@@ -2,13 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "HiClaude",
+    name: "Ohayo",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "HiClaude", path: "Sources/HiClaude",
+            name: "Ohayo", path: "Sources/Ohayo",
             resources: [.process("Resources")]
         ),
-        .testTarget(name: "HiClaudeTests", dependencies: ["HiClaude"], path: "Tests/HiClaudeTests"),
+        .testTarget(
+            name: "OhayoTests",
+            dependencies: ["Ohayo"],
+            path: "Tests/OhayoTests"
+        ),
     ]
 )

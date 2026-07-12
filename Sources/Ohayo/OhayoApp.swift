@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct HiYashiApp: App {
+struct OhayoApp: App {
     @StateObject private var env = AppEnvironment()
 
     /// Vive pelo processo inteiro: o kernel solta o flock quando ele morre.
@@ -23,7 +23,6 @@ struct HiYashiApp: App {
             alert.runModal()
             exit(0)
         }
-        AppPaths.migrateSupportDirectory()
         NSApplication.shared.setActivationPolicy(.accessory)
     }
 

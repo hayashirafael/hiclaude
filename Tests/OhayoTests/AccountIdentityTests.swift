@@ -1,5 +1,5 @@
 import XCTest
-@testable import HiClaude
+@testable import Ohayo
 
 final class AccountIdentityTests: XCTestCase {
     func testLeEmailDoOauthAccount() throws {
