@@ -184,6 +184,13 @@ final class AppState: ObservableObject {
         didSet { defaults.set(language.rawValue, forKey: Keys.language) }
     }
 
+    @Published private(set) var hasDismissedPermissionGuide: Bool
+
+    func dismissPermissionGuide() {
+        hasDismissedPermissionGuide = true
+        defaults.set(true, forKey: Keys.hasDismissedPermissionGuide)
+    }
+
     var strings: L10n { L10n(language: language) }
 
     /// Seção selecionada na janela de Configurações (deep-link a partir do menu).
@@ -455,6 +462,7 @@ final class AppState: ObservableObject {
         static let tasks = "tasks"
         static let language = "language"
         static let lastAliveAt = "lastAliveAt"
+        static let hasDismissedPermissionGuide = "hasDismissedPermissionGuide"
     }
 
     init(defaults: UserDefaults = .standard,
@@ -480,6 +488,7 @@ final class AppState: ObservableObject {
         } else {
             self.language = .english
         }
+        self.hasDismissedPermissionGuide = defaults.bool(forKey: Keys.hasDismissedPermissionGuide)
         self.aliases = (defaults.dictionary(forKey: Keys.aliases) as? [String: String]) ?? [:]
         var loadedTasks: [ScheduledTask] = []
         if let data = defaults.data(forKey: Keys.tasks),

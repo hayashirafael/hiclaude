@@ -717,4 +717,19 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertEqual(state.tasks.map(\.uid), [bom])
     }
+
+    func testPermissionGuideStartsUndismissed() {
+        let state = AppState(defaults: freshDefaults())
+        XCTAssertFalse(state.hasDismissedPermissionGuide)
+    }
+
+    func testPermissionGuideDismissalPersists() {
+        let defaults = freshDefaults()
+        let state = AppState(defaults: defaults)
+
+        state.dismissPermissionGuide()
+
+        XCTAssertTrue(state.hasDismissedPermissionGuide)
+        XCTAssertTrue(AppState(defaults: defaults).hasDismissedPermissionGuide)
+    }
 }
