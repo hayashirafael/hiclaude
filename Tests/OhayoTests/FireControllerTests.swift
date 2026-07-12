@@ -95,7 +95,7 @@ final class FireControllerTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_783_000_000)
 
     override func setUp() async throws {
-        state = AppState(defaults: UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!)
+        state = AppState(defaults: UserDefaults(suiteName: "ohayo-test-\(UUID().uuidString)")!)
         detector = MockDetector()
         runner = MockRunner()
         notifier = MockNotifier()
@@ -160,7 +160,7 @@ final class FireControllerTests: XCTestCase {
         XCTAssertEqual(state.lastEvent, state.makeEvent(
             date: now, result: .failure(message: "sem rede"),
             message: AppState.defaultMessage, origin: .scheduled))
-        XCTAssertEqual(notifier.titles, ["HiYashi: run failed"])
+        XCTAssertEqual(notifier.titles, ["Ohayo: run failed"])
         XCTAssertEqual(notifier.messages, ["sem rede"])
     }
 
@@ -212,7 +212,7 @@ final class FireControllerTests: XCTestCase {
         await controller.fire(message: msg, origin: .scheduled)
         XCTAssertEqual(state.lastEvent?.response, "resposta do claude")
         XCTAssertEqual(notifier.responses.count, 1)
-        XCTAssertEqual(notifier.responses.first?.messageText, "HiYashi: resumo")
+        XCTAssertEqual(notifier.responses.first?.messageText, "Ohayo: resumo")
     }
 
     func testRespostaIgnoradaQuandoDesligado() async {
@@ -392,14 +392,14 @@ final class FireControllerTests: XCTestCase {
         let msg = Message(text: "1+1", kind: .claude, notifyOnSuccess: true)
         await controller.fire(message: msg, origin: .agenda, taskName: "Renovar")
         XCTAssertEqual(notifier.successes.count, 1)
-        XCTAssertEqual(notifier.successes.first?.title, "HiYashi: Renovar")
+        XCTAssertEqual(notifier.successes.first?.title, "Ohayo: Renovar")
         XCTAssertEqual(notifier.successes.first?.body, corpoDeSucesso(para: msg))
     }
 
     func testNotifyOnSuccessSemNomeUsaTextoDoComando() async {
         let msg = Message(text: "bom dia", kind: .claude, notifyOnSuccess: true)
         await controller.fire(message: msg, origin: .agenda)
-        XCTAssertEqual(notifier.successes.first?.title, "HiYashi: bom dia")
+        XCTAssertEqual(notifier.successes.first?.title, "Ohayo: bom dia")
     }
 
     func testNotifyOnSuccessDesligadoNaoNotifica() async {
@@ -449,7 +449,7 @@ final class FireControllerTests: XCTestCase {
         let msg = Message(text: "bom dia", kind: .claude, notifyOnSuccess: true)
         await controller.fire(message: msg, origin: .agenda, taskName: "Interativa")
         XCTAssertEqual(terminal.calls, 1)
-        XCTAssertEqual(notifier.successes.first?.title, "HiYashi: Interativa")
+        XCTAssertEqual(notifier.successes.first?.title, "Ohayo: Interativa")
         XCTAssertEqual(notifier.successes.first?.body, corpoDeSucesso(para: msg))
     }
 

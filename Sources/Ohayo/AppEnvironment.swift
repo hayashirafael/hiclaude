@@ -9,7 +9,7 @@ import os
 final class AppEnvironment: ObservableObject {
     let state: AppState
     /// Observabilidade: log de decisões e mudanças de estado deste ambiente.
-    private let log = Logger(subsystem: "dev.hiclaude", category: "env")
+    private let log = Logger(subsystem: "io.github.hayashirafael.Ohayo", category: "env")
     private let controller: FireController
     private let detector: SessionDetecting
     private let renewalEngine: RenewalEngine

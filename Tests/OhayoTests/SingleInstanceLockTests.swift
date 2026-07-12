@@ -4,7 +4,7 @@ import XCTest
 final class SingleInstanceLockTests: XCTestCase {
     private func tempLockPath() -> String {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("hiclaude-lock-\(UUID().uuidString)/instance.lock").path
+            .appendingPathComponent("ohayo-lock-\(UUID().uuidString)/instance.lock").path
     }
 
     func testPrimeiraInstanciaAdquireOLock() {

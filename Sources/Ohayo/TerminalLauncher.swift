@@ -41,7 +41,7 @@ struct TerminalLauncher: TerminalLaunching {
         // truncados no Terminal e nunca executavam. A última linha apaga o
         // próprio arquivo quando a sessão termina.
         let file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("hiclaude-terminal-\(UUID().uuidString).sh")
+            .appendingPathComponent("ohayo-terminal-\(UUID().uuidString).sh")
         let content = spec.terminalScript + "\nrm -f -- \(Self.shellQuote(file.path))\n"
         do {
             try content.write(to: file, atomically: true, encoding: .utf8)

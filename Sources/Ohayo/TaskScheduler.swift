@@ -19,7 +19,7 @@ final class TaskScheduler {
 
     /// Logger de observabilidade: só decisões e mudanças de estado, nunca o
     /// caminho quente de um tick periódico.
-    private let log = Logger(subsystem: "dev.hiclaude", category: "agenda")
+    private let log = Logger(subsystem: "io.github.hayashirafael.Ohayo", category: "agenda")
 
     private let clock: Clock
     private let calendar: Calendar

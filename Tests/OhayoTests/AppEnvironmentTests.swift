@@ -26,7 +26,7 @@ final class AppEnvironmentTests: XCTestCase {
     }
 
     private func freshDefaults() -> UserDefaults {
-        let d = UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
+        let d = UserDefaults(suiteName: "ohayo-test-\(UUID().uuidString)")!
         d.set([String](), forKey: "registeredAccounts")
         return d
     }
@@ -115,7 +115,7 @@ final class AppEnvironmentTests: XCTestCase {
     }
 
     func testRefreshWindowEndsPublicaFimDeJanelaPorContaAgendada() async {
-        let defaults = UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
+        let defaults = UserDefaults(suiteName: "ohayo-test-\(UUID().uuidString)")!
         let state = AppState(defaults: defaults)
         var task = ScheduledTask(uid: UUID(), command: AppState.defaultMessage)
         task.repetition = .fixed // sem times: nenhum timer arma
@@ -159,7 +159,7 @@ final class AppEnvironmentTests: XCTestCase {
         var msg = AppState.defaultMessage
         msg.uid = nil
         msg.configDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("hiclaude-inexistente-\(UUID().uuidString)").path
+            .appendingPathComponent("ohayo-inexistente-\(UUID().uuidString)").path
         let t = ScheduledTask(uid: UUID(), command: msg, repetition: .fixed,
                               times: [764], weekdays: Set(1...7))
 

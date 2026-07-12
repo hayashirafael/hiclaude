@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class AppStateTests: XCTestCase {
     func freshDefaults() -> UserDefaults {
-        let d = UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
+        let d = UserDefaults(suiteName: "ohayo-test-\(UUID().uuidString)")!
         // Sem isso, o AppState migra o scan legado da máquina real (dev pode
         // ter ~/.claude2, ~/.claude3 de verdade) e os testes ficam
         // dependentes do ambiente. Pré-semear vazio pula a migração.
@@ -16,7 +16,7 @@ final class AppStateTests: XCTestCase {
     /// só pelo teste que exercita a migração do scan legado no `init`, com um
     /// `home` fake injetado (nunca a home real da máquina).
     func rawDefaultsSemMigracao() -> UserDefaults {
-        UserDefaults(suiteName: "hiclaude-test-\(UUID().uuidString)")!
+        UserDefaults(suiteName: "ohayo-test-\(UUID().uuidString)")!
     }
 
     /// Cria uma pasta de conta fake com a assinatura pedida.
@@ -727,7 +727,7 @@ final class AppStateTests: XCTestCase {
 
     func testEmailCacheAtualizaQuandoCredencialMuda() throws {
         let conta = FileManager.default.temporaryDirectory
-            .appendingPathComponent("hiyashi-email-\(UUID().uuidString)")
+            .appendingPathComponent("ohayo-email-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: conta, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: conta) }
         let config = conta.appendingPathComponent(".claude.json")
@@ -747,7 +747,7 @@ final class AppStateTests: XCTestCase {
 
     func testEventoClaudeCapturaContaProviderModeloEIdentidade() throws {
         let conta = FileManager.default.temporaryDirectory
-            .appendingPathComponent("hiyashi-event-\(UUID().uuidString)")
+            .appendingPathComponent("ohayo-event-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: conta, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: conta) }
         let json = ["oauthAccount": ["emailAddress": "antes@example.com"]]
@@ -770,7 +770,7 @@ final class AppStateTests: XCTestCase {
 
     func testIdentidadeDoEventoPrefereDadosAtuaisESnapshotEhFallback() {
         let state = AppState(defaults: freshDefaults())
-        let conta = URL(fileURLWithPath: "/tmp/hiyashi-removida-\(UUID().uuidString)")
+        let conta = URL(fileURLWithPath: "/tmp/ohayo-removida-\(UUID().uuidString)")
         let event = FireEvent(date: Date(), result: .success, account: conta.lastPathComponent,
                               accountPath: conta.path, provider: .codex,
                               modelName: "gpt-5.3-codex", aliasSnapshot: "Pessoal",

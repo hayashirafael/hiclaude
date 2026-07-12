@@ -296,7 +296,7 @@ struct L10n {
              pt: "\(time) — perdido \(occurrence) (app estava fechado)")
     }
     var alreadyRunningTitle: String {
-        text(en: "HiYashi is already running", pt: "O HiYashi já está aberto")
+        text(en: "Ohayo is already running", pt: "O Ohayo já está aberto")
     }
     var alreadyRunningBody: String {
         text(en: "Another instance owns the schedules. This one will quit to avoid duplicate dispatches.",
@@ -314,9 +314,9 @@ struct L10n {
         }
     }
 
-    var notificationFailureTitle: String { text(en: "HiYashi: run failed", pt: "HiYashi: disparo falhou") }
-    func notificationResponseTitle(_ messageText: String) -> String { "HiYashi: \(messageText)" }
-    func notificationSuccessTitle(_ name: String) -> String { "HiYashi: \(name)" }
+    var notificationFailureTitle: String { text(en: "Ohayo: run failed", pt: "Ohayo: disparo falhou") }
+    func notificationResponseTitle(_ messageText: String) -> String { "Ohayo: \(messageText)" }
+    func notificationSuccessTitle(_ name: String) -> String { "Ohayo: \(name)" }
     /// Corpo curto "conta · HH:MM · resultado"; sem segmento de conta para shell.
     func notificationSuccessBody(account: String?, time: String) -> String {
         let result = text(en: "ran successfully", pt: "executada com sucesso")

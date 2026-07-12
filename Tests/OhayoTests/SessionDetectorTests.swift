@@ -57,7 +57,7 @@ final class SessionDetectorTests: XCTestCase {
 
     func testVarreduraDetectaJanelaAtivaEIgnoraArquivoAntigo() async throws {
         let fm = FileManager.default
-        let conta = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let conta = fm.temporaryDirectory.appendingPathComponent("ohayo-test-\(UUID().uuidString)")
         let proj = conta.appendingPathComponent("projects/proj-a")
         try fm.createDirectory(at: proj, withIntermediateDirectories: true)
 
@@ -89,7 +89,7 @@ final class SessionDetectorTests: XCTestCase {
         // 24h truncaria no meio de um bloco. O detector deve ampliar a
         // varredura e devolver o mesmo fim de bloco do histórico completo.
         let fm = FileManager.default
-        let conta = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let conta = fm.temporaryDirectory.appendingPathComponent("ohayo-test-\(UUID().uuidString)")
         let proj = conta.appendingPathComponent("projects/proj-a")
         try fm.createDirectory(at: proj, withIntermediateDirectories: true)
 
@@ -117,7 +117,7 @@ final class SessionDetectorTests: XCTestCase {
         // de 5h à esquerda, então deve PARAR no teto (maxLookback = 7 dias) em
         // vez de crescer para sempre — e ainda devolver a janela ativa.
         let fm = FileManager.default
-        let conta = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let conta = fm.temporaryDirectory.appendingPathComponent("ohayo-test-\(UUID().uuidString)")
         let proj = conta.appendingPathComponent("projects/proj-a")
         try fm.createDirectory(at: proj, withIntermediateDirectories: true)
 
@@ -141,7 +141,7 @@ final class SessionDetectorTests: XCTestCase {
 
     func testArquivoIlegivelEIgnoradoSemBloquear() async throws {
         let fm = FileManager.default
-        let conta = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let conta = fm.temporaryDirectory.appendingPathComponent("ohayo-test-\(UUID().uuidString)")
         let proj = conta.appendingPathComponent("projects/proj-a")
         try fm.createDirectory(at: proj, withIntermediateDirectories: true)
 
@@ -167,7 +167,7 @@ final class SessionDetectorTests: XCTestCase {
         // em branco, e a última linha SEM '\n' final — todas devem ser tratadas
         // e o timestamp recente detectado.
         let fm = FileManager.default
-        let conta = fm.temporaryDirectory.appendingPathComponent("hiclaude-test-\(UUID().uuidString)")
+        let conta = fm.temporaryDirectory.appendingPathComponent("ohayo-test-\(UUID().uuidString)")
         let proj = conta.appendingPathComponent("projects/proj-a")
         try fm.createDirectory(at: proj, withIntermediateDirectories: true)
         let iso = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-1800))

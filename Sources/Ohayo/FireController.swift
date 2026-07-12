@@ -18,7 +18,7 @@ final class FireController {
     private let notifier: Notifying
     private let clock: Clock
     private var isRunning = false
-    private let log = Logger(subsystem: "dev.hiclaude", category: "fire")
+    private let log = Logger(subsystem: "io.github.hayashirafael.Ohayo", category: "fire")
 
     static let responseLimit = 4000
 

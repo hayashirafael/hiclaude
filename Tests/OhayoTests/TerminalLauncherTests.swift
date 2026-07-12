@@ -59,7 +59,7 @@ final class TerminalLauncherTests: XCTestCase {
         // O default NÃO pode ser o home: o Claude Code nunca persiste o trust
         // do home (só por sessão), então abrir lá pede confirmação toda vez.
         let msg = Message(text: "oi", kind: .claude) // sem workingDir
-        let workspace = URL(fileURLWithPath: "/tmp/HiYashi/workspace")
+        let workspace = URL(fileURLWithPath: "/tmp/Ohayo/workspace")
         let spec = try XCTUnwrap(TerminalLauncher.spec(
             for: msg, claudeBinary: URL(fileURLWithPath: "/tmp/claude"),
             defaultWorkspace: workspace))
@@ -197,7 +197,7 @@ final class TerminalLauncherTests: XCTestCase {
         let tempDir = FileManager.default.temporaryDirectory
         func scriptsDoTerminal() -> Set<String> {
             let all = (try? FileManager.default.contentsOfDirectory(atPath: tempDir.path)) ?? []
-            return Set(all.filter { $0.hasPrefix("hiclaude-terminal-") && $0.hasSuffix(".sh") })
+            return Set(all.filter { $0.hasPrefix("ohayo-terminal-") && $0.hasSuffix(".sh") })
         }
         let antes = scriptsDoTerminal()
         let conta = try makeTempDir()
@@ -226,7 +226,7 @@ final class TerminalLauncherTests: XCTestCase {
 
     private func makeTempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("hiclaude-term-\(UUID().uuidString)")
+            .appendingPathComponent("ohayo-term-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

@@ -39,7 +39,7 @@ struct MenuPanel: View {
         }
     }
 
-    // MARK: - Cabeçalho ("HiYashi" ou aviso de CLI + botão Sair)
+    // MARK: - Cabeçalho ("Ohayo" ou aviso de CLI + botão Sair)
 
     private var header: some View {
         HStack {
@@ -66,7 +66,7 @@ struct MenuPanel: View {
         if let missing = state.missingCLIs.first {
             return strings.installCLIWarning(missing)
         }
-        return "HiYashi"
+        return "Ohayo"
     }
 
     // MARK: - Card por conta
