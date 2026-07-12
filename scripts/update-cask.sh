@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Gera Casks/hiclaude.rb a partir da versão + sha256 do DMG. Usado tanto no
+# Gera Casks/ohayo.rb a partir da versão + sha256 do DMG. Usado tanto no
 # release CI (que empurra pro tap hayashirafael/homebrew-tap) quanto localmente
 # pra conferir o cask antes de publicar. Mantém o .rb reproduzível — nunca
 # editado à mão.
@@ -14,20 +14,20 @@ OUT_DIR="${3:-Casks}"
 
 SHA256="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 mkdir -p "$OUT_DIR"
-CASK="$OUT_DIR/hiclaude.rb"
+CASK="$OUT_DIR/ohayo.rb"
 
 cat > "$CASK" <<RUBY
 # typed: strict
 # frozen_string_literal: true
 
-cask "hiclaude" do
+cask "ohayo" do
   version "${VERSION}"
   sha256 "${SHA256}"
 
-  url "https://github.com/hayashirafael/hiclaude/releases/download/v#{version}/HiYashi-#{version}.dmg"
-  name "HiYashi"
+  url "https://github.com/hayashirafael/ohayo/releases/download/v#{version}/Ohayo-#{version}.dmg"
+  name "Ohayo"
   desc "Menu bar scheduler for Claude and Codex usage windows and commands"
-  homepage "https://github.com/hayashirafael/hiclaude"
+  homepage "https://github.com/hayashirafael/ohayo"
 
   livecheck do
     url :url
@@ -36,19 +36,19 @@ cask "hiclaude" do
 
   depends_on macos: :ventura
 
-  app "HiYashi.app"
+  app "Ohayo.app"
 
-  zap trash: "~/Library/Preferences/dev.hiclaude.HiClaude.plist"
+  zap trash: "~/Library/Preferences/io.github.hayashirafael.Ohayo.plist"
 
   caveats <<~EOS
-    HiYashi is ad-hoc signed (not notarized — no paid Apple Developer account).
+    Ohayo is ad-hoc signed (not notarized — no paid Apple Developer account).
     On first launch, macOS Gatekeeper will block it. To open it:
 
       System Settings → Privacy & Security → "Open Anyway"
 
     or clear the quarantine flag yourself:
 
-      xattr -dr com.apple.quarantine "#{appdir}/HiYashi.app"
+      xattr -dr com.apple.quarantine "#{appdir}/Ohayo.app"
   EOS
 end
 RUBY

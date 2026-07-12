@@ -16,7 +16,7 @@ jobs:
       - run: ./scripts/make-dmg.sh
       - uses: softprops/action-gh-release@v2
         with:
-          files: build/HiYashi-*.dmg
+          files: build/Ohayo-*.dmg
       - uses: actions/checkout@v4
         with:
           repository: hayashirafael/homebrew-tap
@@ -25,16 +25,16 @@ jobs:
       - name: Update Homebrew cask
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          ./scripts/update-cask.sh "$VERSION" "build/HiYashi-${VERSION}.dmg" "homebrew-tap/Casks"
+          ./scripts/update-cask.sh "$VERSION" "build/Ohayo-${VERSION}.dmg" "homebrew-tap/Casks"
       - name: Commit Homebrew cask
         working-directory: homebrew-tap
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/hiclaude.rb
+          git add Casks/ohayo.rb
           if git diff --cached --quiet; then
             echo "No cask changes"
           else
-            git commit -m "Update HiYashi cask to ${GITHUB_REF_NAME}"
+            git commit -m "Update Ohayo cask to ${GITHUB_REF_NAME}"
             git push
           fi
