@@ -94,6 +94,20 @@ struct ContasView: View {
                 }
             }
             Spacer()
+            if state.isPaused(dir) {
+                Text(strings.pausedBadge)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 5))
+            }
+            Button {
+                state.setPaused(dir, !state.isPaused(dir))
+            } label: {
+                Image(systemName: state.isPaused(dir) ? "play.fill" : "pause.fill")
+            }
+            .buttonStyle(.plain)
+            .help(state.isPaused(dir) ? strings.resumeAccount : strings.pauseAccount)
             Button {
                 if editingAlias == dir { commitAlias(dir) }
                 else { editingAlias = dir; aliasDraft = state.alias(for: dir) ?? "" }
