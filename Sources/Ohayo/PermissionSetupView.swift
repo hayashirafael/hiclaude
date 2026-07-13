@@ -66,7 +66,7 @@ struct PermissionSetupView: View {
             }
             Text(body).font(.callout).foregroundStyle(.secondary)
             Button(actionTitle, action: action)
-                .disabled(status == .allowed)
+                .disabled(!status.allowsRequest)
         }
         .padding(.vertical, 4)
     }

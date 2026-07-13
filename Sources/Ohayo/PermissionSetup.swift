@@ -8,7 +8,12 @@ enum PermissionAccessStatus: Equatable {
     case notConfigured
     case allowed
     case denied
+    case unavailable
     case failed(String)
+
+    var allowsRequest: Bool {
+        self != .allowed && self != .unavailable
+    }
 }
 
 protocol NotificationPermissionClient {
@@ -17,20 +22,27 @@ protocol NotificationPermissionClient {
 }
 
 struct SystemNotificationPermissionClient: NotificationPermissionClient {
-    private let center: UNUserNotificationCenter
+    private let isBundled: Bool
+    private let center: () -> UNUserNotificationCenter
 
-    init(center: UNUserNotificationCenter = .current()) {
+    init(
+        isBundled: Bool = Bundle.main.bundleIdentifier != nil,
+        center: @escaping () -> UNUserNotificationCenter = { .current() }
+    ) {
+        self.isBundled = isBundled
         self.center = center
     }
 
     func status() async -> PermissionAccessStatus {
-        let settings = await center.notificationSettings()
+        guard isBundled else { return .unavailable }
+        let settings = await center().notificationSettings()
         return Self.map(settings.authorizationStatus)
     }
 
     func request() async -> PermissionAccessStatus {
+        guard isBundled else { return .unavailable }
         do {
-            _ = try await center.requestAuthorization(options: [.alert])
+            _ = try await center().requestAuthorization(options: [.alert])
             return await status()
         } catch {
             return .failed(error.localizedDescription)

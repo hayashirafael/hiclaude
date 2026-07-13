@@ -3,6 +3,31 @@ import XCTest
 @testable import Ohayo
 
 final class PermissionSetupTests: XCTestCase {
+    func testUnbundledNotificationClientDoesNotResolveNotificationCenter() async {
+        var centerResolutionCount = 0
+        let client = SystemNotificationPermissionClient(
+            isBundled: false,
+            center: {
+                centerResolutionCount += 1
+                return .current()
+            })
+
+        let status = await client.status()
+        let requestStatus = await client.request()
+
+        XCTAssertEqual(status, .unavailable)
+        XCTAssertEqual(requestStatus, .unavailable)
+        XCTAssertEqual(centerResolutionCount, 0)
+    }
+
+    func testNotificationRequestAvailability() {
+        XCTAssertFalse(PermissionAccessStatus.allowed.allowsRequest)
+        XCTAssertFalse(PermissionAccessStatus.unavailable.allowsRequest)
+        XCTAssertTrue(PermissionAccessStatus.notConfigured.allowsRequest)
+        XCTAssertTrue(PermissionAccessStatus.denied.allowsRequest)
+        XCTAssertTrue(PermissionAccessStatus.failed("temporary").allowsRequest)
+    }
+
     func testNotificationAuthorizationMapping() {
         XCTAssertEqual(SystemNotificationPermissionClient.map(.notDetermined), .notConfigured)
         XCTAssertEqual(SystemNotificationPermissionClient.map(.denied), .denied)

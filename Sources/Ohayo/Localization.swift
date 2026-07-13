@@ -87,7 +87,7 @@ struct L10n {
         case .notConfigured: return permissionNotConfigured
         case .allowed: return permissionAllowed
         case .denied: return permissionDenied
-        case .failed: return permissionFailed
+        case .unavailable, .failed: return permissionFailed
         }
     }
 
