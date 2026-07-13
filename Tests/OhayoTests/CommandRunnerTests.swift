@@ -190,6 +190,30 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertEqual(result, .failure(.failed("boom")))
     }
 
+    func testFalhaCapturaStdoutQuandoStderrEstaVazio() async {
+        let runner = CommandRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf 'Not logged in · Please run /login\\n'; exit 1")
+        )
+        let result = await runner.run(Message(text: "1+1", kind: .claude))
+        XCTAssertEqual(result, .failure(.failed("Not logged in · Please run /login")))
+    }
+
+    func testFalhaComDoisStreamsPreservaAmbos() async {
+        let runner = CommandRunner(
+            timeout: 5,
+            binaryOverride: makeScript("printf 'stdout erro\\n'; printf 'stderr erro\\n' >&2; exit 1")
+        )
+        let result = await runner.run(Message(text: "1+1", kind: .claude))
+        XCTAssertEqual(result, .failure(.failed("stdout:\nstdout erro\n\nstderr:\nstderr erro")))
+    }
+
+    func testFalhaSemSaidaMantemCodigoDeSaida() async {
+        let runner = CommandRunner(timeout: 5, binaryOverride: makeScript("exit 7"))
+        let result = await runner.run(Message(text: "1+1", kind: .claude))
+        XCTAssertEqual(result, .failure(.failed("exit 7")))
+    }
+
     func testTimeoutMataOProcesso() async {
         let runner = CommandRunner(timeout: 1, binaryOverride: makeScript("sleep 10"))
         let result = await runner.run(Message(text: "1+1", kind: .claude))

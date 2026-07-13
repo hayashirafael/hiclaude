@@ -312,6 +312,20 @@ struct L10n {
     var historyAccountDefaultModel: String { text(en: "Account default", pt: "Padrão da conta") }
     var historyResponse: String { text(en: "Response", pt: "Resposta") }
     var historyDetails: String { text(en: "Details", pt: "Detalhes") }
+    func authenticationRequired(_ provider: Provider, configDir: URL) -> String {
+        let escapedPath = configDir.path.replacingOccurrences(of: "'", with: "'\\''")
+        let loginCommand: String
+        switch provider {
+        case .claude:
+            loginCommand = "CLAUDE_CONFIG_DIR='\(escapedPath)' claude auth login"
+        case .codex:
+            loginCommand = "CODEX_HOME='\(escapedPath)' codex login"
+        }
+        return text(
+            en: "\(provider.displayName) is not logged in for this account. Run `\(loginCommand)` and try again.",
+            pt: "O \(provider.displayName) não está logado nesta conta. Execute `\(loginCommand)` e tente novamente."
+        )
+    }
     var historyExecutedSuccessfully: String {
         text(en: "Executed successfully", pt: "Executado com sucesso")
     }

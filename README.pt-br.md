@@ -32,8 +32,8 @@ transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
   entram uma única vez, no primeiro launch, e daí em diante novas contas são
   adicionadas a qualquer momento via "Adicionar conta…" — mostra o e-mail
   logado, aceita apelidos
-- **Histórico** — disparos recentes com status e resposta expansível (detalhe
-  completo do erro nas falhas); notificações do macOS opcionais em falhas e
+- **Histórico** — disparos recentes com status e resposta expansível (log
+  capturado de stdout/stderr nas falhas); notificações do macOS opcionais em falhas e
   respostas, além de notificações de sucesso opt-in por agendamento
 - **Idioma** — inglês por padrão, com opção para português nas Configurações
 - **Pausar/Retomar** por conta, em **Contas**, e **Iniciar com o Mac**
@@ -46,6 +46,12 @@ transcripts locais do Claude Code, sem nenhuma chamada de rede própria.
 - [Codex CLI](https://github.com/openai/codex) instalado e logado (opcional,
   só para contas/comandos Codex)
 - Para build a partir do código: Swift 5.9+ (Xcode ou Command Line Tools)
+
+O Ohayo verifica a conta Claude ou Codex selecionada imediatamente antes de
+cada disparo agendado. Se a conta não estiver logada, o disparo é registrado
+sem abrir uma sessão; o histórico mostra o comando exato de login com a pasta
+da conta selecionada. Se a CLI falhar por outro motivo, os detalhes do
+histórico preservam stdout e stderr quando disponíveis.
 
 ## Instalação
 

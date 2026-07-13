@@ -55,6 +55,20 @@ final class MockTerminalLauncher: TerminalLaunching {
     }
 }
 
+final class MockAuthenticationChecker: AuthenticationChecking {
+    var status: AuthenticationStatus = .authenticated
+    var calls = 0
+    var lastProvider: Provider?
+    var lastConfigDir: URL?
+
+    func status(for provider: Provider, configDir: URL) async -> AuthenticationStatus {
+        calls += 1
+        lastProvider = provider
+        lastConfigDir = configDir
+        return status
+    }
+}
+
 /// Runner que suspende dentro de `run()` até `resume()` — permite iniciar um
 /// segundo disparo enquanto o primeiro ainda está em andamento, para exercitar
 /// o guard `isRunning` do FireController.
@@ -91,6 +105,7 @@ final class FireControllerTests: XCTestCase {
     var detector: MockDetector!
     var runner: MockRunner!
     var notifier: MockNotifier!
+    var authentication: MockAuthenticationChecker!
     var controller: FireController!
     let now = Date(timeIntervalSince1970: 1_783_000_000)
 
@@ -99,8 +114,10 @@ final class FireControllerTests: XCTestCase {
         detector = MockDetector()
         runner = MockRunner()
         notifier = MockNotifier()
+        authentication = MockAuthenticationChecker()
         controller = FireController(state: state, detector: detector, runner: runner,
-                                    notifier: notifier, clock: FakeClock(now: now))
+                                    notifier: notifier, clock: FakeClock(now: now),
+                                    authenticationChecker: authentication)
     }
 
     func testRenovacaoComJanelaAtivaPulaSemExecutar() async {
@@ -162,6 +179,44 @@ final class FireControllerTests: XCTestCase {
             message: AppState.defaultMessage, origin: .scheduled))
         XCTAssertEqual(notifier.titles, ["Ohayo: run failed"])
         XCTAssertEqual(notifier.messages, ["sem rede"])
+    }
+
+    func testContaNaoAutenticadaBloqueiaBatchEGravaLog() async {
+        authentication.status = .unauthenticated(log: "Not logged in")
+        let message = Message(text: "1+1", kind: .claude, runInTerminal: false)
+
+        await controller.fire(message: message, origin: .agenda)
+
+        XCTAssertEqual(runner.calls, 0)
+        XCTAssertEqual(state.lastEvent?.response, "Not logged in")
+        guard case .failure(let summary) = state.lastEvent?.result else {
+            return XCTFail("esperava falha de autenticação")
+        }
+        XCTAssertTrue(summary.contains("Claude"))
+        XCTAssertEqual(notifier.messages.count, 1)
+    }
+
+    func testContaNaoAutenticadaBloqueiaTerminalInterativo() async {
+        authentication.status = .unauthenticated(log: "Not logged in")
+        let terminal = MockTerminalLauncher()
+        controller = FireController(state: state, detector: detector, runner: runner,
+                                    terminalLauncher: terminal, notifier: notifier,
+                                    clock: FakeClock(now: now),
+                                    authenticationChecker: authentication)
+
+        await controller.fire(message: Message(text: "1+1", kind: .claude), origin: .agenda)
+
+        XCTAssertEqual(terminal.calls, 0)
+        XCTAssertEqual(runner.calls, 0)
+        XCTAssertEqual(state.lastEvent?.response, "Not logged in")
+    }
+
+    func testStatusDesconhecidoNaoBloqueiaExecucao() async {
+        authentication.status = .unknown
+        await controller.fire(message: Message(text: "1+1", kind: .claude,
+                                               runInTerminal: false), origin: .agenda)
+        XCTAssertEqual(authentication.calls, 1)
+        XCTAssertEqual(runner.calls, 1)
     }
 
     func testFalhaManualNaoNotifica() async {
@@ -261,6 +316,13 @@ final class FireControllerTests: XCTestCase {
     func testResumoDeFalhaTruncaEm120Caracteres() {
         let linhaLonga = String(repeating: "x", count: 300)
         XCTAssertEqual(FireController.failureSummary(linhaLonga).count, 120)
+    }
+
+    func testDetalheDeFalhaIndicaQuandoLogFoiTruncado() async {
+        runner.result = .failure(.failed(String(repeating: "x", count: 5000)))
+        await controller.fire(message: Message(text: "1+1", kind: .claude,
+                                               runInTerminal: false), origin: .manual)
+        XCTAssertTrue(state.history.first?.response?.hasSuffix("[log truncated]") == true)
     }
 
     func testResumoUsaUltimaLinhaNaoVazia() {

@@ -306,9 +306,25 @@ struct CommandRunner: CommandRunning {
             stderrBuffer.append(rest)
         }
         if process.terminationStatus != 0 {
-            let message = stderrBuffer.trimmedString()
-            return .failure(.failed(message.isEmpty ? "exit \(process.terminationStatus)" : message))
+            return .failure(.failed(Self.failureLog(
+                stdout: stdoutBuffer.trimmedString(),
+                stderr: stderrBuffer.trimmedString(),
+                terminationStatus: process.terminationStatus)))
         }
         return .success(stdoutBuffer.trimmedString())
+    }
+
+    /// Preserva a saída real da CLI quando ela falha. Claude Code, por
+    /// exemplo, escreve "Not logged in" em stdout e deixa stderr vazio.
+    static func failureLog(stdout: String, stderr: String,
+                           terminationStatus: Int32) -> String {
+        switch (stdout.isEmpty, stderr.isEmpty) {
+        case (false, true): return stdout
+        case (true, false): return stderr
+        case (false, false):
+            return "stdout:\n\(stdout)\n\nstderr:\n\(stderr)"
+        case (true, true):
+            return "exit \(terminationStatus)"
+        }
     }
 }

@@ -35,7 +35,8 @@ final class AppEnvironment: ObservableObject {
         self.controller = FireController(state: state, detector: detector,
                                          runner: CommandRunner(configDir: AppState.defaultConfigDir),
                                          terminalLauncher: terminalLauncher,
-                                         notifier: SystemNotifier())
+                                         notifier: SystemNotifier(),
+                                         authenticationChecker: CLIAuthenticationChecker())
         self.renewalEngine = RenewalEngine(detector: detector)
         self.taskScheduler = taskScheduler
 

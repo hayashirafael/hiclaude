@@ -15,6 +15,7 @@ final class FireController {
     private let detector: SessionDetecting
     private let runner: CommandRunning
     private let terminalLauncher: TerminalLaunching?
+    private let authenticationChecker: AuthenticationChecking
     private let notifier: Notifying
     private let clock: Clock
     private var isRunning = false
@@ -24,11 +25,13 @@ final class FireController {
 
     init(state: AppState, detector: SessionDetecting, runner: CommandRunning,
          terminalLauncher: TerminalLaunching? = nil,
-         notifier: Notifying, clock: Clock = SystemClock()) {
+         notifier: Notifying, clock: Clock = SystemClock(),
+         authenticationChecker: AuthenticationChecking = AllowAllAuthenticationChecker()) {
         self.state = state
         self.detector = detector
         self.runner = runner
         self.terminalLauncher = terminalLauncher
+        self.authenticationChecker = authenticationChecker
         self.notifier = notifier
         self.clock = clock
     }
@@ -78,6 +81,26 @@ final class FireController {
             return true
         }
 
+        if message.kind != .shell {
+            switch await authenticationChecker.status(for: message.kind == .codex ? .codex : .claude,
+                                                       configDir: accountDir) {
+            case .authenticated, .unknown:
+                break
+            case .unauthenticated(let log):
+                let provider: Provider = message.kind == .codex ? .codex : .claude
+                let summary = state.strings.authenticationRequired(provider, configDir: accountDir)
+                state.recordEvent(state.makeEvent(date: clock.now,
+                                                  result: .failure(message: summary),
+                                                  message: message, origin: origin,
+                                                  response: log.isEmpty ? nil : String(log.prefix(Self.responseLimit))))
+                if origin != .manual {
+                    notifier.notifyFailure(title: state.strings.notificationFailureTitle,
+                                           message: summary)
+                }
+                return true
+            }
+        }
+
         if message.resolvedRunInTerminal, let terminalLauncher {
             switch await terminalLauncher.launch(message) {
             case .success:
@@ -125,7 +148,11 @@ final class FireController {
             var detail: String? = nil
             if case .failed(let full) = error {
                 summary = Self.failureSummary(full)
-                if full != summary { detail = String(full.prefix(Self.responseLimit)) }
+                if full != summary {
+                    let truncated = String(full.prefix(Self.responseLimit))
+                    detail = full.count > Self.responseLimit
+                        ? truncated + "\n[log truncated]" : truncated
+                }
             } else {
                 summary = error.userMessage(language: state.language)
             }
@@ -154,13 +181,19 @@ final class FireController {
                 time: Fmt.hhmm(clock.now, language: state.language)))
     }
 
-    /// Resumo de um stderr longo para o título do histórico: a última linha
-    /// não vazia (onde CLIs imprimem o erro final), truncada — o texto
-    /// completo vai em `response` e vira detalhe expansível na UI.
+    /// Resumo de um log longo para o título do histórico: a última linha não
+    /// vazia (onde CLIs imprimem o erro final), truncada — o texto completo
+    /// vai em `response` e vira detalhe expansível na UI.
     static func failureSummary(_ full: String) -> String {
         let line = full.split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .last { !$0.isEmpty } ?? full
         return String(line.prefix(120))
+    }
+}
+
+struct AllowAllAuthenticationChecker: AuthenticationChecking {
+    func status(for provider: Provider, configDir: URL) async -> AuthenticationStatus {
+        .authenticated
     }
 }

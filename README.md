@@ -31,8 +31,8 @@ Code transcripts, making no network calls of its own.
   dirs are detected once, on first launch, and from then on you add accounts
   anytime via "Add account…" — shows the logged-in email, supports custom
   aliases
-- **History** — recent dispatches with status and expandable response (full
-  error detail on failures); optional macOS notifications on failures and
+- **History** — recent dispatches with status and expandable response (the
+  captured stdout/stderr log on failures); optional macOS notifications on failures and
   responses, plus opt-in success notifications per schedule
 - **Language** — English by default, with a Portuguese option in Settings
 - Per-account **Pause/Resume**, in **Accounts**, and optional **Launch at
@@ -45,6 +45,12 @@ Code transcripts, making no network calls of its own.
 - [Codex CLI](https://github.com/openai/codex) installed and logged in
   (optional, only for Codex accounts/commands)
 - To build from source: Swift 5.9+ (Xcode or Command Line Tools)
+
+Ohayo checks the selected Claude or Codex account immediately before each
+scheduled run. If the account is not logged in, the run is recorded without
+opening a session; the history shows the exact login command with the selected
+account directory. If a CLI fails for another reason, the history details
+preserve stdout and stderr when available.
 
 ## Install
 
